@@ -9,6 +9,10 @@ from test_ordinary_effects import OrdinaryEffects
 
 
 class RefResources(OrdinaryEffects):
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        self.git('remote', 'add', 'origin', 'https://example.invalid/owned-composition749')
+
     def keys(self, source='refs/heads/source', destination='refs/heads/destination'):
         device, inode = branches.repository_identity(str(self.repo))
         return ['git-ref:'+str(device)+':'+str(inode)+':'+ref for ref in (source, destination)]
@@ -48,10 +52,12 @@ class RefResources(OrdinaryEffects):
         self.assertTrue(await ordinary.perform(self.store, self.boards['Branch'], self.store.job(job['id'])))
         self.assertEqual(self.store.rows('SELECT * FROM ordinary_tool_records'), before)
 
-    async def test_identical_source_destination_computed_key_is_reserved_once(self):
+    async def test_identical_source_destination_policy_still_refuses_before_intent(self):
         job, _ = self.admitted_refs(same_ref=True)
-        self.assertTrue(await ordinary.perform(self.store, self.boards['Branch'], job))
+        with self.assertRaisesRegex(Refusal, 'separate pinned source'):
+            await ordinary.perform(self.store, self.boards['Branch'], job)
         self.assertEqual(self.git('rev-parse', 'source'), self.head)
+        self.assertEqual(self.store.rows('SELECT * FROM ordinary_runs'), [])
         self.assertEqual(self.store.rows('SELECT * FROM ordinary_resources'), [])
 
     async def test_foreign_unknown_declared_lease_refuses_before_effect_intent(self):
@@ -60,7 +66,7 @@ class RefResources(OrdinaryEffects):
         # An uncollected/unknown original reservation is never inferred free.
         self.store.db.execute('INSERT INTO ordinary_resources VALUES(?,?)', (key, 'fictional-unknown-original'))
         with patch.object(ordinary, 'adapter', side_effect=AssertionError('foreign ref effect')):
-            with self.assertRaises(Refusal):
+            with self.assertRaisesRegex(Refusal, 'resource still belongs to another original'):
                 await ordinary.perform(self.store, self.boards['Branch'], job)
         self.assertEqual(self.git('rev-parse', 'destination'), self.old)
         self.assertEqual(self.store.rows('SELECT * FROM ordinary_runs'), [])
@@ -74,7 +80,7 @@ class RefResources(OrdinaryEffects):
         key = self.keys()[1]
         self.store.db.execute('INSERT INTO ordinary_resources VALUES(?,?)', (key, 'fictional-foreign-original'))
         with patch.object(ordinary, 'adapter', side_effect=AssertionError('foreign ref effect')):
-            with self.assertRaises(Refusal):
+            with self.assertRaisesRegex(Refusal, 'actual common Git ref remains owned'):
                 await ordinary.perform(self.store, self.boards['Branch'], job)
         self.assertEqual(self.git('rev-parse', 'destination'), self.old)
         run = self.store.one('SELECT * FROM ordinary_runs WHERE attempt=?', (attempt,))
