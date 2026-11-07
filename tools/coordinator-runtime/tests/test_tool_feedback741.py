@@ -131,7 +131,7 @@ class CallerPaths(unittest.IsolatedAsyncioTestCase):
         # The middle return remains independently binding after collection.
         changed = dict(self.row)
         forged = dict(self.answer)
-        forged['failures'] = forged['failures'][:1]
+        forged['failures'] = forged['failures'][:-1]
         changed['result'] = json.dumps(forged)
         with self.assertRaises(Refusal):collected_task_result(changed)
 
