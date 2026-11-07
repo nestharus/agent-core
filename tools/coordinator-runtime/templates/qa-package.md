@@ -22,6 +22,21 @@ acceptance or source access from a queue classification. Current explicitly
 authorized ordinary application source access is permitted; obsolete source
 approval counts are not gates.
 
+With the explicit `accepted-qa-branch-cleanup-v1` configuration selection,
+execution returns `consolidated` to the existing Branch integrator. Branch may
+proceed only after the actual QA run/readback has separate independent acceptance
+and current source, grant, resource and original-report guards pass. This return
+does not itself qualify the whole package. Both ordinary adapters belong to the
+same unchanged admission and package; execute QA once.
+
+In that selected sequence, final cleanup follows the actual Branch CAS/readback
+and separate independent acceptance. It waits for ALL admitted ordinary results,
+including QA and Branch, and conserves the entire Branch return containing the
+whole original QA report. Return `qualification` to Work once; do not route back
+to Branch, repeat the QA execution, create a second package or duplicate Work's
+seven consumer duties. Missing/rejected/unknown/stale results stay held. The
+older QA -> cleanup -> Branch route below applies when this selector is absent.
+
 In execution phase, perform only the actual separately admitted QA procedure;
 reuse actual existing PR/run/owner receipts and retain failures, skips, partials,
 unread material and UNKNOWNs. Do not introduce another global admission writer,

@@ -14,6 +14,34 @@ OPERATIONS = {"read-source", "read-reports", "write-role-records", "write-owned-
               "prepare-intents", "organize-authorized-refs", "execute-admitted-qa", "consolidate-reports"}
 LUNA = {"model": "gpt-6-luna", "effort": "low", "provider": "openai"}
 SOL = {"model": "gpt-6.1-sol", "effort": "xhigh", "provider": "openai"}
+QA_BRANCH_SEQUENCE = 'accepted-qa-branch-cleanup-v1'
+
+
+def qa_branch_sequence(config):
+    """One bounded prospective route, with acceptance checked by the adapters.
+
+    This selector confers no effect, resource, package or historical authority.
+    """
+    selected = config.get('qa_branch_sequence')
+    if selected is None:
+        return False
+    if selected != QA_BRANCH_SEQUENCE:
+        raise Refusal('unsupported same-package QA/Branch sequence')
+    tasks = config['tasks']
+    for name, role, phase, effects, category, destination in (
+            ('qa-execution', 'QA', 'execution', 'owner-reconcile', 'consolidated', 'branch-integrator'),
+            ('branch-integrator', 'Branch', 'integrator', 'owner-reconcile', 'complete', 'qa-cleanup'),
+            ('qa-cleanup', 'QA', 'cleanup', 'owned-artifacts', 'qualification', 'work-proposer')):
+        task = tasks.get(name, {})
+        if (task.get('role') != role or task.get('phase') != phase or task.get('effects') != effects
+                or not task.get('require_package_scope') or task.get('execution') == 'owner'
+                or task.get('responses', {}).get(category) != [destination]):
+            raise Refusal('same-package sequence needs the exact existing scoped software phases and routes')
+    if (tasks['qa-execution']['effect_authority']['operations'] != ['execute-admitted-qa']
+            or not tasks['qa-cleanup'].get('package_narrowing')
+            or tasks.get('work-proposer', {}).get('role') != 'Work'):
+        raise Refusal('same-package sequence preserves least-authority execution and report-only final cleanup')
+    return True
 
 
 class Refusal(RuntimeError):
@@ -142,6 +170,7 @@ def validate_config(config, *, withdrawal_only=False):
         if task.get('routine_completion'):
             from .routine import policy_for
             policy_for(task, execution=False)
+    qa_branch_sequence(config)
     if config.get('session_storage',{}).get('mode') not in {None,'producer-owned'}:
         raise Refusal('select producer-owned storage; allocated Codex namespaces do not prove logical ownership')
     if any(t.get('routine_completion') for t in config['tasks'].values()):
@@ -687,7 +716,8 @@ def response_tasks(task, result, config):
     if task["role"] == "Reviews" and task["phase"] == "integrator":
         choices = [n for n in choices if config["tasks"][n]["role"] == "Work"]
     if task["role"] == "QA" and task["phase"] == "cleanup" and key == "qualification":
-        choices = [n for n in choices if config["tasks"][n]["role"] == "Branch"]
+        destination = 'Work' if qa_branch_sequence(config) else 'Branch'
+        choices = [n for n in choices if config["tasks"][n]["role"] == destination]
     if set(choices) - set(config["tasks"]):
         raise Refusal("response route references an unknown typed task")
     return choices

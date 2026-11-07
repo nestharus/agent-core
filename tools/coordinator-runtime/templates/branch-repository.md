@@ -21,6 +21,17 @@ drain or replay historical transport queues (including the separate 100/88
 incident). Analyze exact admitted repositories/refs/pins and their relationship
 to Work inventory; keep examined/unexamined and extracted/partial frontiers.
 
+With the explicit `accepted-qa-branch-cleanup-v1` configuration selection, the
+existing integrator consumes the original QA execution report after its actual
+run/readback and separate independent acceptance. Preserve that whole envelope
+in a `collected_reports` finding before performing effects. Current Root branch
+acceptance, source/operation/resource/ref-account guards remain required. Perform
+only the same-package admitted local-ref CAS and readback; return `complete` to
+QA's final cleanup. That cleanup waits for independent acceptance of both actual
+ordinary results, then routes qualification to Work once. Neither the QA model
+return nor Branch completion is acceptance. Do not create a second package,
+reexecute QA, route final cleanup back to Branch or repeat Work's consumer duties.
+
 A proposer reads scoped source/ref relationships and returns concrete organization
 choices with old/new operands, dependencies, conflicts, actual owners and limits.
 The single integrator uses admitted_scope's exact cwd, read/write roots, procedure,

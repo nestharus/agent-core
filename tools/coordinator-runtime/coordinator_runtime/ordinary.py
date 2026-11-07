@@ -10,8 +10,9 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 
-from .contracts import Refusal, canonical_uuid, collected_task_result, digest, encode, scoped_task
+from .contracts import Refusal, canonical_uuid, collected_task_result, digest, encode, scoped_task, qa_branch_sequence, response_tasks
 from .custody import safe_path, read_file, guard_path
 from . import prospective, qa_source
 
@@ -58,6 +59,10 @@ def frozen_file(store, path, roots, expected=None):
 
 def policy_for(store, job):
     admission = store.one('SELECT * FROM admissions WHERE package=?', (job['package'],))
+    if qa_branch_sequence(store.config) and job['task'] in {'qa-execution', 'branch-integrator'}:
+        sequence_policies(store, job['package'])
+        if job['task'] == 'branch-integrator':
+            accepted_qa(store, job['package'])
     if job.get('id'):
         frozen = store.one('SELECT * FROM job_resource_policies WHERE job=?',(job['id'],))
         if frozen and (json.loads(frozen['task']) != store.config['tasks'][job['task']] or
@@ -342,6 +347,10 @@ async def perform(store, board, job):
     if job['hold_reason'] or blocked(store, job):
         raise Refusal('existing job/legacy hold cannot be released by ordinary automation')
     task, p = policy_for(store, job)
+    if qa_branch_sequence(store.config) and job['task'] == 'branch-integrator':
+        from .report_scope import conserved_inputs
+        if {'collected_reports': conserved_inputs(store, job)} not in answer['findings']:
+            raise Refusal('Branch must conserve the whole accepted QA report before effects')
     from .local_integration import current_basis, validate_method
     current_basis(store, job)
     validate_method(store, job, attempt, answer)
@@ -474,20 +483,145 @@ async def accept(store, actor, attempt_id, decision, evidence):
     return record
 
 
-def accepted_runs(store, package):
+def accepted_runs(store, package, tasks=None):
+    """Accepted active results, complete for the exact requested dependency set.
+
+    The default remains ALL admitted ordinary tasks. A dependency subset never
+    qualifies a package; it is used only for the earlier accepted-QA Branch gate.
+    """
     admission = store.one('SELECT receipt FROM admissions WHERE package=?', (package,))
     if not admission:
         return []
     scopes = json.loads(admission['receipt']).get('task_scopes', {})
     required = {name for name, scope in scopes.items() if scope.get('ordinary_effects')}
-    rows = store.rows("SELECT r.*,j.task,a.receipt AS acceptance FROM ordinary_runs r JOIN jobs j ON j.id=r.job "
-        "JOIN ordinary_acceptance a ON a.attempt=r.attempt WHERE j.package=? AND a.decision='accepted' AND j.active_attempt=r.attempt", (package,))
+    if qa_branch_sequence(store.config):
+        try:
+            sequence_policies(store, package)
+        except Refusal:
+            return []
+    if tasks is not None:
+        if (not isinstance(tasks, (list, tuple)) or not tasks or len(set(tasks)) != len(tasks)
+                or set(tasks) - required):
+            return []
+        required = set(tasks)
+    rows = store.rows("SELECT r.*,j.task,j.effects,a.receipt AS acceptance FROM ordinary_runs r JOIN jobs j ON j.id=r.job "
+        "JOIN ordinary_acceptance a ON a.attempt=r.attempt WHERE j.package=? AND a.decision='accepted' AND j.active_attempt=r.attempt ORDER BY j.task,r.attempt", (package,))
     matching = [r for r in rows if r['admission'] == digest(admission['receipt']) and r['state'] == 'reconciled'
+                and r['effects'] == 'reconciled' and r['task'] in required
+                and json.loads(r['policy']) == scopes[r['task']]['ordinary_effects']
                 and json.loads(r['receipt'])['outcome']['status'] == 'success'
                 and json.loads(r['acceptance'])['execution_hash'] == digest(json.loads(r['receipt']))]
     matching = [r for r in matching if json.loads(r['policy'])['kind'] != 'local-qa'
                 or json.loads(r['receipt'])['outcome'].get('source_execution', {}).get('method') == 'git-blobs-readonly-namespace-v1']
-    return matching if required and required == {r['task'] for r in matching} else []
+    matching = [r for r in matching if r['task'] in required]
+    return matching if required and len(matching) == len(required) and required == {r['task'] for r in matching} else []
+
+
+def sequence_policies(store, package):
+    """The sequence cannot omit an adapter or split its source/package identity."""
+    admission = store.one('SELECT receipt FROM admissions WHERE package=?', (package,))
+    scopes = json.loads(admission['receipt']).get('task_scopes', {}) if admission else {}
+    effects = {name: scope['ordinary_effects'] for name, scope in scopes.items() if scope.get('ordinary_effects')}
+    if (set(effects) != {'qa-execution', 'branch-integrator'}
+            or any(not isinstance(p, dict) for p in effects.values())
+            or effects['qa-execution'].get('kind') != 'local-qa'
+            or effects['branch-integrator'].get('kind') != 'local-ref'
+            or any(effects['qa-execution'].get(k) != effects['branch-integrator'].get(k)
+                   for k in ('repository', 'source_ref', 'source_head'))):
+        raise Refusal('same-package sequence requires both exact QA/Branch adapters on one source')
+    return effects
+
+
+def accepted_qa(store, package):
+    """Actual independent QA acceptance, current rights, frozen policy and bytes."""
+    sequence_policies(store, package)
+    rows = accepted_runs(store, package, ['qa-execution'])
+    if len(rows) != 1:
+        raise Refusal('Branch awaits actual independently accepted same-package QA')
+    run = rows[0]
+    original = store.job(run['job'])
+    if original['effects'] != 'reconciled' or original['hold_reason'] or not selected(store, original):
+        raise Refusal('accepted QA original is unresolved, held or no longer authorized')
+    prospective.board(store, original['role'])._software_job_grant(store, original)
+    _, policy = policy_for(store, original)
+    if json.loads(run['policy']) != policy:
+        raise Refusal('accepted QA policy differs from its frozen current admission')
+    receipt = json.loads(run['receipt'])
+    qa_source.verify(store, run['attempt'], policy, receipt)
+    accepted_source_current(store, run, policy)
+    return run
+
+
+def accepted_source_current(store, run, policy):
+    """Read-only dependency observation; never execute/replay the accepted effect."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
+    env.update(GIT_CONFIG_GLOBAL='/dev/null', GIT_CONFIG_NOSYSTEM='1', GIT_TERMINAL_PROMPT='0')
+    def git(*args):
+        result = subprocess.run([policy['git'], '--no-replace-objects', '--no-optional-locks',
+            '-c', 'core.hooksPath=/dev/null', '-C', policy['repository'], *args],
+            capture_output=True, check=True, timeout=policy['timeout'], env=env)
+        return result.stdout.decode('utf-8').strip()
+    after = json.loads(run['receipt'])['after']
+    if (git('rev-parse', '--show-toplevel') != policy['repository']
+            or git('rev-parse', '--path-format=absolute', '--git-common-dir') != after['git_common_dir']):
+        raise Refusal('accepted dependency repository topology is no longer current')
+    original = store.job(run['job'])
+    admission = store.one('SELECT * FROM admissions WHERE package=?', (original['package'],))
+    task = scoped_task(original['task'], store.config['tasks'][original['task']], admission)
+    info = scoped_path(store, after['git_common_dir'],
+        task['effect_authority']['read_roots'] + task['effect_authority']['write_roots']).stat()
+    if after['common_repository'] != {'dev': info.st_dev, 'ino': info.st_ino}:
+        raise Refusal('accepted dependency common repository changed')
+    if (git('rev-parse', '--verify', policy['source_ref'] + '^{commit}') != after['head']
+            or git('rev-parse', '--verify', policy['source_head'] + '^{tree}') != after['tree']
+            or git('show', '-s', '--format=%P', policy['source_head']).split() != after['ALLparents']
+            or git('remote', 'get-url', 'origin') != after['origin']):
+        raise Refusal('accepted dependency source is no longer current')
+    if policy['kind'] == 'local-ref' and git('rev-parse', '--verify', policy['ref'] + '^{commit}') != policy['target']:
+        raise Refusal('accepted Branch ref is no longer current')
+    binding = task['admitted_scope'].get('branch_binding')
+    if binding:
+        from .branches import association
+        branch = association(store, binding)
+        if (branch['repository'] != policy['repository'] or branch['origin'] != after['origin']
+                or branch['scope'] != original['package']
+                or after['branch'] != {k: branch[k] for k in ('id', 'ref', 'incarnation', 'scope', 'root', 'accepted')}):
+            raise Refusal('accepted dependency Root/branch binding changed')
+
+
+def accepted_report(store, event, run, destination):
+    """Typed sequence transfer of an accepted effect, preserving the whole return.
+
+    The generic report-only edge allowlist is unchanged. This stricter lane
+    requires an actual accepted adapter result and its original collected source.
+    """
+    from .software import clean_processing
+    original = store.job(run['job'])
+    attempt = store.attempt(run['attempt'])
+    answer = collected_task_result(attempt)
+    accepted = accepted_runs(store, original['package'], [original['task']])
+    if (len(accepted) != 1 or accepted[0] != run
+            or original['active_attempt'] != run['attempt'] or not clean_processing(store, original)
+            or original['response'] != event['id'] or event.get('source_job') != original['id']
+            or event.get('source_attempt') != attempt['id'] or event.get('source_role') != original['role']
+            or event.get('source_members') != json.loads(original['members'])
+            or event.get('package') != original['package'] or event.get('body') != answer
+            or event['id'] != digest({'response': attempt['id']})
+            or event.get('allowed_tasks') != response_tasks(store.config['tasks'][original['task']], answer, store.config)
+            or destination not in event['allowed_tasks']):
+        raise Refusal('exact whole collected accepted dependency report required')
+    return answer
+
+
+def branch_dependency(store, row):
+    """The selected Branch route consumes precisely its accepted QA return."""
+    run = accepted_qa(store, row['package'])
+    from .report_scope import source_events
+    events = source_events(store, row)
+    if len(events) != 1:
+        raise Refusal('one original same-package QA report required before Branch')
+    accepted_report(store, events[0], run, row['task'])
+    return run
 
 
 def accepted_package(store, package):

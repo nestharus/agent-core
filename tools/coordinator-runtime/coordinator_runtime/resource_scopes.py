@@ -6,7 +6,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from .contracts import PROFILES, Refusal, digest, required_text, scoped_task
+from .contracts import PROFILES, Refusal, digest, required_text, scoped_task, qa_branch_sequence
 
 
 def root(value, exclusions=(), *, metadata=True):
@@ -285,6 +285,12 @@ def qa_operation(runtime, row, record, account=None):
 
 
 def blocked(runtime, row, task=None):
+    if qa_branch_sequence(runtime.config) and row['task'] == 'branch-integrator':
+        try:
+            from .ordinary import branch_dependency
+            branch_dependency(runtime, row)
+        except (Refusal, OSError, subprocess.SubprocessError, KeyError, TypeError, ValueError):
+            return True
     enrollment = runtime.one('SELECT legacy_hold FROM enrollments WHERE role=?', (row['role'],))
     if not enrollment or not enrollment['legacy_hold']:
         return False
@@ -375,9 +381,13 @@ def qa_cleanup(runtime, row, record, account):
     if not epoch or epoch['policy']['ordinary_effects'] is not False:
         raise Refusal('current no-effect consolidation authority required')
     rows = ordinary.accepted_runs(runtime, row['package'])
-    if len(rows) != 1 or rows[0]['task'] != 'qa-execution':
-        raise Refusal('one exact independently accepted same-package execution required')
-    run = rows[0]
+    qa = [r for r in rows if r['task'] == 'qa-execution']
+    if len(qa) != 1:
+        raise Refusal('all admitted ordinary results and one exact accepted same-package QA execution required')
+    sequence = qa_branch_sequence(runtime.config)
+    if sequence:
+        ordinary.sequence_policies(runtime, row['package'])
+    run = qa[0]
     original = runtime.job(run['job'])
     held = qa_operation(runtime, original, record, account)
     qa_source.verify(runtime, run['attempt'], json.loads(run['policy']), json.loads(run['receipt']))
@@ -393,6 +403,25 @@ def qa_cleanup(runtime, row, record, account):
     events = source_events(runtime, row)
     if not events:
         raise Refusal('actual complete execution reports required')
-    for event in events:
-        execution_report(runtime, event, original, row['task'])
+    if sequence:
+        branch = [r for r in rows if r['task'] == 'branch-integrator']
+        if len(branch) != 1 or len(events) != 1:
+            raise Refusal('one accepted Branch result and its whole report required for final cleanup')
+        branch = branch[0]
+        branch_job = runtime.job(branch['job'])
+        if branch_job['effects'] != 'reconciled' or branch_job['hold_reason'] or not ordinary.selected(runtime, branch_job):
+            raise Refusal('accepted Branch result unresolved, held or no longer authorized')
+        prospective.board(runtime, 'Branch')._software_job_grant(runtime, branch_job)
+        _, policy = ordinary.policy_for(runtime, branch_job)
+        if policy != json.loads(branch['policy']):
+            raise Refusal('accepted Branch policy changed')
+        ordinary.accepted_source_current(runtime, branch, policy)
+        ordinary.accepted_report(runtime, events[0], branch, row['task'])
+        # The Branch return must retain the complete QA envelope too.
+        from .report_scope import conserved_inputs
+        if {'collected_reports': conserved_inputs(runtime, branch_job)} not in events[0]['body']['findings']:
+            raise Refusal('final cleanup cannot omit the whole original QA report')
+    else:
+        for event in events:
+            execution_report(runtime, event, original, row['task'])
     return held
