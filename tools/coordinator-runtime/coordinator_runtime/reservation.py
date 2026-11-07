@@ -1,5 +1,5 @@
 """Finite actual reservation outcomes. No raw error, scope or source-body reads."""
-from .contracts import Refusal
+from .contracts import Refusal, digest, required_text
 
 PREDICATES = (
     'enrollment', 'role-enabled', 'processing-task', 'owner-review', 'legacy-hold',
@@ -13,15 +13,22 @@ PREDICATES = (
     'local-scope-conflict', 'local-branch-conflict',
 )
 OUTCOMES = ('false', 'refusal', 'reserved')
+CONFLICT_ARMS = ('point-access', 'bound-material', 'shared-resource')
 
 
 def write(store, record):
-    store.db.execute('INSERT OR REPLACE INTO reservation_outcomes VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', record)
+    observation = record[:12]
+    store.db.execute('INSERT OR REPLACE INTO reservation_outcomes VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', observation)
+    store.db.execute('DELETE FROM reservation_conflicts WHERE event=?', (record[0],))
+    if len(record) == 14 and record[12] is not None:
+        store.db.execute('INSERT INTO reservation_conflicts VALUES(?,?,1,?,?)',
+                         (record[0], digest(observation), record[12], record[13]))
 
 
 class Evaluation:
     def __init__(self, store, row):
         self.store, self.row, self.predicate = store, row, 'enrollment'
+        self.conflict_job, self.conflict_arm = None, None
         # Existing immutable intake hash and mapping metadata only. No event()
         # reconstruction, protected body read, scope lookup or diagnostic hash.
         source = store.one('SELECT hash FROM events WHERE id=?', (row['event'],))
@@ -37,9 +44,16 @@ class Evaluation:
         assert predicate in PREDICATES
         self.predicate = predicate
 
+    def conflict(self, job, arm):
+        assert self.predicate == 'local-scope-conflict' and arm in CONFLICT_ARMS
+        required_text(job, 'same-evaluation conflicting job identity', 128)
+        self.conflict_job, self.conflict_arm = job, arm
+
     def finish(self, outcome):
         assert outcome in OUTCOMES
-        record = (*self.context, self.store.clock(), 1, outcome, self.predicate)
+        conflict = (self.conflict_job, self.conflict_arm) if (
+            outcome == 'false' and self.predicate == 'local-scope-conflict') else (None, None)
+        record = (*self.context, self.store.clock(), 1, outcome, self.predicate, *conflict)
         write(self.store, record)
         observations = getattr(self.store, '_reservation_observations', None)
         if observations is not None:
@@ -92,7 +106,21 @@ def view(runtime, key, event, state, responsibility, controller):
         return {**unknown, 'outcome': 'stale', 'meaning': 'changed attribution; old identity and reason withheld'}
     if not row['valid']:
         return {**unknown, 'outcome': 'unknown', 'meaning': 'malformed or unrecognized stored observation'}
-    return {'available': True, 'current': True, 'schema_version': 1,
+    diagnostic = {}
+    if row['predicate'] == 'local-scope-conflict':
+        witness = {'schema_version': 1, 'job': None, 'arm': 'unknown'}
+        if row['outcome'] == 'false' and runtime.one(
+                "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='reservation_conflicts'"):
+            observation = (event, state['hash'], queue['id'], queue['task'], queue['phase'],
+                           key, controller, version, row['observed'], 1, row['outcome'], row['predicate'])
+            conflict = runtime.one('SELECT job,arm FROM reservation_conflicts WHERE event=? '
+                'AND observation=? AND schema_version=1 AND arm IN (?,?,?) '
+                "AND typeof(job)='text' AND length(job) BETWEEN 1 AND 128",
+                (event, digest(observation), *CONFLICT_ARMS))
+            if conflict:
+                witness.update(conflict)
+        diagnostic['local_conflict'] = witness
+    return {**diagnostic, 'available': True, 'current': True, 'schema_version': 1,
             'source': event, 'source_hash': state['hash'], 'task': responsibility['task'],
             'phase': queue['phase'], 'capability': key, 'controller': controller,
             'mapping_version': version, 'observed': row['observed'],

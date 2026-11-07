@@ -463,7 +463,7 @@ def resources(store, scope):
     return result
 
 
-def available(store, row, members, *, observe=None):
+def available(store, row, members, *, observe=None, conflict_observe=None):
     def at(predicate):
         if observe:
             observe(predicate)
@@ -507,8 +507,18 @@ def available(store, row, members, *, observe=None):
         if scope['lane'] == prior['lane'] == 'discovery':
             return unavailable('local-discovery')
         at('local-scope-conflict')
-        if (conflict(scope, prior) or binding_conflict(store, scope, prior)
-                or wanted & resources(store, prior)):
+        # Preserve OR short-circuit order and operands. The diagnostic records
+        # only the first true arm; helper refusal has no proven conflict arm.
+        arm = None
+        if conflict(scope, prior):
+            arm = 'point-access'
+        elif binding_conflict(store, scope, prior):
+            arm = 'bound-material'
+        elif wanted & resources(store, prior):
+            arm = 'shared-resource'
+        if arm:
+            if conflict_observe:
+                conflict_observe(job['id'], arm)
             return unavailable('local-scope-conflict')
         at('local-branch-conflict')
         sources = [store.event(m['event']) for m in json.loads(job['members'])]

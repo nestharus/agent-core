@@ -76,6 +76,9 @@ CREATE TABLE IF NOT EXISTS reservation_outcomes(
  task TEXT NOT NULL,phase TEXT NOT NULL,capability TEXT,controller TEXT NOT NULL,
  mapping_version INTEGER NOT NULL,observed REAL NOT NULL,
  schema_version INTEGER NOT NULL,outcome TEXT NOT NULL,predicate TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS reservation_conflicts(
+ event TEXT PRIMARY KEY,observation TEXT NOT NULL,schema_version INTEGER NOT NULL,
+ job TEXT NOT NULL,arm TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS queue_pending ON queue(role,phase,state);
 CREATE INDEX IF NOT EXISTS events_parent ON events(parent);
 CREATE INDEX IF NOT EXISTS attempts_job ON attempts(job);
@@ -764,7 +767,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 observation.at('members')
                 members = local_integration.members(self, row) if local else (json.loads(window['basis'])['members'] if window else self._members(row))
                 observation.at('local-availability')
-                if local and not local_integration.available(self, row, members, observe=observation.at):
+                if local and not local_integration.available(self, row, members, observe=observation.at,
+                                                            conflict_observe=observation.conflict):
                     observation.finish('false')
                     return None
             except Refusal as exc:

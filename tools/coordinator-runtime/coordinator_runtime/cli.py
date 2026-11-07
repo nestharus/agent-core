@@ -246,13 +246,13 @@ def parser():
     recovery.add_argument('--token',required=True)
     recovery.add_argument('--attempt',required=True)
     recovery.add_argument('--receipt',required=True,help='use-diagnosis: exact diagnosis/selection with remaining:null; optional qualified publication_remainder basis and collector_continuity; remaining-work requests fresh diagnosis')
-    for command in ('integration-closure-basis', 'retire-integration', 'integration-prestart-basis', 'withdraw-integration-prestart', 'integration-no-start-basis', 'withdraw-integration-no-start', 'work-read-closure-basis', 'fence-work-proposer'):
+    for command in ('integration-metadata-closure-basis', 'retire-integration-metadata', 'integration-closure-basis', 'retire-integration', 'integration-prestart-basis', 'withdraw-integration-prestart', 'integration-no-start-basis', 'withdraw-integration-no-start', 'work-read-closure-basis', 'fence-work-proposer'):
         integration = sub.add_parser(command, help='Actual Work: closed execution only; all original duties retained')
         integration.add_argument('job')
         integration.add_argument('--token', required=True)
-        if command in {'integration-closure-basis', 'retire-integration', 'work-read-closure-basis', 'fence-work-proposer'}:
+        if command in {'integration-metadata-closure-basis', 'retire-integration-metadata', 'integration-closure-basis', 'retire-integration', 'work-read-closure-basis', 'fence-work-proposer'}:
             integration.add_argument('--management', help='Explicit current paused-owner operation selection; no processing access')
-        if command in {'retire-integration', 'withdraw-integration-prestart', 'withdraw-integration-no-start', 'fence-work-proposer'}:integration.add_argument('--receipt', required=True)
+        if command in {'retire-integration-metadata', 'retire-integration', 'withdraw-integration-prestart', 'withdraw-integration-no-start', 'fence-work-proposer'}:integration.add_argument('--receipt', required=True)
     window = sub.add_parser('integration-window-basis', help='Exact new inputs and conserved debt; no launch')
     window.add_argument('task')
     window.add_argument('--events', nargs='+', required=True)
@@ -261,6 +261,7 @@ def parser():
     window.add_argument('--receipt', required=True)
     window.add_argument('--management', help='Explicit current paused-owner operation selection; no launch authority')
     management = sub.add_parser('integration-management-basis', help='Genuine Work: original enrollment/grant metadata and source pins only; no old bodies or authority issuance')
+    management.add_argument('--metadata-only', action='store_true', help='Versioned metadata closure authority; no legacy enrollment evidence')
     management.add_argument('--roles', nargs='+', required=True)
     management.add_argument('--authority', required=True)
     management.add_argument('--purpose', required=True)
@@ -341,7 +342,7 @@ def operate(args, store):
         from . import integration_management
         actor = actual_actor(store.config['roles']['Work']['owner'])
         with store.tx():
-            return integration_management.basis(store, args.roles, actor, args.authority, args.purpose)
+            return integration_management.basis(store, args.roles, actor, args.authority, args.purpose, metadata_only=args.metadata_only)
     if args.command in {'draft-current-configuration', 'current-configuration-basis', 'select-current-configuration', 'current-configuration-status'}:
         from . import configuration, processing
         boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
@@ -506,7 +507,7 @@ def operate(args, store):
         if args.command == 'revoke-retained':
             return board.revoke_retained(store, args.capability)
         return board.retained_step(store, args.capability)
-    if args.command in {'integration-closure-basis', 'retire-integration', 'integration-window-basis', 'select-integration-window', 'integration-prestart-basis', 'withdraw-integration-prestart', 'integration-no-start-basis', 'withdraw-integration-no-start', 'work-read-closure-basis', 'fence-work-proposer'}:
+    if args.command in {'integration-metadata-closure-basis', 'retire-integration-metadata', 'integration-closure-basis', 'retire-integration', 'integration-window-basis', 'select-integration-window', 'integration-prestart-basis', 'withdraw-integration-prestart', 'integration-no-start-basis', 'withdraw-integration-no-start', 'work-read-closure-basis', 'fence-work-proposer'}:
         if getattr(args, 'management', None):
             from . import integration_management
             actor = actual_actor(store.config['roles']['Work']['owner'])
@@ -515,6 +516,12 @@ def operate(args, store):
             selected = integration_management.target(args.command, args, receipt)
             return integration_management.execute(store, args.command, selected, selection, actor,
                 lambda: integration_operation(args, store, actor, receipt))
+        if args.command in {'integration-metadata-closure-basis', 'retire-integration-metadata'}:
+            from .integration_management import metadata_authority
+            actor = actual_actor(store.config['roles']['Work']['owner'])
+            with store.tx():
+                metadata_authority(store, actor)
+                return integration_operation(args, store, actor)
         actor = actual_actor(store.enrollment('Work')['owner'])
         Board(store.config, 'Work').verify_authority(store)
         return integration_operation(args, store, actor)
@@ -696,6 +703,7 @@ def integration_operation(args, store, actor, receipt=None):
     """Same qualified operations for ordinary and explicit management callers."""
     if args.command == 'integration-no-start-basis':return store.integration_no_start_basis(args.job, args.token)
     if args.command == 'integration-prestart-basis':return store.integration_prestart_basis(args.job, args.token)
+    if args.command == 'integration-metadata-closure-basis':return store.integration_metadata_closure_basis(args.job, args.token, actor)
     if args.command == 'integration-closure-basis':return store.integration_closure_basis(args.job, args.token)
     if args.command == 'work-read-closure-basis':return store.work_read_closure_basis(args.job, args.token)
     if args.command == 'integration-window-basis':return store.integration_window_basis(args.task, args.events)
@@ -703,6 +711,7 @@ def integration_operation(args, store, actor, receipt=None):
         receipt = read_record(args.receipt)
     if args.command == 'withdraw-integration-no-start':return store.withdraw_integration_no_start(args.job, args.token, actor, receipt)
     if args.command == 'withdraw-integration-prestart':return store.withdraw_integration_prestart(args.job, args.token, actor, receipt)
+    if args.command == 'retire-integration-metadata':return store.retire_integration_metadata(args.job, args.token, actor, receipt)
     if args.command == 'retire-integration':return store.retire_integration(args.job, args.token, actor, receipt)
     if args.command == 'fence-work-proposer':return store.fence_work_proposer(args.job, args.token, actor, receipt)
     return store.select_integration_window(actor, receipt)

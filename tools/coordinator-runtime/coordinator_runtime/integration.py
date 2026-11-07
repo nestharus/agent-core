@@ -5,10 +5,13 @@ Only the actual owner may select them through the authority-checked CLI. No
 retirement completes a job, processes an input, transfers custody or replays work.
 """
 import json
+import math
 from contextlib import nullcontext
 
 from .contracts import Refusal, digest, encode, required_text
 from .integration_evidence import attempt_view, fence_view, shared_debt_view
+
+METADATA_CLOSURE = 'integration-execution-closure-metadata-v1'
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS integration_retirements(
@@ -154,6 +157,7 @@ class IntegrationJournal:
         for item in closures:
             if not isinstance(item, dict) or set(item) != {'controller', 'collector', 'end', 'collected', 'writers_closed', 'evidence'}:
                 raise Refusal('exact controller/collector/END and writer closure evidence required')
+            required_text(item['controller'], 'actual launch-capable controller', 128)
             required_text(item['collector'], 'actual controller collector', 128)
             if type(item['end']) is not int or item['collected'] is not True or item['writers_closed'] is not True:
                 raise Refusal('controller END alone cannot establish writer closure')
@@ -366,6 +370,115 @@ class IntegrationJournal:
         return self._integration_bounded({'job': row, 'attempts': attempts,
             'results': self.rows('SELECT * FROM results WHERE job=? ORDER BY rowid', (job,)),
             'controllers': controllers})
+
+    def integration_metadata_closure_basis(self, job, token, actor):
+        """One versioned, owner-selected metadata snapshot; no old return reads.
+
+        Revision tokens witness cooperative mutations, including opaque old
+        columns. They neither validate those bodies nor discharge their duties.
+        Collector/writer closure still needs actual attributed external facts.
+        """
+        with (nullcontext() if self.db.in_transaction else self.tx()):
+            return self._integration_metadata_basis(job, token, actor)
+
+    def _integration_metadata_basis(self, job, token, actor, *, operation='integration-metadata-closure-basis'):
+        from . import windows
+        if self.processing is not None:
+            raise Refusal('metadata closure requires genuine owner authority, not processing access')
+        if actor != self.config['roles']['Work']['owner']:
+            raise Refusal('actual current Work owner required')
+        management = getattr(self, 'integration_management', None)
+        if management and (management.actor != actor or management.selection['operation'] != operation
+                or management.selection['target'] != {'job': job, 'token': token}):
+            raise Refusal('metadata closure outside exact operation/job/token management authority')
+        # Do not use job(), source_roles(), attempt(), or execution-open's
+        # legacy fence return: each can acquire retained historical bodies.
+        row = self.one('SELECT id,role,phase,task,state,active_attempt,controller,effects,'
+                       'recovery_owner,recovery_state,recovery_count FROM jobs WHERE id=? AND token=?', (job, token))
+        if (not row or row['role'] != 'Work' or row['phase'] != 'integrator' or row['state'] != 'held'):
+            raise Refusal('exact held Work integrator and reservation token required')
+        task = self.config['tasks'].get(row['task'])
+        if not task or task['role'] != 'Work' or task['phase'] != 'integrator':
+            raise Refusal('selected current Work integration task required')
+        if (self.one('SELECT job FROM integration_retirements WHERE job=?', (job,))
+                or self.one('SELECT job FROM integration_prestart_dispositions WHERE job=?', (job,))
+                or self.one('SELECT job FROM work_read_fences WHERE job=?', (job,))):
+            raise Refusal('execution retired; original duties remain held, no callback/recovery/replay')
+        sources = self.integration_metadata_sources(job)
+        if not sources or any(s['role'] not in self.config['roles'] for s in sources):
+            raise Refusal('exact related source identities and configured roles required')
+        enrollments = []
+        for role in sorted({'Work'} | {s['role'] for s in sources}):
+            enrollment = (management.enrollment(role) if management else self.one(
+                'SELECT role,owner,profile,grant_id,cutover,intake FROM enrollments WHERE role=? AND intake=1', (role,)))
+            if not enrollment or enrollment['owner'] != self.config['roles'][role]['owner']:
+                raise Refusal('actual current source role owner enrollment required')
+            enrollments.append({k: enrollment[k] for k in ('role','owner','profile','grant_id','cutover','intake')})
+        if (row['recovery_state'] not in {None, 'awaiting-disposition', 'owner-deferred', 'handed-off'}
+                or (row['recovery_state'] is None) != (row['recovery_owner'] is None)
+                or type(row['recovery_count']) is not int or row['recovery_count'] < 0
+                or (row['recovery_owner'] is None) != (row['recovery_count'] == 0)
+                or row['recovery_state'] == 'handed-off' and row['controller'] != row['recovery_owner']):
+            raise Refusal('exact inactive recovery/controller relationship required')
+        attempts = self.rows('SELECT id,kind,job,controller,begin,ended,collected,exit,state '
+                             'FROM attempts WHERE job=? ORDER BY rowid', (job,))
+        active = next((a for a in attempts if a['id'] == row['active_attempt']), None)
+        if (not active or active['kind'] != 'task' or active['controller'] != row['controller']
+                or any(a['kind'] not in {'task','diagnosis'} or a['job'] != job
+                       or a['state'] != 'collected' or a['begin'] is None or a['ended'] is None
+                       or a['collected'] is None or type(a['exit']) is not int
+                       or any(type(a[k]) not in {int,float} or not math.isfinite(a[k]) or a[k] < 0
+                              for k in ('begin','ended','collected'))
+                       or not a['begin'] <= a['ended'] <= a['collected'] for a in attempts)):
+            raise Refusal('all related originals need actual begun numeric END and collection; exact active task/controller required')
+        pending = self.one("SELECT 1 AS pending FROM recovery_requests WHERE job=? AND state='pending' LIMIT 1", (job,))
+        if pending:
+            raise Refusal('pending owner recovery selection must be disposed before retirement')
+        controllers = {row['controller'], *[a['controller'] for a in attempts]}
+        if row['recovery_owner'] is not None:
+            controllers.add(row['recovery_owner'])
+        for controller in controllers:
+            required_text(controller, 'actual launch-capable controller', 128)
+        return self._integration_bounded({'schema': METADATA_CLOSURE,
+            'configuration': digest(self.config), 'job': row, 'sources': sources,
+            'enrollments': enrollments, 'attempts': attempts, 'controllers': sorted(controllers),
+            'pending_recovery': False, 'journal_revision': windows.revision(self)})
+
+    def integration_metadata_sources(self, job):
+        """Only frozen relationship identities; never transport member hashes."""
+        sources = self.rows("SELECT json_extract(m.value,'$.queue') AS queue,"
+            "json_extract(m.value,'$.event') AS event,e.role AS role,q.event AS queue_event,"
+            "q.job AS queue_job,q.role AS queue_role,q.task AS queue_task,q.phase AS queue_phase "
+            "FROM jobs j,json_each(j.members) m LEFT JOIN events e ON e.id=json_extract(m.value,'$.event') "
+            "LEFT JOIN queue q ON q.id=json_extract(m.value,'$.queue') WHERE j.id=? ORDER BY m.key", (job,))
+        header = self.one('SELECT task FROM jobs WHERE id=?', (job,))
+        if (not sources or len({s['event'] for s in sources}) != len(sources)
+                or len({s['queue'] for s in sources}) != len(sources)
+                or any(not s['event'] or not s['queue'] or not s['role'] or s['queue_event'] != s['event']
+                       or s['queue_job'] != job or s['queue_role'] != 'Work'
+                       or s['queue_task'] != header['task'] or s['queue_phase'] != 'integrator' for s in sources)):
+            raise Refusal('exact frozen source/queue/job relationships required')
+        return [{k: s[k] for k in ('queue','event','role')} for s in sources]
+
+    def retire_integration_metadata(self, job, token, actor, receipt):
+        """Append the existing permanent execution gate, retaining UNKNOWNs.
+
+        No scheduler limits, old rows, leases, custody, source or effect duties
+        change. The metadata-only registration budget grants no allocation.
+        """
+        from .selected_source import custody_budget
+        with (nullcontext() if self.db.in_transaction else self.tx()):
+            basis = self._integration_metadata_basis(job, token, actor, operation='retire-integration-metadata')
+            self._integration_controller_closures(basis, receipt)
+            self._integration_bounded(receipt)
+            custody_budget(self, len(encode(basis).encode()) + len(encode(receipt).encode()))
+            # Same write transaction, after evidence and capacity checks. Even
+            # a mutation in an omitted old column invalidates this selection.
+            if self._integration_metadata_basis(job, token, actor, operation='retire-integration-metadata') != basis:
+                raise Refusal('metadata closure revision changed; fresh owner selection required')
+            self.db.execute('INSERT INTO integration_retirements VALUES(?,?,?,?,?,?)',
+                (job, basis['job']['active_attempt'], actor, encode(basis), encode(receipt), self.clock()))
+        return self.one('SELECT job,attempt,actor,basis,receipt,created FROM integration_retirements WHERE job=?', (job,))
 
     def retire_integration(self, job, token, actor, receipt):
         """One permanent execution fence; all historical rows stay unchanged."""

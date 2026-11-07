@@ -13,11 +13,55 @@ from .contracts import Refusal, digest, encode, required_text
 
 OPERATIONS = {'integration-closure-basis', 'retire-integration',
               'integration-window-basis', 'select-integration-window',
-              'work-read-closure-basis', 'fence-work-proposer'}
+              'work-read-closure-basis', 'fence-work-proposer',
+              'integration-metadata-closure-basis', 'retire-integration-metadata'}
 READ_FENCE_OPERATIONS = {'work-read-closure-basis', 'fence-work-proposer'}
+METADATA_OPERATIONS = {'integration-metadata-closure-basis', 'retire-integration-metadata'}
+METADATA_MANAGEMENT = 'integration-metadata-management-v1'
 
 
-def basis(runtime, roles, actor, authority, purpose):
+def _metadata_original(board, conn, runtime, *, stopped=True):
+    """The original stopped-grant checks with explicit metadata projections.
+
+    Match RetainedBoard._original, including ProcessingBoard's configuration
+    bridge. Do not acquire enrollment reconciliation/legacy evidence columns.
+    """
+    enrollment = runtime.one('SELECT role,owner,profile,grant_id,cutover,intake FROM enrollments WHERE role=?', (board.role,))
+    grant = conn.execute('SELECT id,board_id,role,owner,actor,runtime,runtime_dev,runtime_ino,'
+                         'issued_by,authority,revoked FROM coordinator_grants_v1 WHERE id=?',
+                         (enrollment['grant_id'],)).fetchone() if enrollment else None
+    info = runtime.path.stat()
+    selected = runtime.config.get('software_delegation', {})
+    if stopped and (not grant or not selected or grant['issued_by'] != selected.get('grantor')
+            or grant['authority'] != selected.get('authority')
+            or grant['revoked'] is None or enrollment['intake'] != 0):
+        raise Refusal('exact stopped Work-issued software grant required; no native grant takeover')
+    if not stopped and (not grant or grant['revoked'] is not None or enrollment['intake'] != 1):
+        raise Refusal('active original owner enrollment/delegation required')
+    expected = (board.selected['board_id'], board.role, board.selected['owner'], runtime.config['actor'],
+                str(runtime.path), info.st_dev, info.st_ino)
+    if tuple(grant[k] for k in ('board_id','role','owner','actor','runtime','runtime_dev','runtime_ino')) != expected:
+        raise Refusal('original runtime/source/owner binding changed')
+    if stopped:
+        cap = conn.execute('SELECT configuration FROM coordinator_software_grants_v1 WHERE grant_id=?', (grant['id'],)).fetchone()
+        if not cap or cap['configuration'] != board._configuration(runtime, board._binding(grant)):
+            raise Refusal('original immutable software configuration changed')
+    return dict(grant), enrollment
+
+
+def metadata_authority(runtime, actor):
+    """Ordinary current Work grant, without enrollment history acquisition."""
+    if actor != runtime.config['roles']['Work']['owner'] or runtime.processing is not None:
+        raise Refusal('actual current Work owner required; no processing substitution')
+    configuration.assert_current(runtime)
+    board = processing.ProcessingBoard(runtime.config, 'Work')
+    with board.opened() as conn:
+        _, enrollment = _metadata_original(board, conn, runtime, stopped=False)
+        if enrollment['owner'] != actor or enrollment['profile'] != board.selected['profile']:
+            raise Refusal('original source enrollment owner/profile changed')
+
+
+def basis(runtime, roles, actor, authority, purpose, *, metadata_only=False):
     """Only enrollment/original-grant metadata and public source pins; no bodies."""
     owner = runtime.config['roles']['Work']['owner']
     if actor != owner or runtime.config.get('software_delegation', {}).get('grantor') != owner:
@@ -37,19 +81,23 @@ def basis(runtime, roles, actor, authority, purpose):
         # No Access, _grant, retained basis/body inventory or capability is used.
         board = processing.ProcessingBoard(runtime.config, role)
         with board.opened(settlement=True) as conn:
-            grant = board._original(conn, runtime)
-            enrollment = runtime.one('SELECT * FROM enrollments WHERE role=?', (role,))
+            if metadata_only:
+                grant, enrollment = _metadata_original(board, conn, runtime)
+            else:
+                grant = board._original(conn, runtime)
+                enrollment = runtime.one('SELECT * FROM enrollments WHERE role=?', (role,))
             if (enrollment['owner'] != board.selected['owner']
                     or enrollment['profile'] != board.selected['profile']):
                 raise Refusal('original source enrollment owner/profile changed')
             sources[role] = {'binding': board._binding(grant), 'enrollment': enrollment}
-    return runtime._integration_bounded({'configuration': digest(runtime.config),
+    return runtime._integration_bounded({**({'schema': METADATA_MANAGEMENT} if metadata_only else {}),
+        'configuration': digest(runtime.config),
         'implementation': processing.implementation(), 'roles': sources,
         'authority': authority, 'purpose': purpose})
 
 
 def target(command, args, receipt):
-    if command in {'integration-closure-basis', 'retire-integration'} | READ_FENCE_OPERATIONS:
+    if command in {'integration-closure-basis', 'retire-integration'} | READ_FENCE_OPERATIONS | METADATA_OPERATIONS:
         return {'job': args.job, 'token': args.token}
     if command == 'integration-window-basis':
         return {'task': args.task, 'events': args.events}
@@ -76,11 +124,13 @@ class Access:
                 or not self.runtime.clock() < expiry <= self.runtime.clock() + 3600):
             raise Refusal('explicit current management selection must expire within one hour')
         prior = selection['basis']
-        if (not isinstance(prior, dict) or set(prior) != {
-                'configuration', 'implementation', 'roles', 'authority', 'purpose'}
+        metadata = selection['operation'] in METADATA_OPERATIONS
+        keys = {'configuration', 'implementation', 'roles', 'authority', 'purpose'} | ({'schema'} if metadata else set())
+        if (not isinstance(prior, dict) or set(prior) != keys
+                or metadata and prior.get('schema') != METADATA_MANAGEMENT
                 or not isinstance(prior['roles'], dict)):
             raise Refusal('exact current management metadata basis required')
-        if basis(self.runtime, list(prior['roles']), self.actor, prior['authority'], prior['purpose']) != prior:
+        if basis(self.runtime, list(prior['roles']), self.actor, prior['authority'], prior['purpose'], metadata_only=metadata) != prior:
             raise Refusal('management source/configuration/original authority changed; fresh selection required')
         return prior
 
@@ -105,7 +155,7 @@ class Access:
                     or len(set(values)) != len(values)):
                 raise Refusal('distinct explicit management record identities required')
         runtime = self.runtime
-        if command in {'integration-closure-basis', 'retire-integration'} | READ_FENCE_OPERATIONS:
+        if command in {'integration-closure-basis', 'retire-integration'} | READ_FENCE_OPERATIONS | METADATA_OPERATIONS:
             jobs, events = {selected['job']}, set()
         else:
             task = runtime.config['tasks'].get(selected['task'])
@@ -118,11 +168,16 @@ class Access:
             raise Refusal('tracked job scope differs; no implicit debt/body acquisition')
         roles = {'Work'}
         for job in jobs:
-            row = runtime.one('SELECT role,phase,members FROM jobs WHERE id=?', (job,))
+            row = runtime.one('SELECT role,phase FROM jobs WHERE id=? AND token=?',
+                (job, selected['token'])) if command in METADATA_OPERATIONS else runtime.one(
+                'SELECT role,phase,members FROM jobs WHERE id=?', (job,))
             phase = 'proposer' if command in READ_FENCE_OPERATIONS else 'integrator'
             if not row or row['role'] != 'Work' or row['phase'] != phase:
                 raise Refusal('management job must be an exact Work '+phase)
-            events.update(m['event'] for m in json.loads(row['members']))
+            if command in METADATA_OPERATIONS:
+                events.update(m['event'] for m in runtime.integration_metadata_sources(job))
+            else:
+                events.update(m['event'] for m in json.loads(row['members']))
         if set(declared['events']) != events:
             raise Refusal('related input scope differs; no implicit source/body acquisition')
         for event in events:
@@ -150,9 +205,13 @@ def execute(runtime, command, selected, selection, actor, operation):
         try:
             outcome = operation()
             access.current()
-            if command in {'retire-integration', 'select-integration-window', 'fence-work-proposer'}:
+            if command in {'retire-integration', 'select-integration-window', 'fence-work-proposer', 'retire-integration-metadata'}:
                 key = digest(selection)
-                runtime.budget(None, len(encode(selection).encode()) + len(encode(outcome).encode()))
+                if command in METADATA_OPERATIONS:
+                    from .selected_source import custody_budget
+                    custody_budget(runtime, len(encode(selection).encode()) + len(encode(outcome).encode()))
+                else:
+                    runtime.budget(None, len(encode(selection).encode()) + len(encode(outcome).encode()))
                 runtime.db.execute('INSERT INTO integration_management_operations VALUES(?,?,?,?,?)',
                     (key, actor, encode(selection), encode(outcome), runtime.clock()))
             return outcome
