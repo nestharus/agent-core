@@ -1067,7 +1067,7 @@ AMEND_VERSION = 'stopped-owner-source-amendment-v1'
 AMEND_ADDED_MODULES = frozenset({'plain_control.py', 'native_review_scope.py'})
 AMEND_MODULES = AMEND_ADDED_MODULES | LEASE_MODULES | {'local_integration.py', 'inputs.py', 'contracts.py',
                               'software.py', 'completion.py', 'local_native.py', 'resource_scopes.py', 'dispatcher.py',
-                              'review_returns.py', 'metadata_lookup.py', 'processing_admission.py'}
+                              'review_returns.py', 'metadata_lookup.py', 'processing_admission.py', 'cleanup.py'}
 # This closed source-code ceiling is separate from the original lease's twelve
 # modules and grants no runtime/native rights. Every use needs a new exact review.
 WORK_REVIEW_VERSION = 'outside-work-collected-source-review-v1'

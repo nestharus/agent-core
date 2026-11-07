@@ -57,7 +57,8 @@ class CompositeAmendment(OutsideReview):
                             if self.original_impl.get(k) != self.candidate_impl.get(k))
 
     def test_actual_composite_cli_all_changed_modules(self):
-        self.assertIn('resource_scopes.py', self.delta)
+        self.assertEqual(len(self.delta), 14)
+        self.assertTrue({'resource_scopes.py', 'cleanup.py'} <= set(self.delta))
         self.assertTrue({'plain_control.py','native_review_scope.py'} <= set(self.delta))
         self.assertTrue(set(self.delta) <= report_repair.AMEND_MODULES)
         self.test_real_cli_basis_external_safe5_work_collection_and_selection()

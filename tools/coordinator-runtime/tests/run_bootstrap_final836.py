@@ -11,7 +11,7 @@ import sys
 import time
 
 repo = Path(__file__).resolve().parents[3]
-base = repo / '.qualification838'
+base = repo / '.qualification842'
 base.mkdir(mode=0o700, exist_ok=True)
 def usage():
     return sum(p.stat().st_size for p in repo.rglob('*') if p.is_file())
