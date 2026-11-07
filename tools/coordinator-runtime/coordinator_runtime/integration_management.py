@@ -14,9 +14,12 @@ from .contracts import Refusal, digest, encode, required_text
 OPERATIONS = {'integration-closure-basis', 'retire-integration',
               'integration-window-basis', 'select-integration-window',
               'work-read-closure-basis', 'fence-work-proposer',
-              'integration-metadata-closure-basis', 'retire-integration-metadata'}
-READ_FENCE_OPERATIONS = {'work-read-closure-basis', 'fence-work-proposer'}
-METADATA_OPERATIONS = {'integration-metadata-closure-basis', 'retire-integration-metadata'}
+              'integration-metadata-closure-basis', 'retire-integration-metadata',
+              'work-read-metadata-closure-basis', 'fence-work-proposer-metadata'}
+READ_FENCE_OPERATIONS = {'work-read-closure-basis', 'fence-work-proposer',
+                         'work-read-metadata-closure-basis', 'fence-work-proposer-metadata'}
+METADATA_OPERATIONS = {'integration-metadata-closure-basis', 'retire-integration-metadata',
+                       'work-read-metadata-closure-basis', 'fence-work-proposer-metadata'}
 METADATA_MANAGEMENT = 'integration-metadata-management-v1'
 
 
@@ -175,7 +178,7 @@ class Access:
             if not row or row['role'] != 'Work' or row['phase'] != phase:
                 raise Refusal('management job must be an exact Work '+phase)
             if command in METADATA_OPERATIONS:
-                events.update(m['event'] for m in runtime.integration_metadata_sources(job))
+                events.update(m['event'] for m in runtime.integration_metadata_sources(job, phase=phase))
             else:
                 events.update(m['event'] for m in json.loads(row['members']))
         if set(declared['events']) != events:
@@ -205,7 +208,7 @@ def execute(runtime, command, selected, selection, actor, operation):
         try:
             outcome = operation()
             access.current()
-            if command in {'retire-integration', 'select-integration-window', 'fence-work-proposer', 'retire-integration-metadata'}:
+            if command in {'retire-integration', 'select-integration-window', 'fence-work-proposer', 'retire-integration-metadata', 'fence-work-proposer-metadata'}:
                 key = digest(selection)
                 if command in METADATA_OPERATIONS:
                     from .selected_source import custody_budget

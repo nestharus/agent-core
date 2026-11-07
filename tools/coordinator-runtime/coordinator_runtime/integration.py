@@ -29,6 +29,12 @@ CREATE TABLE IF NOT EXISTS integration_management_operations(
 CREATE TABLE IF NOT EXISTS work_read_fences(
  job TEXT PRIMARY KEY,actor TEXT NOT NULL,basis TEXT NOT NULL,
  receipt TEXT NOT NULL,created REAL NOT NULL);
+CREATE TRIGGER IF NOT EXISTS work_read_metadata_no_update BEFORE UPDATE ON work_read_fences
+ WHEN json_extract(OLD.basis,'$.schema')='work-read-fence-metadata-v1'
+ BEGIN SELECT RAISE(ABORT,'immutable metadata Work read fence'); END;
+CREATE TRIGGER IF NOT EXISTS work_read_metadata_no_delete BEFORE DELETE ON work_read_fences
+ WHEN json_extract(OLD.basis,'$.schema')='work-read-fence-metadata-v1'
+ BEGIN SELECT RAISE(ABORT,'immutable metadata Work read fence'); END;
 """
 
 
@@ -142,7 +148,21 @@ class IntegrationJournal:
         fence = self.one('SELECT basis FROM work_read_fences WHERE job=?', (source['id'],))
         if not fence:
             return False
-        return json.loads(fence['basis']) == self._work_read_basis(source['id'])
+        selected = json.loads(fence['basis'])
+        from . import work_read_metadata
+        if isinstance(selected, dict) and 'schema' in selected:
+            if selected['schema'] != work_read_metadata.SCHEMA:
+                raise Refusal('unsupported Work read fence version; retain original duties')
+            return work_read_metadata.coexists(self, source['id'], selected)
+        return selected == self._work_read_basis(source['id'])
+
+    def work_read_metadata_closure_basis(self, job, token, actor):
+        from .work_read_metadata import closure_basis
+        return closure_basis(self, job, token, actor)
+
+    def fence_work_proposer_metadata(self, job, token, actor, receipt):
+        from .work_read_metadata import fence
+        return fence(self, job, token, actor, receipt)
 
     def _integration_controller_closures(self, basis, receipt):
         if not isinstance(receipt, dict) or set(receipt) != {'basis', 'controllers', 'reason'}:
@@ -444,7 +464,7 @@ class IntegrationJournal:
             'enrollments': enrollments, 'attempts': attempts, 'controllers': sorted(controllers),
             'pending_recovery': False, 'journal_revision': windows.revision(self)})
 
-    def integration_metadata_sources(self, job):
+    def integration_metadata_sources(self, job, *, phase='integrator'):
         """Only frozen relationship identities; never transport member hashes."""
         sources = self.rows("SELECT json_extract(m.value,'$.queue') AS queue,"
             "json_extract(m.value,'$.event') AS event,e.role AS role,q.event AS queue_event,"
@@ -456,7 +476,7 @@ class IntegrationJournal:
                 or len({s['queue'] for s in sources}) != len(sources)
                 or any(not s['event'] or not s['queue'] or not s['role'] or s['queue_event'] != s['event']
                        or s['queue_job'] != job or s['queue_role'] != 'Work'
-                       or s['queue_task'] != header['task'] or s['queue_phase'] != 'integrator' for s in sources)):
+                       or s['queue_task'] != header['task'] or s['queue_phase'] != phase for s in sources)):
             raise Refusal('exact frozen source/queue/job relationships required')
         return [{k: s[k] for k in ('queue','event','role')} for s in sources]
 

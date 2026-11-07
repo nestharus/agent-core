@@ -1,5 +1,8 @@
 # Closed Work integration execution
 
+For a held nonwriting Work proposer whose historical bodies are outside the
+selected authority, use the separate [metadata-only read fence](work-read-metadata.md).
+
 An explicitly selected [local integration policy](local-integration.md) supersedes
 legacy singleton/window and cross-package QA phase requirements for its future
 anchored paths. All seven duties, actual contexts and applicable gates persist;

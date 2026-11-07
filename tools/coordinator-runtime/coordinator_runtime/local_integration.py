@@ -567,7 +567,7 @@ def current_job(store, job):
     scope = json.loads(frozen['scope'])
     native_access(store, job, scope)
     for source in scope.get('read_fences', []):
-        if not store.work_read_coexists(job, scope, store.job(source)):
+        if not store.work_read_coexists(job, scope, {'id': source}):
             raise Refusal('Work read fence or current read-only authority changed')
     for member in [*json.loads(job['members']), *scope.get('neighbors', [])]:
         queue = store.one('SELECT * FROM queue WHERE id=?', (member['queue'],))
