@@ -299,7 +299,11 @@ semantic/result. Diagnoses require that same no-start proof or their genuine
 finite ordered begin, numeric END and collection. A running job, pending or
 unknown recovery authority, collection handoff, response, effect receipt,
 publication intent, local commit or ordinary-effect record refuses. The initial
-job effect status `unknown` is retained, not reconciled. A retained claimed or
+job effect status `unknown` or the dispatcher's known-not-started status `none`
+is retained without rewriting effect history. `none` alone is never no-start
+proof; every affirmative attempt and closure requirement above still applies,
+and `reconciled` or other effect statuses refuse this local route. Global
+no-start predicates are unchanged. A retained claimed or
 diagnosing recovery label does not prove an active process or authorize bypass:
 all related originals must qualify and every controller still needs the owner's
 explicit actual closed-writers/no-task-launch testimony, including stopped
@@ -338,6 +342,9 @@ successors retain their existing fresh-window requirements.
 
 Owned fictional local controls:
 `python3 -I -B tests/test_local_no_start708.py --fixtures ABSOLUTE_NEW_OWNED_ROOT`.
+The same local conservation/refusal controls cover both initial `unknown` and
+the production dispatcher's prelaunch refusal/collection path to `none`, with
+no model call. Paused owner CLI controls also cover both effect statuses.
 `--legacy` exercises the existing test77 global guards with real Store/transactions;
 only its environmental `/proc` preamble is replaced by supplied admission and
 owned fixture accounting, with a 1 KiB explicit fictional publication bound.
