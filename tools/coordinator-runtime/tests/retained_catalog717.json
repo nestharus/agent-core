@@ -1,0 +1,1275 @@
+{
+  "work_integrator": {
+    "allowed_handoffs": [
+      "Work",
+      "Branch",
+      "Reviews",
+      "QA",
+      "Root"
+    ],
+    "authority": "Fictional Work current bounded catalog reconciliation; retain original owners and unknowns.",
+    "binding": {
+      "effort": "xhigh",
+      "model": "gpt-6.1-sol",
+      "provider": "openai"
+    },
+    "capacity": 1,
+    "cwd": "$FIXTURE/references/7/work",
+    "delivery_required": true,
+    "effect_authority": {
+      "operations": [
+        "read-source",
+        "read-reports",
+        "prepare-intents",
+        "write-role-records",
+        "write-owned-artifacts"
+      ],
+      "owner": "$WORK_OWNER",
+      "read_roots": [
+        "$FIXTURE/canonical/ASSIGNMENTS.json",
+        "$FIXTURE/canonical/ASSIGNMENTS.md",
+        "$FIXTURE/canonical/CONSOLIDATION_REGISTER.json",
+        "$FIXTURE/canonical/WORK_NOW_20261030.json",
+        "$FIXTURE/canonical/WORK_NOW_20261030.md",
+        "$FIXTURE/canonical/ROOT_NEXT.md",
+        "$FIXTURE/references/8/coordinator-runtime",
+        "$FIXTURE/references/9/message-board",
+        "$FIXTURE/references/10/direct-child",
+        "$FIXTURE/references/11/direct-codex-child",
+        "$FIXTURE/references/12/retention.py",
+        "$FIXTURE/references/13/PRIMARY.md",
+        "$FIXTURE/references/14/ACTUAL-WORK-DECISION.json",
+        "$FIXTURE/references/15/ACTUAL-USER-CONTROL-AND-CRW-SELECTION-20261105.json",
+        "$FIXTURE/references/16/USER-ACCEPTABLE-RISK-ADDENDUM.json",
+        "$FIXTURE/references/17/ACTUAL-WORK-DECISION.json",
+        "$FIXTURE/references/18/ROOT49290-ACTUAL-WORK-INTAKE.json",
+        "$FIXTURE/references/19/ROOT49304-FULL-RECEIVING.json",
+        "$FIXTURE/references/20/board_store.py",
+        "$FIXTURE/references/21/catalog.py",
+        "$FIXTURE/references/22/queue_transport.py",
+        "$FIXTURE/references/23/active_listener.py"
+      ],
+      "write_roots": [
+        "$FIXTURE/canonical/ASSIGNMENTS.json",
+        "$FIXTURE/canonical/ASSIGNMENTS.md",
+        "$FIXTURE/canonical/CONSOLIDATION_REGISTER.json",
+        "$FIXTURE/canonical/WORK_NOW_20261030.json",
+        "$FIXTURE/canonical/WORK_NOW_20261030.md",
+        "$FIXTURE/canonical/ROOT_NEXT.md",
+        "$FIXTURE/canonical/WORK_LOG.md"
+      ]
+    },
+    "effects": "owner-reconcile",
+    "network": false,
+    "phase": "integrator",
+    "profile": ".codex3",
+    "purpose": "Fictional seven-consumer catalog integration through the declared staged publisher.",
+    "responses": {
+      "blocker": [
+        "work-proposer"
+      ],
+      "scope": [
+        "work-proposer"
+      ]
+    },
+    "role": "Work",
+    "routine_completion": {
+      "bounded_log": {
+        "max_bytes": 8192,
+        "max_entry_bytes": 16384,
+        "max_lines": 12,
+        "target": "$FIXTURE/canonical/WORK_LOG.md"
+      },
+      "kind": "catalog-bounded-log-v1",
+      "targets": [
+        "$FIXTURE/canonical/ASSIGNMENTS.json",
+        "$FIXTURE/canonical/ASSIGNMENTS.md",
+        "$FIXTURE/canonical/CONSOLIDATION_REGISTER.json",
+        "$FIXTURE/canonical/WORK_NOW_20261030.json",
+        "$FIXTURE/canonical/WORK_NOW_20261030.md",
+        "$FIXTURE/canonical/ROOT_NEXT.md",
+        "$FIXTURE/canonical/WORK_LOG.md"
+      ]
+    },
+    "sandbox": "workspace-write",
+    "startup": "explicit-packet",
+    "templates": [
+      "$FIXTURE/references/24/ROLLOUT-OPERATING-BOUNDS.md",
+      "$FIXTURE/references/25/OPERATING-TASK-BOUNDS.md",
+      "$FIXTURE/references/26/README.md",
+      "$FIXTURE/references/27/batch-integrator.prompt.md",
+      "$FIXTURE/references/28/work-catalog.md"
+    ]
+  },
+  "local_policy": {
+    "authority": "Fictional current Work routine local reconciliation under unchanged original rights.",
+    "capacity": 5,
+    "discovery_batch": 4,
+    "discovery_lines": [
+      {
+        "authority": "UNSELECTED neutral coordination namespace for genuine positive new-business proposals, not Main/Cloud/PR1230 identity, ownership acceptance or native permission.",
+        "incarnation": "PROPOSED-prospective479-v1",
+        "line": "coord479:mixed-coordination"
+      }
+    ],
+    "lookup_scopes": [
+      {
+        "member_field": "id",
+        "point": {
+          "bindings": [
+            {
+              "path": [
+                "assignments"
+              ],
+              "target": "$FIXTURE/canonical/ASSIGNMENTS.json"
+            }
+          ],
+          "incarnation": "PROPOSED-prospective479-v1",
+          "kind": "item",
+          "line": "coord479:mixed-coordination",
+          "protected": [
+            "work_id",
+            "owner",
+            "packet",
+            "decision",
+            "proposal",
+            "admission_observation",
+            "scope",
+            "stage_states",
+            "retention",
+            "catalog_integration_receipt",
+            "admission_coalescing",
+            "selected_maker_metadata",
+            "selected_maker_metadata_at",
+            "criteria_ref",
+            "no_downstream_effects",
+            "intake07_20261103",
+            "id",
+            "accepted_owner",
+            "owner_ack",
+            "owner_evidence",
+            "acceptance_receipt",
+            "accepted",
+            "key",
+            "history",
+            "sources",
+            "line",
+            "domain",
+            "branch",
+            "branch_id",
+            "incarnation"
+          ],
+          "resources": [],
+          "writable": []
+        },
+        "prefix": "coord479:assignment-id:",
+        "query": true,
+        "view": [
+          "id"
+        ]
+      },
+      {
+        "member_field": "id",
+        "point": {
+          "bindings": [
+            {
+              "path": [
+                "assignments"
+              ],
+              "target": "$FIXTURE/canonical/ASSIGNMENTS.json"
+            }
+          ],
+          "incarnation": "PROPOSED-prospective479-v1",
+          "kind": "item",
+          "line": "coord479:mixed-coordination",
+          "protected": [
+            "work_id",
+            "owner",
+            "packet",
+            "decision",
+            "proposal",
+            "admission_observation",
+            "scope",
+            "stage_states",
+            "retention",
+            "catalog_integration_receipt",
+            "admission_coalescing",
+            "selected_maker_metadata",
+            "selected_maker_metadata_at",
+            "criteria_ref",
+            "no_downstream_effects",
+            "intake07_20261103",
+            "id",
+            "accepted_owner",
+            "owner_ack",
+            "owner_evidence",
+            "acceptance_receipt",
+            "accepted",
+            "key",
+            "history",
+            "sources",
+            "line",
+            "domain",
+            "branch",
+            "branch_id",
+            "incarnation"
+          ],
+          "resources": [],
+          "writable": [
+            "$value"
+          ]
+        },
+        "prefix": "coord479:assignment-state:",
+        "query": true,
+        "view": [
+          "state"
+        ]
+      },
+      {
+        "member_field": "id",
+        "point": {
+          "bindings": [
+            {
+              "path": [
+                "assignments"
+              ],
+              "target": "$FIXTURE/canonical/ASSIGNMENTS.json"
+            }
+          ],
+          "incarnation": "PROPOSED-prospective479-v1",
+          "kind": "item",
+          "line": "coord479:mixed-coordination",
+          "protected": [
+            "work_id",
+            "owner",
+            "packet",
+            "decision",
+            "proposal",
+            "admission_observation",
+            "scope",
+            "stage_states",
+            "retention",
+            "catalog_integration_receipt",
+            "admission_coalescing",
+            "selected_maker_metadata",
+            "selected_maker_metadata_at",
+            "criteria_ref",
+            "no_downstream_effects",
+            "intake07_20261103",
+            "id",
+            "accepted_owner",
+            "owner_ack",
+            "owner_evidence",
+            "acceptance_receipt",
+            "accepted",
+            "key",
+            "history",
+            "sources",
+            "line",
+            "domain",
+            "branch",
+            "branch_id",
+            "incarnation"
+          ],
+          "resources": [],
+          "writable": []
+        },
+        "prefix": "coord479:assignment-scope:",
+        "query": true,
+        "view": [
+          "scope"
+        ]
+      },
+      {
+        "member_field": "id",
+        "point": {
+          "bindings": [
+            {
+              "path": [
+                "assignments"
+              ],
+              "target": "$FIXTURE/canonical/ASSIGNMENTS.json"
+            }
+          ],
+          "incarnation": "PROPOSED-prospective479-v1",
+          "kind": "item",
+          "line": "coord479:mixed-coordination",
+          "protected": [
+            "work_id",
+            "owner",
+            "packet",
+            "decision",
+            "proposal",
+            "admission_observation",
+            "scope",
+            "stage_states",
+            "retention",
+            "catalog_integration_receipt",
+            "admission_coalescing",
+            "selected_maker_metadata",
+            "selected_maker_metadata_at",
+            "criteria_ref",
+            "no_downstream_effects",
+            "intake07_20261103",
+            "id",
+            "accepted_owner",
+            "owner_ack",
+            "owner_evidence",
+            "acceptance_receipt",
+            "accepted",
+            "key",
+            "history",
+            "sources",
+            "line",
+            "domain",
+            "branch",
+            "branch_id",
+            "incarnation"
+          ],
+          "resources": [],
+          "writable": []
+        },
+        "prefix": "coord479:assignment-owner:",
+        "query": true,
+        "view": [
+          "owner"
+        ]
+      },
+      {
+        "member_field": "id",
+        "point": {
+          "bindings": [
+            {
+              "path": [
+                "assignments"
+              ],
+              "target": "$FIXTURE/canonical/ASSIGNMENTS.json"
+            }
+          ],
+          "incarnation": "PROPOSED-prospective479-v1",
+          "kind": "item",
+          "line": "coord479:mixed-coordination",
+          "protected": [
+            "work_id",
+            "owner",
+            "packet",
+            "decision",
+            "proposal",
+            "admission_observation",
+            "scope",
+            "stage_states",
+            "retention",
+            "catalog_integration_receipt",
+            "admission_coalescing",
+            "selected_maker_metadata",
+            "selected_maker_metadata_at",
+            "criteria_ref",
+            "no_downstream_effects",
+            "intake07_20261103",
+            "id",
+            "accepted_owner",
+            "owner_ack",
+            "owner_evidence",
+            "acceptance_receipt",
+            "accepted",
+            "key",
+            "history",
+            "sources",
+            "line",
+            "domain",
+            "branch",
+            "branch_id",
+            "incarnation"
+          ],
+          "resources": [],
+          "writable": []
+        },
+        "prefix": "coord479:assignment-comparison:",
+        "query": true,
+        "view": []
+      },
+      {
+        "member_field": null,
+        "point": {
+          "bindings": [
+            {
+              "id": "$source",
+              "native": "branch"
+            }
+          ],
+          "incarnation": "PROPOSED-prospective479-v1",
+          "kind": "item",
+          "line": "coord479:mixed-coordination",
+          "protected": [
+            "work_id",
+            "owner",
+            "packet",
+            "decision",
+            "proposal",
+            "admission_observation",
+            "scope",
+            "stage_states",
+            "retention",
+            "catalog_integration_receipt",
+            "admission_coalescing",
+            "selected_maker_metadata",
+            "selected_maker_metadata_at",
+            "criteria_ref",
+            "no_downstream_effects",
+            "intake07_20261103",
+            "id",
+            "accepted_owner",
+            "owner_ack",
+            "owner_evidence",
+            "acceptance_receipt",
+            "accepted",
+            "key",
+            "history",
+            "sources",
+            "line",
+            "domain",
+            "branch",
+            "branch_id",
+            "incarnation"
+          ],
+          "resources": [],
+          "writable": []
+        },
+        "prefix": "coord479:native-branch:"
+      },
+      {
+        "member_field": null,
+        "point": {
+          "bindings": [
+            {
+              "component": "$source",
+              "native": "review"
+            }
+          ],
+          "incarnation": "PROPOSED-prospective479-v1",
+          "kind": "item",
+          "line": "coord479:mixed-coordination",
+          "protected": [
+            "work_id",
+            "owner",
+            "packet",
+            "decision",
+            "proposal",
+            "admission_observation",
+            "scope",
+            "stage_states",
+            "retention",
+            "catalog_integration_receipt",
+            "admission_coalescing",
+            "selected_maker_metadata",
+            "selected_maker_metadata_at",
+            "criteria_ref",
+            "no_downstream_effects",
+            "intake07_20261103",
+            "id",
+            "accepted_owner",
+            "owner_ack",
+            "owner_evidence",
+            "acceptance_receipt",
+            "accepted",
+            "key",
+            "history",
+            "sources",
+            "line",
+            "domain",
+            "branch",
+            "branch_id",
+            "incarnation"
+          ],
+          "resources": [],
+          "writable": []
+        },
+        "prefix": "coord479:native-review:"
+      },
+      {
+        "member_field": null,
+        "point": {
+          "bindings": [
+            {
+              "native": "execution",
+              "package": "$source",
+              "task": "qa-execution"
+            }
+          ],
+          "incarnation": "PROPOSED-prospective479-v1",
+          "kind": "item",
+          "line": "coord479:mixed-coordination",
+          "protected": [
+            "work_id",
+            "owner",
+            "packet",
+            "decision",
+            "proposal",
+            "admission_observation",
+            "scope",
+            "stage_states",
+            "retention",
+            "catalog_integration_receipt",
+            "admission_coalescing",
+            "selected_maker_metadata",
+            "selected_maker_metadata_at",
+            "criteria_ref",
+            "no_downstream_effects",
+            "intake07_20261103",
+            "id",
+            "accepted_owner",
+            "owner_ack",
+            "owner_evidence",
+            "acceptance_receipt",
+            "accepted",
+            "key",
+            "history",
+            "sources",
+            "line",
+            "domain",
+            "branch",
+            "branch_id",
+            "incarnation"
+          ],
+          "resources": [],
+          "writable": []
+        },
+        "prefix": "coord479:native-execution:"
+      }
+    ],
+    "method": "$FIXTURE/references/28/work-catalog.md",
+    "new_point_prefix": "coord479:new-business:",
+    "ownership_fields": [
+      "owner",
+      "accepted_owner",
+      "owner_ack",
+      "owner_evidence",
+      "acceptance_receipt",
+      "accepted"
+    ],
+    "points": [
+      "coord479:rollout-status",
+      "coord479:assignment-comparison:233ba4c42fc5e3c54b0965f2fbbd84132f2883b24e540dd50064d8811b988343",
+      "coord479:assignment-id:d2883a978bb7984d325079bd87cd479673870dbc98d503944a221d193490f903",
+      "coord479:assignment-owner:04f8ca2aab24b153488658eacbb2aee7f28fc00a7618db531542a17b20c43262",
+      "coord479:assignment-scope:50ae278a05faf85001e8652f647c6d2d1e7fa3dfcd1d155b63bf231a8e28a419",
+      "coord479:assignment-state:fe2562c48b8a8c3f18f09b3c63adc6399d62b82b6ef57eb43777a81579c2def7",
+      "coord479:proposed608:assignment-next-action",
+      "coord479:proposed608:planning-document-status",
+      "coord479:proposed608:planning-document-next-action",
+      "coord479:proposed608:finding-current-execution-status",
+      "coord479:proposed608:finding-state",
+      "coord479:proposed608:current-work-status",
+      "coord479:proposed608:current-work-next-action"
+    ]
+  },
+  "points": {
+    "coord479:rollout-status": {
+      "bindings": [
+        {
+          "path": [
+            "packet_coordination",
+            "coordinator_runtime_rollout",
+            "status"
+          ],
+          "target": "$FIXTURE/canonical/ASSIGNMENTS.json"
+        },
+        {
+          "path": [
+            "coordinator_runtime_rollout_20261103",
+            "status"
+          ],
+          "target": "$FIXTURE/canonical/CONSOLIDATION_REGISTER.json"
+        },
+        {
+          "path": [
+            "packet_coordination",
+            "coordinator_runtime_rollout",
+            "status"
+          ],
+          "target": "$FIXTURE/canonical/WORK_NOW_20261030.json"
+        }
+      ],
+      "incarnation": "PROPOSED-prospective479-v1",
+      "kind": "item",
+      "line": "coord479:mixed-coordination",
+      "protected": [
+        "work_id",
+        "owner",
+        "packet",
+        "decision",
+        "proposal",
+        "admission_observation",
+        "scope",
+        "stage_states",
+        "retention",
+        "catalog_integration_receipt",
+        "admission_coalescing",
+        "selected_maker_metadata",
+        "selected_maker_metadata_at",
+        "criteria_ref",
+        "no_downstream_effects",
+        "intake07_20261103",
+        "id",
+        "accepted_owner",
+        "owner_ack",
+        "owner_evidence",
+        "acceptance_receipt",
+        "accepted",
+        "key",
+        "history",
+        "sources",
+        "line",
+        "domain",
+        "branch",
+        "branch_id",
+        "incarnation"
+      ],
+      "resources": [],
+      "writable": [
+        "$value"
+      ]
+    },
+    "coord479:assignment-comparison:233ba4c42fc5e3c54b0965f2fbbd84132f2883b24e540dd50064d8811b988343": {
+      "bindings": [
+        {
+          "path": [
+            "assignments",
+            {
+              "field": "id",
+              "value": "WORK-20261103-COORDINATOR-RUNTIME-LUNA-ROUTING-AND-CLEANUP"
+            }
+          ],
+          "target": "$FIXTURE/canonical/ASSIGNMENTS.json"
+        }
+      ],
+      "incarnation": "PROPOSED-prospective479-v1",
+      "kind": "item",
+      "line": "coord479:mixed-coordination",
+      "protected": [
+        "work_id",
+        "owner",
+        "packet",
+        "decision",
+        "proposal",
+        "admission_observation",
+        "scope",
+        "stage_states",
+        "retention",
+        "catalog_integration_receipt",
+        "admission_coalescing",
+        "selected_maker_metadata",
+        "selected_maker_metadata_at",
+        "criteria_ref",
+        "no_downstream_effects",
+        "intake07_20261103",
+        "id",
+        "accepted_owner",
+        "owner_ack",
+        "owner_evidence",
+        "acceptance_receipt",
+        "accepted",
+        "key",
+        "history",
+        "sources",
+        "line",
+        "domain",
+        "branch",
+        "branch_id",
+        "incarnation"
+      ],
+      "resources": [],
+      "writable": []
+    },
+    "coord479:assignment-id:d2883a978bb7984d325079bd87cd479673870dbc98d503944a221d193490f903": {
+      "bindings": [
+        {
+          "path": [
+            "assignments",
+            {
+              "field": "id",
+              "value": "WORK-20261103-COORDINATOR-RUNTIME-LUNA-ROUTING-AND-CLEANUP"
+            },
+            "id"
+          ],
+          "target": "$FIXTURE/canonical/ASSIGNMENTS.json"
+        }
+      ],
+      "incarnation": "PROPOSED-prospective479-v1",
+      "kind": "item",
+      "line": "coord479:mixed-coordination",
+      "protected": [
+        "work_id",
+        "owner",
+        "packet",
+        "decision",
+        "proposal",
+        "admission_observation",
+        "scope",
+        "stage_states",
+        "retention",
+        "catalog_integration_receipt",
+        "admission_coalescing",
+        "selected_maker_metadata",
+        "selected_maker_metadata_at",
+        "criteria_ref",
+        "no_downstream_effects",
+        "intake07_20261103",
+        "id",
+        "accepted_owner",
+        "owner_ack",
+        "owner_evidence",
+        "acceptance_receipt",
+        "accepted",
+        "key",
+        "history",
+        "sources",
+        "line",
+        "domain",
+        "branch",
+        "branch_id",
+        "incarnation"
+      ],
+      "resources": [],
+      "writable": []
+    },
+    "coord479:assignment-owner:04f8ca2aab24b153488658eacbb2aee7f28fc00a7618db531542a17b20c43262": {
+      "bindings": [
+        {
+          "path": [
+            "assignments",
+            {
+              "field": "id",
+              "value": "WORK-20261103-COORDINATOR-RUNTIME-LUNA-ROUTING-AND-CLEANUP"
+            },
+            "owner"
+          ],
+          "target": "$FIXTURE/canonical/ASSIGNMENTS.json"
+        }
+      ],
+      "incarnation": "PROPOSED-prospective479-v1",
+      "kind": "item",
+      "line": "coord479:mixed-coordination",
+      "protected": [
+        "work_id",
+        "owner",
+        "packet",
+        "decision",
+        "proposal",
+        "admission_observation",
+        "scope",
+        "stage_states",
+        "retention",
+        "catalog_integration_receipt",
+        "admission_coalescing",
+        "selected_maker_metadata",
+        "selected_maker_metadata_at",
+        "criteria_ref",
+        "no_downstream_effects",
+        "intake07_20261103",
+        "id",
+        "accepted_owner",
+        "owner_ack",
+        "owner_evidence",
+        "acceptance_receipt",
+        "accepted",
+        "key",
+        "history",
+        "sources",
+        "line",
+        "domain",
+        "branch",
+        "branch_id",
+        "incarnation"
+      ],
+      "resources": [],
+      "writable": []
+    },
+    "coord479:assignment-scope:50ae278a05faf85001e8652f647c6d2d1e7fa3dfcd1d155b63bf231a8e28a419": {
+      "bindings": [
+        {
+          "path": [
+            "assignments",
+            {
+              "field": "id",
+              "value": "WORK-20261103-COORDINATOR-RUNTIME-LUNA-ROUTING-AND-CLEANUP"
+            },
+            "scope"
+          ],
+          "target": "$FIXTURE/canonical/ASSIGNMENTS.json"
+        }
+      ],
+      "incarnation": "PROPOSED-prospective479-v1",
+      "kind": "item",
+      "line": "coord479:mixed-coordination",
+      "protected": [
+        "work_id",
+        "owner",
+        "packet",
+        "decision",
+        "proposal",
+        "admission_observation",
+        "scope",
+        "stage_states",
+        "retention",
+        "catalog_integration_receipt",
+        "admission_coalescing",
+        "selected_maker_metadata",
+        "selected_maker_metadata_at",
+        "criteria_ref",
+        "no_downstream_effects",
+        "intake07_20261103",
+        "id",
+        "accepted_owner",
+        "owner_ack",
+        "owner_evidence",
+        "acceptance_receipt",
+        "accepted",
+        "key",
+        "history",
+        "sources",
+        "line",
+        "domain",
+        "branch",
+        "branch_id",
+        "incarnation"
+      ],
+      "resources": [],
+      "writable": []
+    },
+    "coord479:assignment-state:fe2562c48b8a8c3f18f09b3c63adc6399d62b82b6ef57eb43777a81579c2def7": {
+      "bindings": [
+        {
+          "path": [
+            "assignments",
+            {
+              "field": "id",
+              "value": "WORK-20261103-COORDINATOR-RUNTIME-LUNA-ROUTING-AND-CLEANUP"
+            },
+            "state"
+          ],
+          "target": "$FIXTURE/canonical/ASSIGNMENTS.json"
+        }
+      ],
+      "incarnation": "PROPOSED-prospective479-v1",
+      "kind": "item",
+      "line": "coord479:mixed-coordination",
+      "protected": [
+        "work_id",
+        "owner",
+        "packet",
+        "decision",
+        "proposal",
+        "admission_observation",
+        "scope",
+        "stage_states",
+        "retention",
+        "catalog_integration_receipt",
+        "admission_coalescing",
+        "selected_maker_metadata",
+        "selected_maker_metadata_at",
+        "criteria_ref",
+        "no_downstream_effects",
+        "intake07_20261103",
+        "id",
+        "accepted_owner",
+        "owner_ack",
+        "owner_evidence",
+        "acceptance_receipt",
+        "accepted",
+        "key",
+        "history",
+        "sources",
+        "line",
+        "domain",
+        "branch",
+        "branch_id",
+        "incarnation"
+      ],
+      "resources": [],
+      "writable": [
+        "$value"
+      ]
+    },
+    "coord479:proposed608:assignment-next-action": {
+      "bindings": [
+        {
+          "path": [
+            "assignments",
+            {
+              "field": "id",
+              "value": "WORK-20261103-COORDINATOR-RUNTIME-LUNA-ROUTING-AND-CLEANUP"
+            },
+            "next_action"
+          ],
+          "target": "$FIXTURE/canonical/ASSIGNMENTS.json"
+        }
+      ],
+      "incarnation": "PROPOSED-prospective479-v1",
+      "kind": "item",
+      "line": "coord479:mixed-coordination",
+      "protected": [
+        "work_id",
+        "owner",
+        "packet",
+        "decision",
+        "proposal",
+        "admission_observation",
+        "scope",
+        "stage_states",
+        "retention",
+        "catalog_integration_receipt",
+        "admission_coalescing",
+        "selected_maker_metadata",
+        "selected_maker_metadata_at",
+        "criteria_ref",
+        "no_downstream_effects",
+        "intake07_20261103",
+        "id",
+        "accepted_owner",
+        "owner_ack",
+        "owner_evidence",
+        "acceptance_receipt",
+        "accepted",
+        "key",
+        "history",
+        "sources",
+        "line",
+        "domain",
+        "branch",
+        "branch_id",
+        "incarnation"
+      ],
+      "resources": [],
+      "writable": [
+        "$value"
+      ]
+    },
+    "coord479:proposed608:planning-document-status": {
+      "bindings": [
+        {
+          "path": [
+            "planning_documents",
+            {
+              "field": "document_id",
+              "value": "local:coordinator-runtime-rollout-20261103-01"
+            },
+            "status_accepted_deferred_or_unknown"
+          ],
+          "target": "$FIXTURE/canonical/CONSOLIDATION_REGISTER.json"
+        }
+      ],
+      "incarnation": "PROPOSED-prospective479-v1",
+      "kind": "item",
+      "line": "coord479:mixed-coordination",
+      "protected": [
+        "work_id",
+        "owner",
+        "packet",
+        "decision",
+        "proposal",
+        "admission_observation",
+        "scope",
+        "stage_states",
+        "retention",
+        "catalog_integration_receipt",
+        "admission_coalescing",
+        "selected_maker_metadata",
+        "selected_maker_metadata_at",
+        "criteria_ref",
+        "no_downstream_effects",
+        "intake07_20261103",
+        "id",
+        "accepted_owner",
+        "owner_ack",
+        "owner_evidence",
+        "acceptance_receipt",
+        "accepted",
+        "key",
+        "history",
+        "sources",
+        "line",
+        "domain",
+        "branch",
+        "branch_id",
+        "incarnation"
+      ],
+      "resources": [],
+      "writable": [
+        "$value"
+      ]
+    },
+    "coord479:proposed608:planning-document-next-action": {
+      "bindings": [
+        {
+          "path": [
+            "planning_documents",
+            {
+              "field": "document_id",
+              "value": "local:coordinator-runtime-rollout-20261103-01"
+            },
+            "accountable_owner_and_next_action"
+          ],
+          "target": "$FIXTURE/canonical/CONSOLIDATION_REGISTER.json"
+        }
+      ],
+      "incarnation": "PROPOSED-prospective479-v1",
+      "kind": "item",
+      "line": "coord479:mixed-coordination",
+      "protected": [
+        "work_id",
+        "owner",
+        "packet",
+        "decision",
+        "proposal",
+        "admission_observation",
+        "scope",
+        "stage_states",
+        "retention",
+        "catalog_integration_receipt",
+        "admission_coalescing",
+        "selected_maker_metadata",
+        "selected_maker_metadata_at",
+        "criteria_ref",
+        "no_downstream_effects",
+        "intake07_20261103",
+        "id",
+        "accepted_owner",
+        "owner_ack",
+        "owner_evidence",
+        "acceptance_receipt",
+        "accepted",
+        "key",
+        "history",
+        "sources",
+        "line",
+        "domain",
+        "branch",
+        "branch_id",
+        "incarnation"
+      ],
+      "resources": [],
+      "writable": [
+        "$value"
+      ]
+    },
+    "coord479:proposed608:finding-current-execution-status": {
+      "bindings": [
+        {
+          "path": [
+            "finding_to_existing_work",
+            {
+              "field": "document_id",
+              "value": "local:coordinator-runtime-rollout-20261103-01"
+            },
+            "current_execution_status"
+          ],
+          "target": "$FIXTURE/canonical/CONSOLIDATION_REGISTER.json"
+        }
+      ],
+      "incarnation": "PROPOSED-prospective479-v1",
+      "kind": "item",
+      "line": "coord479:mixed-coordination",
+      "protected": [
+        "work_id",
+        "owner",
+        "packet",
+        "decision",
+        "proposal",
+        "admission_observation",
+        "scope",
+        "stage_states",
+        "retention",
+        "catalog_integration_receipt",
+        "admission_coalescing",
+        "selected_maker_metadata",
+        "selected_maker_metadata_at",
+        "criteria_ref",
+        "no_downstream_effects",
+        "intake07_20261103",
+        "id",
+        "accepted_owner",
+        "owner_ack",
+        "owner_evidence",
+        "acceptance_receipt",
+        "accepted",
+        "key",
+        "history",
+        "sources",
+        "line",
+        "domain",
+        "branch",
+        "branch_id",
+        "incarnation"
+      ],
+      "resources": [],
+      "writable": [
+        "$value"
+      ]
+    },
+    "coord479:proposed608:finding-state": {
+      "bindings": [
+        {
+          "path": [
+            "finding_to_existing_work",
+            {
+              "field": "document_id",
+              "value": "local:coordinator-runtime-rollout-20261103-01"
+            },
+            "state"
+          ],
+          "target": "$FIXTURE/canonical/CONSOLIDATION_REGISTER.json"
+        }
+      ],
+      "incarnation": "PROPOSED-prospective479-v1",
+      "kind": "item",
+      "line": "coord479:mixed-coordination",
+      "protected": [
+        "work_id",
+        "owner",
+        "packet",
+        "decision",
+        "proposal",
+        "admission_observation",
+        "scope",
+        "stage_states",
+        "retention",
+        "catalog_integration_receipt",
+        "admission_coalescing",
+        "selected_maker_metadata",
+        "selected_maker_metadata_at",
+        "criteria_ref",
+        "no_downstream_effects",
+        "intake07_20261103",
+        "id",
+        "accepted_owner",
+        "owner_ack",
+        "owner_evidence",
+        "acceptance_receipt",
+        "accepted",
+        "key",
+        "history",
+        "sources",
+        "line",
+        "domain",
+        "branch",
+        "branch_id",
+        "incarnation"
+      ],
+      "resources": [],
+      "writable": [
+        "$value"
+      ]
+    },
+    "coord479:proposed608:current-work-status": {
+      "bindings": [
+        {
+          "path": [
+            "rows",
+            {
+              "field": "work",
+              "value": "WORK-20261103-COORDINATOR-RUNTIME-LUNA-ROUTING-AND-CLEANUP"
+            },
+            "status"
+          ],
+          "target": "$FIXTURE/canonical/WORK_NOW_20261030.json"
+        }
+      ],
+      "incarnation": "PROPOSED-prospective479-v1",
+      "kind": "item",
+      "line": "coord479:mixed-coordination",
+      "protected": [
+        "work_id",
+        "owner",
+        "packet",
+        "decision",
+        "proposal",
+        "admission_observation",
+        "scope",
+        "stage_states",
+        "retention",
+        "catalog_integration_receipt",
+        "admission_coalescing",
+        "selected_maker_metadata",
+        "selected_maker_metadata_at",
+        "criteria_ref",
+        "no_downstream_effects",
+        "intake07_20261103",
+        "id",
+        "accepted_owner",
+        "owner_ack",
+        "owner_evidence",
+        "acceptance_receipt",
+        "accepted",
+        "key",
+        "history",
+        "sources",
+        "line",
+        "domain",
+        "branch",
+        "branch_id",
+        "incarnation"
+      ],
+      "resources": [],
+      "writable": [
+        "$value"
+      ]
+    },
+    "coord479:proposed608:current-work-next-action": {
+      "bindings": [
+        {
+          "path": [
+            "rows",
+            {
+              "field": "work",
+              "value": "WORK-20261103-COORDINATOR-RUNTIME-LUNA-ROUTING-AND-CLEANUP"
+            },
+            "next_action"
+          ],
+          "target": "$FIXTURE/canonical/WORK_NOW_20261030.json"
+        }
+      ],
+      "incarnation": "PROPOSED-prospective479-v1",
+      "kind": "item",
+      "line": "coord479:mixed-coordination",
+      "protected": [
+        "work_id",
+        "owner",
+        "packet",
+        "decision",
+        "proposal",
+        "admission_observation",
+        "scope",
+        "stage_states",
+        "retention",
+        "catalog_integration_receipt",
+        "admission_coalescing",
+        "selected_maker_metadata",
+        "selected_maker_metadata_at",
+        "criteria_ref",
+        "no_downstream_effects",
+        "intake07_20261103",
+        "id",
+        "accepted_owner",
+        "owner_ack",
+        "owner_evidence",
+        "acceptance_receipt",
+        "accepted",
+        "key",
+        "history",
+        "sources",
+        "line",
+        "domain",
+        "branch",
+        "branch_id",
+        "incarnation"
+      ],
+      "resources": [],
+      "writable": [
+        "$value"
+      ]
+    }
+  },
+  "meaning": "Supplied actual task/routine and thirteen point shapes, with all paths and principals replaced by fictional placeholders before metadata. No actual deployment inputs.",
+  "configuration_shape": "073b46486ca76c9e9a11fa57e22a0a5ff290cfcff76f686baac588996800e390"
+}

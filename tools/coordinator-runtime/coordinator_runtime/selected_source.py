@@ -121,7 +121,7 @@ def permits_job(runtime, job, authority, attempt):
     if (authority['selection'].get('job_birth') != 'observed-v1'
             or not bridge or not runtime.processing or runtime.processing.key != bridge or not attempt
             or job['role'] != 'Work' or job['phase'] not in {'proposer', 'integrator'}
-            or task['role'] != job['role'] or task['phase'] != job['phase'] or task['effects'] != 'none'
+            or task['role'] != job['role'] or task['phase'] != job['phase']
             or job['package'] is not None or authority['policy']['ordinary_effects'] is not False
             or job['controller'] != runtime.controller or attempt['controller'] != runtime.controller
             or attempt['job'] != job['id'] or attempt['kind'] != 'task'
@@ -129,6 +129,20 @@ def permits_job(runtime, job, authority, attempt):
             or not local.selected(runtime, job['task'])
             or runtime.one('SELECT attempt FROM ordinary_runs WHERE job=?', (job['id'],))):
         return False
+    catalog = None
+    if task['effects'] != 'none':
+        from . import bounded_log
+        from .routine import policy_for
+        if (job['phase'] != 'integrator' or task['effects'] != 'owner-reconcile'
+                or task['sandbox'] != 'workspace-write' or task.get('execution') == 'owner'
+                or not isinstance(task.get('routine_completion'), dict) or not bounded_log.selected(task)):
+            return False
+        # Validate the selected seven-consumer/log contract without touching
+        # targets. Current task/config hashes bind this policy, not its title.
+        # Actual stage/write/commit authority stays with the routine publisher.
+        catalog = policy_for(task, execution=False)
+        if set(catalog['targets']) != set(task['effect_authority']['write_roots']):
+            return False  # Exact file authority, never directory-wide roots.
     cap, selection = runtime.processing.current()
     owner = runtime.config['roles']['Work']['owner']
     if (cap['issuer'] != owner or authority['selection']['grantor'] != owner
@@ -182,6 +196,15 @@ def permits_job(runtime, job, authority, attempt):
     if (not keys or keys - local.allowed_points(runtime, job['task']) or keys - points.keys()
             or any('native' in b for k in keys for b in points[k]['bindings'])):
         return False  # Before any native acquisition, even read-only native.
+    if catalog:
+        peers = set(bounded_log.inventory(catalog))
+        if (keys - set(local.selected(runtime, job['task'])['points'])
+                or keys - runtime.config['local_integration']['points'].keys()
+                or any(not points[k]['bindings'] for k in keys)
+                or any(set(b) != {'target', 'path'} or b['target'] not in peers
+                       or not isinstance(b['path'], list) or not b['path']
+                       for k in keys for b in points[k]['bindings'])):
+            return False  # No discovery/lookup expansion or unbound file source.
     local.current_job(runtime, job)
     packets = []
     for member in members:
