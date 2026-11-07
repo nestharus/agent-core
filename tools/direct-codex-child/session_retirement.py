@@ -257,7 +257,12 @@ class Stdio:
                 self.buffer += chunk
 
     def close(self):
-        self.p.stdin.close()
+        self.close_error = None
+        try:
+            self.p.stdin.close()
+        except Exception as error:
+            # A failed buffered flush must not skip collection of the created process.
+            self.close_error = type(error).__name__
         try:
             return self.p.wait(timeout=2)
         except subprocess.TimeoutExpired:
@@ -307,6 +312,8 @@ def retire(attempt, actor, binding, current_session, now=None, factory=Stdio, ch
             if server is not None:
                 try:
                     op['adapter_end'] = server.close()
+                    if getattr(server, 'close_error', None):
+                        op['end_failure'] = server.close_error
                 except Exception as error:
                     op['adapter_end'] = None
                     op['end_failure'] = type(error).__name__

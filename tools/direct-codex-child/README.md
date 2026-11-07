@@ -169,3 +169,14 @@ Its nonexperimental generated schema includes `initialize.codexHome`, exact
 confirms `--listen stdio://`. Generation/help ran without networking and with
 empty private HOME/TMPDIR; no real server was initialized. Schema qualification
 and synthetic ACK tests establish the request contract, not live deletion behavior.
+
+Correction to preparatory retirement (fix845): the launcher resolves PATH once to
+an absolute canonical executable before MCP preflight, records it in state (and
+the opted-in manifest), and invokes that same path after changing directory. An
+inherited `codex_binary` cannot select another executable. This is a path binding,
+not protection against concurrent replacement of the file. Adapter stdin-close
+errors are retained alongside the actual numeric process END after bounded
+wait/terminate/kill collection. ACK and possible-send remain fenced without replay.
+Auxiliary startup/descendant effects, actual account/server semantics, external
+writer completeness, and extractor-failure consumer interpretation remain outside
+this controlled qualification. Distinct correction review precedes adoption.

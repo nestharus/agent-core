@@ -94,8 +94,10 @@ if [[ $dry_run == true ]]; then
   exit 0
 fi
 
-command -v codex >/dev/null 2>&1 || die 'codex is not installed'
 command -v python3 >/dev/null 2>&1 || die 'python3 is required to inspect effective MCP servers'
+# Resolve once before preflight or cwd changes; inherited shell variables do not select it.
+codex_binary=$(python3 -c 'import os, shutil, sys; p = shutil.which("codex"); sys.exit(1) if p is None else print(os.path.realpath(p))') \
+  || die 'codex is not installed'
 launcher_dir=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || die 'cannot locate launcher'
 [[ -z $log_max_bytes || -r $launcher_dir/capture_output.py ]] || die 'missing bounded output collector'
 parse_mcp_json() {
@@ -126,7 +128,7 @@ except (ValueError, TypeError, json.JSONDecodeError) as error:
 '
 }
 
-discovery_report=$(CODEX_HOME="$profile_home" codex -c 'mcp_servers={}' mcp list --json 2>/dev/null) \
+discovery_report=$(CODEX_HOME="$profile_home" "$codex_binary" -c 'mcp_servers={}' mcp list --json 2>/dev/null) \
   || die 'MCP discovery failed; Codex child was not started'
 server_rows=$(printf '%s\n' "$discovery_report" | parse_mcp_json) \
   || die 'cannot parse effective MCP server discovery'
@@ -150,7 +152,7 @@ mcp_flags+=(-c 'mcp_servers.openaiDeveloperDocs.url="https://developers.openai.c
 expected_rows+='openaiDeveloperDocs'$'\t0\n'
 ((server_count+=1))
 expected_rows=$(printf '%s' "$expected_rows" | LC_ALL=C sort)
-mcp_report=$(CODEX_HOME="$profile_home" codex "${mcp_flags[@]}" mcp list --json 2>/dev/null) \
+mcp_report=$(CODEX_HOME="$profile_home" "$codex_binary" "${mcp_flags[@]}" mcp list --json 2>/dev/null) \
   || die 'MCP preflight failed; Codex child was not started'
 verified_rows=$(printf '%s\n' "$mcp_report" | parse_mcp_json) \
   || die 'cannot parse effective MCP preflight'
@@ -169,7 +171,7 @@ fi
 # still launches with capability recorded as not established.
 delegation_like='multi_agent|agent_message|collab|subagent'
 delegation_rows() {
-  CODEX_HOME="$profile_home" codex "$@" features list 2>/dev/null | python3 -c '
+  CODEX_HOME="$profile_home" "$codex_binary" "$@" features list 2>/dev/null | python3 -c '
 import re
 import sys
 
@@ -245,12 +247,12 @@ git_branch=$(git -C "$cwd" branch --show-current 2>/dev/null || printf 'unavaila
   printf 'delegation_restriction_args=%s\n' "${delegation_flags[*]}"
   [[ -z $delegation_readback ]] || printf 'delegation_features=%s\n' "$(printf '%s' "$delegation_readback" | tr '\t\n' '=,')"
   printf 'delegation_scope=built-in features listed by the installed CLI; shell-launched processes, hooks, plugins and skills not covered\n'
+  printf 'codex_binary=%s\n' "$codex_binary"
   printf 'transport=direct\nprofile_lock=none\n'
   printf 'start_utc=%s\nexpected_status=native terminal exit plus codex_exit entry\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 } > "$state_path" || die 'cannot write state'
 
 if [[ -n $session_lifecycle ]]; then
-  codex_binary=$(command -v codex)
   retirement_binding=$(python3 - "$codex_binary" "$profile_home" "$profile" "$attempt" "$ephemeral" "$session_owner_receipt" <<'PYB'
 import hashlib, json, os, sys
 binary, home, profile, attempt, ephemeral, receipt = sys.argv[1:]
@@ -284,7 +286,7 @@ run_child() {
     admission=(python3 "$launcher_dir/../direct-child/execution_pool.py" --routes "$execution_pool_routes" \
       exec --profile "$profile" --receipt "$attempt/pool-admission.json" --)
   fi
-  CODEX_HOME="$profile_home" "${admission[@]}" "${codex_binary:-codex}" exec --dangerously-bypass-approvals-and-sandbox \
+  CODEX_HOME="$profile_home" "${admission[@]}" "$codex_binary" exec --dangerously-bypass-approvals-and-sandbox \
     -m "$model" -c "model_reasoning_effort=\"$effort\"" "${mcp_flags[@]}" "${delegation_flags[@]}" \
     "${session_flags[@]}" -C "$cwd" --color never -o "$final_path" -
 }
