@@ -9,6 +9,7 @@ from contextlib import contextmanager
 import copy
 import fcntl
 import hashlib
+from importlib.util import cache_from_source
 import json
 import os
 from pathlib import Path
@@ -121,16 +122,31 @@ def branch_release_sources(root):
 
 
 def release(runtime, candidate):
-    """Actual public source bytes; no account probing, pool allocation or install."""
-    directory = Path(__file__).resolve().parents[1]
-    root = directory.parent.parent
+    """Guard this call's acquisitions, not the caller's prior Python bootstrap.
+
+    The caller/configuration module and trusted interpreter are already loaded.
+    Exclusions cannot retroactively unread them. Deferred local imports below
+    have a closed source/cache footprint, checked before their loader runs.
+    """
     exclusions = _PathExclusions(candidate.get('artifact_exclusions', []))
+    # Derive the release lexically: resolve() would acquire excluded metadata
+    # and erase an alias before _path could refuse it.
+    module = _path(__file__, exclusions)
+    directory = module.parents[1]
+    root = directory.parent.parent
+    modules = _path(str(module.parent), exclusions)
     expected = {'board_library': str(root/'tools/message-board'),
                 'operator_cli': str(directory/'coordinator')}
     if any(candidate.get(k) != v for k, v in expected.items()):
         raise Refusal('current operator and Board SDK must select this same release checkout')
     if candidate.get('canonical_publication', {}).get('method') != 'retention-same-inode-v1':
         raise Refusal('current retention must preserve the same-inode snapshot lock contract')
+    # retention capture imports custody, which imports cleanup. Check their
+    # source and the loader's current-interpreter bytecode paths even when warm;
+    # an import-cache hit must not become an exclusion/alias permission cache.
+    for name in ('retention_dependency.py', 'custody.py', 'cleanup.py'):
+        source = _path(str(modules/name), exclusions)
+        _path(cache_from_source(str(source)), exclusions)
     from . import retention_dependency
     retention = candidate['canonical_publication']
     retention_dependency.validate_pins(retention.get('source_pins'))
@@ -144,7 +160,6 @@ def release(runtime, candidate):
         raise Refusal('operator config file must contain this exact selected current configuration')
     # Guard the source directory before glob enumeration as well as each file
     # before metadata/bytes. This index never memoizes either guard's outcome.
-    modules = _path(str(directory/'coordinator_runtime'), exclusions)
     paths = [*sorted(modules.glob('*.py')), directory/'coordinator',
              *(root/'tools/message-board'/p for p in ('catalog.py', 'board_store.py', 'active_listener.py', 'queue_transport.py', 'managed_owner.py')),
              root/'tools/direct-child/execution_pool.py', root/'tools/direct-child/dispatch.py',
@@ -165,6 +180,10 @@ def release(runtime, candidate):
     # Membership is user-owned hot control, including an empty paused pool.
     # Pin all other bytes and the exact public location, without touching state.
     control = regular_path(str(_path(candidate['execution_pool_routes'], exclusions)))
+    # The adapter cold-loads the shared public pool module after its source has
+    # passed the same byte/alias guards above. Guard both loader caches too.
+    for source in (modules/'execution_pool.py', root/'tools/direct-child/execution_pool.py'):
+        _path(cache_from_source(str(source)), exclusions)
     from .execution_pool import _module
     try:
         pool = _module.Pool(control)
