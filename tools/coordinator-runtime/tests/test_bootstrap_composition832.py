@@ -4,7 +4,7 @@ import json
 from unittest.mock import patch
 from test_native_return820 import NativeReturn
 from test_source_amendment822 import OutsideReview
-from coordinator_runtime import local_integration as local, report_repair
+from coordinator_runtime import local_integration as local, report_repair, native_review_scope
 
 
 class NativeToWork(NativeReturn):
@@ -27,8 +27,18 @@ class NativeToWork(NativeReturn):
         # Continue through the real delegated mapping and Work task collection.
         self.mapping_readonly = True
         self.initial[event['id']] = 'work-proposer'
-        asyncio.run(self.until(lambda:self.store.one("SELECT j.id FROM jobs j JOIN attempts a "
-            "ON a.id=j.active_attempt WHERE j.task='work-proposer' AND a.collected IS NOT NULL"), n=22))
+        def traced(function):
+            def invoke(*args, **kwargs):
+                try:
+                    return function(*args, **kwargs)
+                except Exception as exc:
+                    print('NATIVE_WORK_DIAGNOSTIC', function.__name__, str(exc), flush=True)
+                    raise
+            return invoke
+        with patch.object(native_review_scope,'preflight',traced(native_review_scope.preflight)), \
+             patch.object(native_review_scope,'_authenticate',traced(native_review_scope._authenticate)):
+            asyncio.run(self.until(lambda:self.store.one("SELECT j.id FROM jobs j JOIN attempts a "
+                "ON a.id=j.active_attempt WHERE j.task='work-proposer' AND a.collected IS NOT NULL"), n=4))
         work = self.store.one("SELECT * FROM jobs WHERE task='work-proposer'")
         call = next(c for c in self.models.calls if c['attempt']==work['active_attempt'])
         self.assertIn('QA472-FULL-NATIVE-REPORT', call['prompt'])

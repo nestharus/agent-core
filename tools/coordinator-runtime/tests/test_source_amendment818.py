@@ -31,7 +31,8 @@ class Amendment(OwnerLease):
         self.candidate_release = copy.deepcopy(self.original_release)
         root=self.original_release['root']+'/tools/coordinator-runtime/coordinator_runtime/'
         self.candidate_release['files'].update({root+k:v for k,v in self.candidate_impl.items()})
-        self.delta=sorted(k for k in pins if pins[k]!=self.candidate_impl[k])
+        self.delta=sorted(k for k in pins.keys() | self.candidate_impl.keys()
+                          if pins.get(k)!=self.candidate_impl.get(k))
         self.previous=dict(commit='8'*40,tree='7'*40,parents=['6'*40,'5'*40])
         self.current=dict(commit='9'*40,tree='4'*40,parents=['8'*40])
         self.manifest={n:digest(n) for n in ('PRIMARY.md','RESULT.json','LIMITS.md','PUBLICATION.json','WRITER-RELEASE.json')}
