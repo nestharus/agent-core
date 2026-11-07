@@ -14,6 +14,7 @@ class NativeToWork(NativeReturn):
             self.config['local_integration']['tasks'][task].update(points=['a'], lookup_scopes=[])
 
     def test_native_whole_integrator_return_maps_real_work_point(self):
+        self.mapping_readonly = True
         self.test_whole_native_return_and_real_integrator_transport()
         job = self.store.one("SELECT * FROM jobs WHERE task='reviews-integrator'")
         event = self.store.event(job['response'])
