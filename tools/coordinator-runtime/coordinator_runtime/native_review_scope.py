@@ -145,7 +145,13 @@ def _authenticate(runtime, row, record):
         if consumer['hold_reason'] or not prospective.for_job(runtime, consumer):
             raise Refusal('current unheld consumer birth/task rights required')
         runtime.processing.authorize(runtime.attempt(row['active_attempt']))
-        runtime.processing.boards['Reviews']._software_job_grant(runtime, consumer)
+        # _metadata admits only this controller's current running task when
+        # software authority has not been bound yet. Full bound grants remain
+        # mandatory as soon as the journal records that transition.
+        bound = runtime.one("SELECT json_extract(detail,'$.software_authority') AS proof FROM attempts WHERE id=?",
+                            (consumer['active_attempt'],))
+        if bound['proof'] is not None:
+            runtime.processing.boards['Reviews']._software_job_grant(runtime, consumer)
     proof = reviews.collected_proof(runtime, job, attempt)
     if not proof or proof['material'].get('selected_task') != p['source_task']:
         raise Refusal('original collected native context required')

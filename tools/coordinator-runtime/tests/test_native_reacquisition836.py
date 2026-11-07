@@ -120,7 +120,15 @@ class Reacquisition836(NativeReturn):
         async def resume():
             self.dispatch.schedule_job()
             await self.drain()
-        asyncio.run(resume())
+        from coordinator_runtime import native_review_scope
+        original = native_review_scope._authenticate
+        def traced(*args):
+            try: return original(*args)
+            except Exception as exc:
+                print('FIXTURE_AUTH836',str(exc),flush=True)
+                raise
+        with patch.object(native_review_scope,'_authenticate',side_effect=traced):
+            asyncio.run(resume())
         current = self.store.job(job['id'])
         self.assertIsNotNone(current['active_attempt'])
         result = self.store.attempt(current['active_attempt'])
