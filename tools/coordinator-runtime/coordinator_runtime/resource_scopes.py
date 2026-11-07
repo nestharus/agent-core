@@ -271,27 +271,30 @@ def blocked(runtime, row, task=None):
     exclusions = runtime.config.get('artifact_exclusions', [])
     selected = [root(p, exclusions) for p in task['effect_authority']['read_roots'] + task['effect_authority']['write_roots'] + [task['cwd']]]
     held = [root(p, exclusions) for p in record['roots'] + operation_held]
-    # Actual unresolved local jobs remain owners of their configured/admitted
-    # roots even when an external legacy inventory was narrower.
-    for job in runtime.rows("SELECT * FROM jobs WHERE role=? AND effects NOT IN ('none','reconciled')", (row['role'],)):
+    # Actual unresolved local jobs retain their original roots across roles,
+    # including reservations with no attempt/ordinary lease. This is local
+    # responsibility, not a census or clearance of external legacy inventory.
+    for job in runtime.rows("SELECT * FROM jobs WHERE effects NOT IN ('none','reconciled')"):
         if row.get('id') == job['id']:
             continue  # Reconcile this operation against OTHER unresolved owners.
-        from .configuration import task_for_job
-        prior = task_for_job(runtime, job)
         frozen = runtime.one('SELECT * FROM job_resource_policies WHERE job=?', (job['id'],))
-        if frozen:
-            prior = json.loads(frozen['task'])
-            prior_admission = json.loads(frozen['admission']) if frozen['admission'] else None
-        elif prior.get('require_package_scope'):
-            return True  # Missing original scope remains unknown, never current admission laundering.
-        else:
-            prior_admission = None
         try:
+            if frozen:
+                prior = json.loads(frozen['task'])
+                prior_admission = json.loads(frozen['admission']) if frozen['admission'] else None
+            else:
+                from .configuration import task_for_job
+                prior = task_for_job(runtime, job)
+                if prior.get('require_package_scope'):
+                    return True  # Never launder missing original scope through current admission.
+                prior_admission = None
             if scope_excluded(runtime, job['task'], prior_admission):
                 return True
             prior = scoped_task(job['task'], prior, prior_admission)
             authority = prior['effect_authority']
-        except (Refusal, KeyError):
+            if prior.get('network') or 'organize-authorized-refs' in authority.get('operations', []):
+                return True  # Path separation cannot map unresolved external/shared-ref effects.
+            held.extend(root(p, exclusions) for p in authority['read_roots'] + authority['write_roots'] + [prior['cwd']])
+        except (Refusal, OSError, KeyError, TypeError, ValueError):
             return True
-        held.extend(root(p, exclusions) for p in authority['read_roots'] + authority['write_roots'] + [prior['cwd']])
     return not selected or any(overlaps(a, b) for a in selected for b in held)
