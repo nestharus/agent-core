@@ -60,6 +60,19 @@ python3 -m unittest discover -s /absolute/selected-checkout/tools/coordinator-ru
 python3 "$RUNTIME" qualify-schema --output /absolute/owned-evidence/fresh-schema-directory
 ```
 
+`configuration.release()` builds exclusions before checking its own lexical
+module path. It checks exclusions before metadata and refuses aliases before
+deferred local imports and module enumeration. Its closed deferred import footprint
+(retention dependency, custody, cleanup and the public pool adapter) includes
+the current interpreter's bytecode cache paths, including on warm calls. Source
+and provider bytes and pool control are still freshly checked on each call.
+This boundary starts with an already imported caller/configuration module and
+trusted interpreter/standard library; it cannot unread bootstrap acquisitions.
+It is a cooperative release check, not a physical sandbox or protection against
+noncooperating writers. The owned cold/warm loader regression is
+`tests/test_release_acquisition673.py`; its retained fixture parent is selected
+with `RFQ673_FIXTURES`.
+
 Schema qualification starts no app-server/model. Retain its schema/receipt for
 current consumers, at least 24h plus all holds. Installed 0.166.0 schema exposes
 experimental ephemeral start, read, turn, interrupt and unsubscribe. The
