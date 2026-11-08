@@ -144,7 +144,17 @@ operation for a separately authorized adapter rather than silently replaying it.
 
 For newly bound ordinary jobs the model performs read-only preparation. The
 service executes the exact admitted tools only after the original preparation
-attempt is fully collected. The service durably records its intent and exclusive
+attempt is fully collected. For a new report, `unknowns` contains unresolved facts
+needed for that preparation. Future service preflight/export/runner/readback,
+separate acceptance/downstream work and unrelated historical obligations remain
+explicit findings of kind `ordinary-pending-stage`, with owning stage and full
+original ref/text. They are pending evidence, not observed outcomes or authority.
+An admission prerequisite that prevents preparation remains a blocking unknown.
+No pending finding bypasses the service's current guards, changes an old return
+or clears inherited holds. Existing original reports with `unknowns` stay intact
+and refused; this prospective prompt contract does not reinterpret them.
+
+The service durably records its intent and exclusive
 keys before tools, records each actual process/capture/END, checks current scope,
 grant, procedure, lease and source around operations, and records actual readback.
 Successful known reconciliation releases only those ordinary resource keys.
