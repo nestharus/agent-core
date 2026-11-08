@@ -11,7 +11,10 @@ import sys
 import time
 
 repo = Path(__file__).resolve().parents[3]
-base = Path('/home/nes/projects/rfq/planning/coordinator-runtime-rollout-20261103-01/handoff-prompts875/qualification')
+run_name = os.environ.get('HANDOFF875_RUN','qualification')
+if run_name not in {'qualification','qualification-final'}:
+    raise SystemExit('unselected qualification namespace')
+base = Path('/home/nes/projects/rfq/planning/coordinator-runtime-rollout-20261103-01/handoff-prompts875')/run_name
 base.mkdir(mode=0o700, parents=True, exist_ok=False)
 prior_current_charge = int(os.environ.get('HANDOFF875_PRIOR_CURRENT_BYTES','0'))
 if prior_current_charge < 0:
@@ -154,7 +157,7 @@ for label in (sys.argv[1:] or list(groups)):
                     reason=reason,collector_exception=collector_exception,argv=command,test_ids=ids,production_overrides=overrides,owned_bytes=usage())
         records.append(record)
         (root/'collection.json').write_text(json.dumps(records,indent=2))
-        print(json.dumps(dict(root=str(root),source=source,**record)),flush=True)
+        print(json.dumps(dict(root=str(root),source=source,**{k:v for k,v in record.items() if k!='argv'})),flush=True)
         print(data.decode(errors='replace'),flush=True)
     if collector_exception or reason:
         break  # never retry an unknown admission/collection
