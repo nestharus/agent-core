@@ -703,7 +703,9 @@ def wait_for_acceptance(store, job):
 
 
 def awaiting_acceptance(store, job):
-    return bool(job['active_attempt'] and json.loads(store.attempt(job['active_attempt'])['detail']).get('ordinary_awaiting_acceptance'))
+    from .native_review_scope import acquisition
+    with acquisition(store, job):
+        return bool(job['active_attempt'] and json.loads(store.attempt(job['active_attempt'])['detail']).get('ordinary_awaiting_acceptance'))
 
 
 async def qualification(store, job):

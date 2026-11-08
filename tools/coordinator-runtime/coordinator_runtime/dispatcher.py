@@ -633,6 +633,7 @@ class Dispatcher:
                           ('recovery-admission:'+job['id'],)):
             return False  # Pending custody needs an explicit owner request, even after hold release.
         try:
+            native_review_scope.admit(self.store, job)
             local_integration.current_sources(self.store, job)
         except Refusal as exc:
             self.runtime_errors[job['id']] = str(exc)
@@ -641,7 +642,12 @@ class Dispatcher:
 
     def reconcile_collected(self, job):
         if not self.admit_collected_context(job):return
-        if ordinary.awaiting_acceptance(self.store, job):
+        try:
+            awaiting = ordinary.awaiting_acceptance(self.store, job)
+        except Refusal as exc:
+            self.runtime_errors[job['id']] = str(exc)
+            return
+        if awaiting:
             if (job['controller'] == self.store.controller and not job['hold_reason']
                     and job['id'] not in self.acceptance_active and ordinary.accepted_runs(self.store, job['package'])):
                 self.acceptance_active.add(job['id'])

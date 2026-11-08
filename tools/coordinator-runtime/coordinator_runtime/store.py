@@ -1017,6 +1017,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             if row["state"] == "closed":
                 return None
             from .report_scope import source_metadata
+            from .native_review_scope import admit
+            admit(self, row)
             source_metadata(self, row)
             attempt = self.attempt(row["active_attempt"])
             task = self.config["tasks"][row["task"]]
