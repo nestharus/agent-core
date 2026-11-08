@@ -11,6 +11,7 @@ from pathlib import Path
 import stat
 
 from .contracts import Refusal, encode
+from .oneoff import recovery_hold
 
 RETENTION = 86400
 
@@ -135,7 +136,7 @@ def eligible_event(store, event):
         "WHERE a.event=? OR q.event=?", (dependent["id"], dependent["id"]))]
     # Session/store uncertainty stays separately owned, not a universal freeze
     # on already conserved queue sources or permission to purge a profile.
-    return all(a["collected"] is not None and (a["ended"] is not None or a["state"] == "not-started")
+    return all(not recovery_hold(store, a) and a["collected"] is not None and (a["ended"] is not None or a["state"] == "not-started")
                and a["cleanup"] in {"done", "owned-ephemeral-lifecycle-observed", "no-session-created"} for a in attempts)
 
 

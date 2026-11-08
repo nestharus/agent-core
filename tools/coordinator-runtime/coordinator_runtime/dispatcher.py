@@ -813,8 +813,10 @@ class Dispatcher:
     async def run_model(self, attempt, prompt, spec, schema):
         try:
             self.store.authorize_launch(attempt)
+            from .oneoff import prepare
+            prepare(self.store, attempt, prompt, spec, schema)
         except Exception as exc:
-            return {"exit": None, "result": None, "error": "launch authority refused: "+str(exc)[:500],
+            return {"exit": None, "result": None, "error": "launch/recovery preparation refused: "+str(exc)[:500],
                     "capture": "not-started", "cleanup": "no-session-created",
                     "detail": {"known_not_started": True, "resume_disposition": "unavailable-before-owned-start"}}
         return await self.models.run(self.store, attempt, prompt, spec, schema)

@@ -81,6 +81,10 @@ def parse_args(argv):
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument('--profile-advice', action=Once,
                         help='record earlier Codex profile advice while using ordinary automatic pool rotation; incompatible with --profile')
+    parser.add_argument('--ephemeral', action='store_true',
+                        help='direct Codex only: avoid session persistence; caller retains durable recovery duties')
+    parser.add_argument('--log-max-bytes', action=Once, type=int,
+                        help='direct Codex only: bounded capture; incomplete capture stays explicit')
     return parser.parse_args(argv)
 
 
@@ -509,7 +513,22 @@ def codex_command(args, record, profile, config, route_json=None):
                "--model", record["model"], "--effort", record["effort"]]
     if record.get('profile_source') != 'explicit':
         command += ['--execution-pool-routes', record['config']]
+    if getattr(args, 'ephemeral', False):
+        command += ['--ephemeral']
+    if getattr(args, 'log_max_bytes', None) is not None:
+        command += ['--log-max-bytes', str(args.log_max_bytes)]
     return command + (["--route-json", route_json] if route_json is not None else [])
+
+
+def capture_selection(args, record):
+    ephemeral = getattr(args, 'ephemeral', False)
+    maximum = getattr(args, 'log_max_bytes', None)
+    if maximum is not None and not 1 <= maximum <= 999999999999:
+        raise Refusal('--log-max-bytes must be positive and at most 12 decimal digits')
+    if (ephemeral or maximum is not None) and (record['provider'], record['transport']) != ('codex', 'direct'):
+        raise Refusal('ephemeral/bounded capture options require the direct Codex producer; no native/Claude substitution')
+    return {'ephemeral': ephemeral, 'log_max_bytes': maximum,
+            'retention': 'caller-owned processing completion+24h AND all holds; no automatic session/store retirement'}
 
 
 def native_command(record, cwd, prompt, out):
@@ -1047,6 +1066,7 @@ def main(argv):
         record.update(config=str(config_path.resolve()), config_sha256=digest)
         check_paths(args)
         record.update(resolve_transport(config, args, record))
+        record['capture_selection'] = capture_selection(args, record)
         provider = record["provider"]
         if provider == "claude" and record["transport"] == "direct":
             wrapper = args.profile or config["providers"]["claude"]["pool"][0]

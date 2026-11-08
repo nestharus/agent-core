@@ -524,6 +524,8 @@ class Peer:
 
 
 def thread_request(spec,binding):
+    if spec.get('exact_session_after_exit'):
+        raise Refusal('ephemeral thread cannot preserve exact-session continuation after owner exit')
     return {
         'model':binding['model'],'modelProvider':binding['provider'],
         'allowProviderModelFallback':False,'ephemeral':True,'cwd':spec['cwd'],
@@ -594,6 +596,15 @@ class AppServer:
             if isinstance(exc, MetadataFailure):
                 outcome['detail']['metadata_failure'] = exc.projection
         finally:
+            if child is not None:
+                try:
+                    from .oneoff import checkpoint
+                    checkpoint(store, attempt, outcome, {
+                        'tools': list(peer.tools.values()) if peer else [],
+                        'capture_issues': list(peer.capture_issues) if peer else ['peer-unavailable']})
+                except Exception as exc:
+                    outcome['error'] = outcome['error'] or 'pre-teardown recovery checkpoint refused: '+type(exc).__name__
+                    outcome['detail']['recovery_checkpoint'] = 'unqualified-held'
             await self.unsubscribe(peer, store, attempt, outcome)
             try:
                 await self.teardown(child, peer, outcome)

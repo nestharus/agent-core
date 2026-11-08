@@ -21,6 +21,7 @@ from .delivery import DeliveryJournal, SCHEMA as DELIVERY_SCHEMA
 from .custody import SCHEMA as CUSTODY_SCHEMA, witnesses
 from .routine import SCHEMA as ROUTINE_SCHEMA
 from .storage import SCHEMA as STORAGE_SCHEMA
+from . import oneoff
 from .publication import SCHEMA as PUBLICATION_SCHEMA
 from .recovery import RecoveryJournal, SCHEMA as RECOVERY_SCHEMA
 from .inputs import InputJournal, CONTROL_ROUTES, SCHEMA as INPUT_SCHEMA
@@ -160,7 +161,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         admitted.policy(config)
         windows.policy(config)
         custodian_service.policy(config)
-        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA + INPUT_SCHEMA + INTEGRATION_SCHEMA + prospective.SCHEMA + ordinary.SCHEMA + capacity.SCHEMA + admitted.SCHEMA + windows.SCHEMA + custodian_service.SCHEMA)
+        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + oneoff.SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA + INPUT_SCHEMA + INTEGRATION_SCHEMA + prospective.SCHEMA + ordinary.SCHEMA + capacity.SCHEMA + admitted.SCHEMA + windows.SCHEMA + custodian_service.SCHEMA)
         self.db.execute("PRAGMA user_version=1")
         self.db.executescript(configuration.SCHEMA + ref_scope.SCHEMA + local_integration.SCHEMA)
         from .metadata_lookup import SCHEMA as LOOKUP_SCHEMA
@@ -260,6 +261,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         counts['custodian_reserved_bytes'] = self.one(
             "SELECT COUNT(*) AS n FROM custodian_visits WHERE state IN ('prepared','running')")['n'] * (3 * custodian_service.CAPTURE + 4096)
         counts['bytes'] += counts['custodian_reserved_bytes']
+        counts['oneoff_recovery_reserved_bytes'] = oneoff.reserved_bytes(self)
+        counts['bytes'] += counts['oneoff_recovery_reserved_bytes']
         counts['excluded_codex_store_scope'] = 'sessions subtree opaque/unmeasured; shared account stores not inventoried'
         return counts
 
@@ -709,6 +712,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             self.db.execute("INSERT INTO results VALUES(?,?,?,?,?,?,?,?)",
                             (attempt, row["job"], row["event"], result_json, outcome.get("error"),
                              outcome.get("exit"), outcome["capture"], self.clock(),))
+            oneoff.collected(self, attempt)
 
     def classification_failed(self, attempt, error):
         with self.tx():
