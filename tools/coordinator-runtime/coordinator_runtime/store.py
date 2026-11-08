@@ -728,8 +728,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             detail={**json.loads(row['detail']),'protocol_capture':row['capture'],
                     'pre_inventory_error':row['error'],'artifact_inventory_error':str(error)[:1000]}
             message=((row['error']+'; ') if row['error'] else '')+'artifact inventory: '+str(error)
-            self.db.execute("UPDATE attempts SET capture='artifact-inventory-incomplete',error=?,detail=? WHERE id=?",
-                            (message[:2000],encode(detail),attempt))
+            oneoff.advance(self, attempt, {'capture': 'artifact-inventory-incomplete', 'error': message[:2000],
+                                          'detail': encode(detail)}, 'original artifact inventory gap')
             self.db.execute("UPDATE results SET capture='artifact-inventory-incomplete',error=? WHERE attempt=?",
                             (message[:2000], attempt))
 

@@ -426,8 +426,9 @@ class RecoveryJournal:
                 'prior_capture':old['capture'],'prior_error':old['error'],
                 'prior_inventory_error':detail.get('artifact_inventory_error'),
                 'basis':'all explicit leaves captured by current contract; original result/results row retained'}
-            self.db.execute('UPDATE attempts SET capture=?,error=?,detail=? WHERE id=?',
-                            (detail['protocol_capture'],detail.get('pre_inventory_error'),encode(detail),attempt))
+            from .oneoff import advance
+            advance(self, attempt, {'capture': detail['protocol_capture'], 'error': detail.get('pre_inventory_error'),
+                                    'detail': encode(detail)}, 'original artifact capture recheck')
 
     def owns_disposition(self,row,old):
         if row['controller']!=self.controller:return False

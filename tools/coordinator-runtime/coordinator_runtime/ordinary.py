@@ -699,7 +699,8 @@ def wait_for_acceptance(store, job):
     with store.tx():
         detail = json.loads(attempt['detail'])
         detail['ordinary_awaiting_acceptance'] = True
-        store.db.execute('UPDATE attempts SET detail=? WHERE id=?', (encode(detail), attempt['id']))
+        from .oneoff import advance
+        advance(store, attempt['id'], {'detail': encode(detail)}, 'ordinary acceptance/qualification')
 
 
 def awaiting_acceptance(store, job):
@@ -714,7 +715,8 @@ async def qualification(store, job):
         attempt = store.attempt(job['active_attempt'])
         detail = json.loads(attempt['detail'])
         detail.pop('ordinary_qualification', None)
-        store.db.execute('UPDATE attempts SET detail=? WHERE id=?', (encode(detail), attempt['id']))
+        from .oneoff import advance
+        advance(store, attempt['id'], {'detail': encode(detail)}, 'ordinary acceptance/qualification')
     rows = accepted_runs(store, job['package'])
     if not rows:
         raise Refusal('actual independent acceptance missing for one or more admitted ordinary task outcomes')
@@ -744,7 +746,8 @@ async def qualification(store, job):
         attempt = store.attempt(job['active_attempt'])
         detail = json.loads(attempt['detail'])
         detail['ordinary_qualification'] = {'acceptances': digest([r['acceptance'] for r in rows]), 'checked': store.clock()}
-        store.db.execute('UPDATE attempts SET detail=? WHERE id=?', (encode(detail), attempt['id']))
+        from .oneoff import advance
+        advance(store, attempt['id'], {'detail': encode(detail)}, 'ordinary acceptance/qualification')
 
 
 def qualification_current(store, job):

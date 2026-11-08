@@ -10,7 +10,7 @@ unknown residual was created, owned, headless, retired or physically removed.
 import json
 from contextlib import nullcontext
 
-from .contracts import Refusal, digest, encode
+from .contracts import Refusal, Backpressure, digest, encode, required_text
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS oneoff_recovery(
@@ -20,6 +20,13 @@ CREATE TABLE IF NOT EXISTS oneoff_recovery(
 CREATE TABLE IF NOT EXISTS oneoff_terminal_recovery(
  attempt TEXT PRIMARY KEY REFERENCES oneoff_recovery(attempt),
  reserved_bytes INTEGER NOT NULL,body TEXT,sha256 TEXT,created REAL);
+CREATE TABLE IF NOT EXISTS oneoff_collection_recovery(
+ attempt TEXT PRIMARY KEY REFERENCES oneoff_recovery(attempt),
+ original TEXT,current_hash TEXT,error TEXT);
+CREATE TABLE IF NOT EXISTS oneoff_progress_recovery(
+ sequence INTEGER PRIMARY KEY,attempt TEXT NOT NULL,collector TEXT NOT NULL,
+ basis TEXT NOT NULL,before_hash TEXT NOT NULL,changes TEXT NOT NULL,
+ after_hash TEXT NOT NULL,created REAL NOT NULL);
 """
 COLLECTION = ('id', 'controller', 'kind', 'event', 'job', 'binding', 'profile',
               'session', 'turn', 'ended', 'exit', 'collected', 'capture',
@@ -117,18 +124,108 @@ def collected(store, attempt):
         raise Refusal('launch snapshot collection belongs to its original collector')
     if capsule['collection_hash'] is not None:
         raise Refusal('original recovery collection cannot be replaced')
+    original = encode({key: row[key] for key in COLLECTION})
+    try:
+        store.budget(None, len(original.encode()) + 4096)
+    except Refusal as exc:
+        # Collection itself is still factual; missing recovery capacity is held.
+        store.db.execute('INSERT INTO oneoff_collection_recovery VALUES(?,NULL,NULL,?)',
+                         (attempt, str(exc)[:2000]))
+        return
+    seal = collection_digest(row)
+    store.db.execute('INSERT INTO oneoff_collection_recovery VALUES(?,?,?,NULL)',
+                     (attempt, original, seal))
     store.db.execute('UPDATE oneoff_recovery SET collection_hash=? WHERE attempt=?',
-                     (collection_digest(row), attempt))
+                     (seal, attempt))
+
+
+def authorize_recovery(store, attempt):
+    """Current read authority, distinct from permission to execute/classify again."""
+    from . import configuration
+    store.require_attempt_execution_open(attempt)
+    row = store.one('SELECT id,job,event,kind FROM attempts WHERE id=?', (attempt,))
+    if not row:
+        raise Refusal('attempt not owned by this journal')
+    if row['job'] or row['kind'] not in {'classifier', 'diagnosis'}:
+        store.authorize_preparation(attempt)
+        return
+    scope, parameters = configuration.event_candidate_scope(store)
+    source = store.one('SELECT e.id,e.hold FROM events e WHERE e.id=? AND (' + scope + ')',
+                       (row['event'], *parameters))
+    if not source or source['hold'] is not None:
+        raise Refusal('recovery source held/excluded before body acquisition')
+    store.require_active_sources(event=row['event'])
+    if store.processing and not store.processing.event(store.event(row['event'])):
+        raise Refusal('recovery source outside current processing selection')
+    if store.processing:
+        store.processing.authorize(store.attempt(attempt))
+
+
+def original_collection(store, row, capsule):
+    retained = store.one('SELECT * FROM oneoff_collection_recovery WHERE attempt=?', (row['id'],))
+    if not retained or not retained['original'] or retained['error']:
+        raise Refusal('original recovery collection unavailable; retain its actual gap')
+    original = json.loads(retained['original'])
+    if digest(original) != capsule['collection_hash'] or retained['current_hash'] != collection_digest(row):
+        raise Refusal('original collection or authorized progress changed; recovery remains held')
+    return original
+
+
+def advance(store, attempt, changes, basis):
+    """Trusted normal writer, inside its current transaction; never reseal originals.
+
+    Records a bounded attributed derived transition. A raw/model update cannot
+    mint this receipt. Historic capsules without original bytes remain held.
+    """
+    if not store.db.in_transaction or not changes or set(changes) - {'detail', 'capture', 'error', 'cleanup'}:
+        raise Refusal('derived recovery update needs its current bounded writer transaction')
+    capsule = store.one('SELECT collector,collection_hash FROM oneoff_recovery WHERE attempt=?', (attempt,))
+    if capsule:
+        authorize_recovery(store, attempt)
+    row = store.attempt(attempt)
+    if capsule:
+        original_collection(store, row, capsule)
+        require_progress_owner(store, row)
+        receipted = record_progress(store, row, changes, basis)
+    columns = ','.join(key + '=?' for key in changes)
+    store.db.execute('UPDATE attempts SET ' + columns + ' WHERE id=?', (*changes.values(), attempt))
+    if capsule and receipted:
+        store.db.execute('UPDATE oneoff_collection_recovery SET current_hash=? WHERE attempt=?',
+                         (collection_digest(store.attempt(attempt)), attempt))
+
+
+def require_progress_owner(store, row):
+    if row['collected'] is None or not row['job'] or not store.owns_disposition(store.job(row['job']), row):
+        raise Refusal('derived progress belongs to the collected original disposition owner')
+
+
+def record_progress(store, row, changes, basis):
+    required_text(basis, 'derived writer basis', 256)
+    body = encode(changes)
+    try:
+        store.budget(None, len(body.encode()) + 4096)
+    except Backpressure as exc:
+        store.db.execute('UPDATE oneoff_collection_recovery SET error=? WHERE attempt=?',
+                         (str(exc)[:2000], row['id']))
+        return False  # Preserve the factual update; missing progress evidence keeps recovery/retirement held.
+    store.db.execute('INSERT INTO oneoff_progress_recovery(attempt,collector,basis,before_hash,changes,after_hash,created) '
+                     'VALUES(?,?,?,?,?,?,?)', (row['id'], store.controller, basis, collection_digest(row),
+                                              body, collection_digest({**row, **changes}), store.clock()))
+    return True
 
 
 def snapshot(store, attempt):
-    """Recover exact context after owner exit/restart without resuming a session.
+    """Lawful current recovery read, including uncollected/completed-classifier windows.
 
-    The caller must already have lawful journal/source access. Recheck current
-    execution/privacy admission BEFORE acquiring a launch or result body.
+    Reading an original never adopts its process, renews an execution grant,
+    replays an effect or establishes collection/whole-processing completion.
     """
-    store.require_attempt_execution_open(attempt)
-    store.authorize_preparation(attempt)
+    with (nullcontext() if store.db.in_transaction else store.tx()):
+        authorize_recovery(store, attempt)
+        return recovery_view(store, attempt)
+
+
+def recovery_view(store, attempt):
     row = store.attempt(attempt)
     capsule = store.one('SELECT * FROM oneoff_recovery WHERE attempt=?', (attempt,))
     if capsule is None:
@@ -136,17 +233,26 @@ def snapshot(store, attempt):
     launch = json.loads(capsule['launch'])
     if capsule['launch_hash'] != digest(launch) or capsule['collector'] != row['controller']:
         raise Refusal('original launch source/collector changed')
-    if capsule['collection_hash'] != collection_digest(row):
-        raise Refusal('original collection missing or changed; recovery/effect duty remains held')
+    original = original_collection(store, row, capsule) if capsule['collection_hash'] is not None or row['collected'] is not None else None
+    require_launch_binding(row, launch)
     terminal = store.one('SELECT body,sha256 FROM oneoff_terminal_recovery WHERE attempt=?', (attempt,))
-    if terminal and terminal['body'] is not None and terminal['sha256'] != digest(json.loads(terminal['body'])):
-        raise Refusal('original terminal recovery context changed')
+    if terminal is None or terminal_changed(terminal):
+        raise Refusal('original terminal recovery missing or changed')
     return {'launch': launch, 'launch_hash': capsule['launch_hash'],
-            'collection': {key: row[key] for key in COLLECTION},
-            'collection_hash': capsule['collection_hash'],
-            'pre_teardown': json.loads(terminal['body']) if terminal and terminal['body'] else None,
+            'collection': {key: row[key] for key in COLLECTION} if row['collected'] is not None else None,
+            'original_collection': original, 'collection_hash': capsule['collection_hash'],
+            'collection_status': 'collected' if row['collected'] is not None else 'uncollected-original-held',
+            'pre_teardown': json.loads(terminal['body']) if terminal['body'] else None,
             'source_custody': 'existing events/results/artifact_blobs; retain their existing holds',
-            'permission_to_replay': False}
+            'permission_to_adopt_original': False, 'permission_to_replay': False}
+
+
+def require_launch_binding(row, launch):
+    expected = {'attempt': row['id'], 'kind': row['kind'], 'collector': row['controller'],
+                'binding': json.loads(row['binding']), 'profile': row['profile'],
+                'event': row['event'], 'job': row['job']}
+    if any(launch[key] != value for key, value in expected.items()):
+        raise Refusal('original producer binding changed; retain original custody')
 
 
 def source_events(store, row):
@@ -169,7 +275,7 @@ def retirement_state(store, attempt):
     store.require_attempt_execution_open(attempt)
     row = store.attempt(attempt)
     capsule = store.one('SELECT collection_hash FROM oneoff_recovery WHERE attempt=?', (attempt,))
-    if not capsule or capsule['collection_hash'] != collection_digest(row):
+    if not capsule or recovery_hold(store, row):
         return 'held-original-recovery-gap'
     if (row['collected'] is None or row['ended'] is None or row['capture'] != 'complete'
             or row['error'] or row['cleanup'] not in {'done', 'owned-ephemeral-lifecycle-observed'}):
@@ -189,9 +295,12 @@ def recovery_hold(store, row):
         return True
     if row['cleanup'] == 'owned-ephemeral-lifecycle-observed' and terminal['body'] is None:
         return True
+    try:
+        original_collection(store, row, capsule)
+    except (Refusal, ValueError, TypeError, KeyError):
+        return True
     return (capsule['collector'] != row['controller']
-            or capsule['launch_hash'] != digest(json.loads(capsule['launch']))
-            or capsule['collection_hash'] != collection_digest(row))
+            or capsule['launch_hash'] != digest(json.loads(capsule['launch'])))
 
 
 def terminal_changed(terminal):
