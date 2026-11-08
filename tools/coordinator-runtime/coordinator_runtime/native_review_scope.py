@@ -20,8 +20,12 @@ def validate(runtime, role, record, selection=None):
             or type(p['expires']) not in (int, float) or not math.isfinite(p['expires'])
             or p['expires'] <= runtime.clock()):
         raise Refusal('finite native consolidation must preserve unbounded original hold')
-    for k in ('authority', 'package', 'component', 'resource_evidence'):
+    for k in ('authority', 'component', 'resource_evidence'):
         required_text(p[k], 'actual current native consolidation ' + k, 4000)
+    # Explicit null selects an unpackaged Source. The exact field set above
+    # rejects omission; metadata admission still matches Source and consumer.
+    if p['package'] is not None:
+        required_text(p['package'], 'actual current native consolidation package', 4000)
     import re
     for k in ('packet_sha256', 'source_task_sha256', 'task_sha256', 'review_policy_sha256'):
         if not isinstance(p[k], str) or not re.fullmatch('[0-9a-f]{64}', p[k]):
