@@ -24,7 +24,7 @@ CREATE TRIGGER IF NOT EXISTS plain_control_immutable_delete BEFORE DELETE ON pla
 def selected_metadata(runtime, event):
     """Scalar selection checks before any original body/result acquisition."""
     _, selection = runtime.processing.current()
-    row = runtime.one('SELECT id,hash,received,hold,role,classifier,state FROM events WHERE id=?', (event,))
+    row = runtime.one('SELECT id,hash,received,hold IS NOT NULL AS held,role,classifier,state FROM events WHERE id=?', (event,))
     position = runtime.one('SELECT position FROM processing_source_positions WHERE event=?', (event,))
     originals = {e['id']:e['hash'] for r in selection['basis']['roles'].values() for e in r['original']['events']}
     if (not row or not position or row['role'] not in selection['basis']['roles']
@@ -48,6 +48,12 @@ def selected_metadata(runtime, event):
     return row, position['position']
 
 
+def classifier_metadata(runtime, attempt):
+    return runtime.one('SELECT id,kind,event,controller,state,begin,ended,collected,exit,capture, '
+                       "error IS NOT NULL AS error_present,json_extract(detail,'$.processing_capability') AS capability "
+                       'FROM attempts WHERE id=?',(attempt,))
+
+
 def basis(runtime, event):
     """Authorized exact metadata, not an interpretation or eligibility receipt."""
     with runtime.tx():
@@ -60,9 +66,11 @@ def basis(runtime, event):
         if returned:
             child, child_birth = selected_metadata(runtime, returned['response'])
             child = dict(source=child, source_birth=child_birth, payload_hash=child['hash'],
+                         classifier=classifier_metadata(runtime,child['classifier']),
                          responsibility=runtime.one('SELECT * FROM queue WHERE event=?',(child['id'],)))
         runtime.processing.current()
         return dict(schema='plain-control-basis-v1',source=row,source_birth=birth,control=control,
+                    classifier=classifier_metadata(runtime,row['classifier']),
                     responsibility=runtime.one('SELECT * FROM queue WHERE event=?',(event,)),
                     control_return=returned,consumer=child,
                     meaning='metadata pins only; whole original source/result and all current guards still required')
@@ -82,7 +90,7 @@ def metadata(runtime, event, attempt, request):
     row, _ = selected_metadata(runtime, event)
     control = runtime.one('SELECT event,capability,attempt,source_hash FROM processing_controls WHERE event=?', (event,))
     worker = runtime.one('SELECT kind,event,begin,ended,collected,exit,error,capture FROM attempts WHERE id=?', (attempt,))
-    if (not row or row['hold'] is not None or row['hash'] != request['source_hash']
+    if (not row or row['held'] or row['hash'] != request['source_hash']
             or row['received'] != request['received'] or not control
             or control['attempt'] != attempt or control['source_hash'] != row['hash']
             or not worker or worker['event'] != event or worker['kind'] != 'input-control'
@@ -260,7 +268,7 @@ def consumer_metadata(runtime, source, returned, receipt):
     eligible = queue and ((queue['task'] == 'work-proposer' and queue['state'] in ('queued','done'))
                          or (queue['task'] == '@unresolved' and queue['phase'] == 'control'
                              and queue['state'] in ('awaiting-owner','done')))
-    if (link['parent'] != source or child['role'] != 'Work' or child['hold'] is not None
+    if (link['parent'] != source or child['role'] != 'Work' or child['held']
             or child['hash'] != receipt['source_hash'] or child['received'] != receipt['received']
             or not queue or queue['job'] is not None or queue['package'] is not None
             or queue['role'] != 'Work' or not eligible or child['state'] == 'received'
@@ -269,13 +277,12 @@ def consumer_metadata(runtime, source, returned, receipt):
             or runtime.one('SELECT id FROM events WHERE parent=? AND (processed_at IS NULL OR hold IS NOT NULL)',(child['id'],))
             or runtime.input_resolution(child['id'])):
         raise Refusal('consumer has actual work, pending descendant, hold or reservation')
-    classifier = runtime.one('SELECT kind,event,state,ended,collected,exit,error,capture FROM attempts '
-                             "WHERE id=? AND json_extract(detail,'$.processing_capability')=?",
-                             (child['classifier'],runtime.processing.key))
+    classifier = classifier_metadata(runtime,child['classifier'])
     if (not classifier or classifier['kind'] not in ('classifier','diagnosis')
+            or classifier['capability'] != runtime.processing.key or classifier['begin'] is None
             or classifier['event'] != child['id'] or classifier['state'] != 'collected'
             or classifier['ended'] is None or classifier['collected'] is None
-            or classifier['exit'] != 0 or classifier['error'] or classifier['capture'] != 'complete'):
+            or classifier['exit'] != 0 or classifier['error_present'] or classifier['capture'] != 'complete'):
         raise Refusal('consumer needs its own collected classifier and ACK')
     if not isinstance(receipt['evidence'],list) or not 1 <= len(receipt['evidence']) <= 32:
         raise Refusal('whole original payload/history interpretation required')

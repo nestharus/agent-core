@@ -52,6 +52,8 @@ class Scope862(Completion821):
         self.assertEqual(basis['source']['classifier'],current['classifier'])
         self.assertEqual(basis['consumer']['payload_hash'],request['consumer_disposition']['payload_hash'])
         self.assertEqual(basis['consumer']['source']['received'],request['consumer_disposition']['received'])
+        self.assertEqual(basis['consumer']['classifier']['capability'],self.cap)
+        self.assertIsNotNone(basis['consumer']['classifier']['collected'])
         self.command(source,attempt,request)
         self.fresh(); self.runtime.receipts(); self.store.complete_events()
         for event in (source['id'],returned['response']):
@@ -71,6 +73,8 @@ class Scope862(Completion821):
                ('queue','job','real-reservation'),('queue','package','actual-package'),
                ('events','hold','actual-hold'),('events','state','received'),
                ('attempts','exit',1),('attempts','capture','partial'),('attempts','collected',None),
+               ('attempts','begin',None),('attempts','error','actual classifier error'),
+               ('attempts','detail',encode({'processing_capability':'older-capability'})),
                ('attempts','event',source['id'])]
         for table,column,value in cases:
             key='event' if table=='queue' else 'id'; identity=classifier if table=='attempts' else child

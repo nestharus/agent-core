@@ -11,7 +11,7 @@ import sys
 import time
 
 repo = Path(__file__).resolve().parents[3]
-base = repo / '.qualification862'
+base = repo / '.qualification862-final'
 base.mkdir(mode=0o700, exist_ok=False)
 def usage():
     return sum(p.stat().st_size for p in base.rglob('*') if p.is_file())
@@ -34,6 +34,9 @@ for rel in paths:
     if any(p in {'AGENTS.md','WORK_LOG.md','runs','captures'} for p in Path(rel).parts):
         continue
     if not (rel.endswith('.py') or rel.endswith('/coordinator') or rel.endswith('/launch.sh')
+            or rel in ['tools/coordinator-runtime/final-release-risk.md',
+                       *['tools/coordinator-runtime/templates/'+name+'.md' for name in
+                         ('work-catalog','branch-repository','reviews-selected','qa-package')]]
             or rel.endswith('/coordinator-receive.md')):
         continue
     data = git('show',head+':'+rel)
@@ -69,8 +72,8 @@ groups = {
   'test_load_recurrence_full_occurrences_and_finite_consumer_work',
   'test_notification_consumption_does_not_create_business_return',
   'test_forgery_partial_control_and_missing_coverage_cannot_finish_notice',
-  'test_unresolved_notification_interpretation_keeps_work_return',
-  'test_zero_violations_produce_no_occurrence_or_notification']],
+  'test_unresolved_notification_interpretation_keeps_work_return']]
+  + ['test_alert_phase340.Silence.test_zero_violations_produce_no_occurrence_or_notification'],
  'admission': ['test_reconcile_admission847.Reconcile847.'+name for name in [
   'test_periodic_orphan_after_original_collection',
   'test_admitted_later_reads_join_transaction']]}
