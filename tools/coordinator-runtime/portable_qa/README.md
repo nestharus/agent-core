@@ -27,7 +27,7 @@ The exact constructor fields are:
 | selected_selectors | Later Work-chosen genuine current test selectors, additive to REGRESSIONS in common.py |
 | expected_ids | Every distinct full unittest ID after expanding the selectors; nonempty, no missing/extra/skipped tests; exact duplicate IDs from imported classes are executed once |
 | effects | Nonempty declarative retained `file` UTF8 and/or read-only `sqlite` SELECT expected rows; paths are relative to output |
-| historical_files | Every candidate production module filename to `{commit, path, pin}` for exact public old704 inputs; only their complete source-derived hashes are needed at execution |
+| historical_files | Every candidate production module filename to an exact public old704 `{commit, path, pin}` blob record or `{commit, absent: true}` genuine absence record; absence never supplies an old hash |
 | caller | `{path, pin}` for the exact admitted inert public caller bytes needed by native fixture tests |
 | limits | Positive finite timeout, output_bytes, effect_bytes and effect_files; these are procedure instance allowances, not changes to existing runtime ceilings or grants |
 | scope_rationale | Actual selected behavioral claim and adequacy rationale |
@@ -39,6 +39,20 @@ five files. Candidate production and test files remain unchanged, read-only,
 at their actual CWD; `/src` and `/actualsrc` are read-only aliases to the same
 export. There is no shadow checkout. `/public` contains the inert caller,
 fictional71 exclusions and source-derived original/candidate production hashes.
+The public history also retains an `absent` map with the exact old commit and
+explicit absence facts. The preparer must establish those facts against the
+public Git tree; this offline constructor cannot authenticate Git provenance.
+Current modules stay in `candidate` even when absent from `original`. Every
+current module needs one history record, including explicit absence where true.
+An omitted blob record is not implicitly treated as absence. Existing complete
+blob-only histories remain valid and keep their original hashes.
+
+Absence is not evidence satisfying an assertion that needs an old hash. In
+particular, the inherited Future1008 setup and Integration1012 transition case
+index every candidate module in `original`. A genuinely new module leaves those
+assertions unsupported: the unchanged test raises an error, execution fails,
+and readback refuses. Such a dependent run stays partial. No historical value
+is filled in from current source and no assertion is skipped or softened.
 The private host HOME, profiles, native stores and network are absent. Tests
 write solely inside the fresh output bind `/fixtures`, plus ephemeral sandbox
 `/tmp`; they may retain fictional symlinks, which accounting never follows.
