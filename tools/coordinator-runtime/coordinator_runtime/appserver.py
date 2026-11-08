@@ -774,12 +774,17 @@ class AppServer:
             outcome["detail"]["prior_turn_result"] = result
             outcome["detail"]["resume_disposition"] = "attempted-after-semantic-incompletion"
             prompt=None
-            if is_task and spec.get('routine_completion'):
+            if is_task:
                 prompt=('Continue this SAME owned task. Retain real blockers and original history; '
                     'do not invent DONE, replay effects or rewrite completed stages. These are available '
                     'own observed protocol IDs, never inferred correlations to visible labels. Complete only '
-                    'genuinely remaining authorized local work or remain truthfully partial/blocked.\n'+
-                    task_result_instructions()+readiness.INSTRUCTIONS+
+                    'genuinely remaining authorized local work or remain truthfully partial/blocked, including '
+                    'expandedScope when applicable. This is semantic incompletion, not evidence of interruption '
+                    'or unknown delivery. Preserve every original array as a verbatim prefix and all original '
+                    'fields under the shared conservation rules; append corrections. Model handoff intents are '
+                    'not actual delivery: the actual collector owns transport. An earlier handoff intent alone '
+                    'does not establish a sent effect or require unknown-send reconciliation.\n'+
+                    task_result_instructions()+(readiness.INSTRUCTIONS if spec.get('routine_completion') else '')+
                     self.tool_feedback(peer))
             return await self.clarify_task(peer,store,attempt,thread,turn,spec,binding,schema,prompt,outcome)
         return result
