@@ -68,6 +68,15 @@ def parser():
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("init")
     sub.add_parser("status")
+    for name in ('historical-metadata-authorize','historical-metadata-project',
+                 'historical-metadata-compare','historical-metadata-revoke'):
+        historical = sub.add_parser(name, help='Explicit current metadata scope; no old execution/closure/effect rights')
+        if name == 'historical-metadata-authorize':
+            historical.add_argument('--selection', required=True)
+        else:
+            historical.add_argument('metadata_access')
+        if name == 'historical-metadata-compare':
+            historical.add_argument('--candidate', required=True)
     for command in ('owner-source-amendment-basis','review-owner-source-amendment',
                     'collect-owner-source-review','select-owner-source-amendment'):
         amendment = sub.add_parser(command, help='Stopped append-only source selection; original owner plan retained')
@@ -412,6 +421,16 @@ async def serve(store):
 
 
 def operate(args, store):
+    if args.command.startswith('historical-metadata-'):
+        from . import historical_verification as historical, processing
+        boards = {r:processing.ProcessingBoard(store.config,r) for r in ('Work','Reviews')}
+        if args.command == 'historical-metadata-authorize':
+            return historical.authorize(store,boards,read_record(args.selection))
+        if args.command == 'historical-metadata-revoke':
+            return historical.revoke(store,boards,args.metadata_access)
+        if args.command == 'historical-metadata-compare':
+            return historical.compare(store,boards,args.metadata_access,read_record(args.candidate))
+        return historical.project(store,boards,args.metadata_access)
     if args.command in {'owner-source-amendment-basis','review-owner-source-amendment',
                         'collect-owner-source-review','select-owner-source-amendment'}:
         from . import processing, report_repair, configuration

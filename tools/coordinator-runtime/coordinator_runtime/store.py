@@ -168,6 +168,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         self._bind_config()
         from .processing import SCHEMA as PROCESSING_SCHEMA
         self.db.executescript(PROCESSING_SCHEMA)
+        from .historical_verification import SCHEMA as HISTORICAL_METADATA_SCHEMA
+        self.db.executescript(HISTORICAL_METADATA_SCHEMA)
         from .processing import migrate_links
         migrate_links(self)
         from .reviews import SCHEMA as REVIEW_SCHEMA

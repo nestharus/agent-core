@@ -583,6 +583,47 @@ class Access:
 
 
 class ProcessingBoard(RetainedBoard):
+    def historical_authority(self, runtime, task=None):
+        """Original software journal binding, without execution current().
+
+        Only the existing trusted-account Board identity model is claimed.
+        This grants no access without current owner scope/source visibility.
+        """
+        with self.opened(settlement=True) as conn:
+            grant = self._original(conn, runtime)
+            policy = conn.execute('SELECT configuration,json_extract(policies,?) AS task_hash '
+                'FROM coordinator_software_grants_v1 WHERE grant_id=?',
+                ('$.'+json.dumps(task) if task else '$.__no_task__',grant['id'])).fetchone()
+            if not policy:
+                raise Refusal('original software configuration witness absent')
+            return dict(grant=grant['id'], board=grant['board_id'], owner=grant['owner'],
+                        issuer=grant['issued_by'], authority=grant['authority'],
+                        configuration=policy['configuration'], task_hash=policy['task_hash'])
+
+    def historical_source_access(self, runtime, post, principal):
+        """Exact current read visibility before journal field acquisition.
+
+        Schema-4 query_posts thread-member predicate; no text/attachments.
+        """
+        if self.role != 'Reviews' or principal != runtime.config['roles']['Work']['owner']:
+            raise Refusal('exact original Reviews source/current Work principal required')
+        with self.opened(settlement=True) as conn:
+            self._historical_visibility(conn,self.selected['owner'],post)
+            self._historical_visibility(conn,principal,post)
+        return True
+
+    @staticmethod
+    def _historical_visibility(conn, actor, post):
+        active = conn.execute("SELECT 1 FROM sessions WHERE session=? AND status='active'",(actor,)).fetchone()
+        visible = conn.execute('SELECT 1 FROM posts LEFT JOIN thread_posts ON thread_posts.post_seq=posts.seq '
+            'LEFT JOIN threads ON threads.thread_id=thread_posts.thread_id '
+            'LEFT JOIN posts AS thread_root ON thread_root.seq=threads.thread_id '
+            'WHERE posts.seq=? AND (posts.recipient IS NULL OR posts.recipient=? OR '
+            '(threads.thread_id IS NOT NULL AND (threads.opener=? OR thread_root.recipient=?)))',
+            (post,actor,actor,actor)).fetchone()
+        if not active or not visible:
+            raise Refusal('current original source read visibility absent; source custodian retains it')
+
     def _selected_usage(self, conn, grant):
         # Public aggregate row residency only, never historical payload LENGTH.
         shared = conn.execute('SELECT COUNT(*) FROM coordinator_deliveries_v1').fetchone()[0]
