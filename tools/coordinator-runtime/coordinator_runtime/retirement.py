@@ -11,6 +11,7 @@ from .contracts import Refusal, digest, encode, required_text
 from .cleanup import eligible_event, RETENTION
 from .capacity import HOLDS, NOTIFICATION, NOTIFICATION_LIMIT, NOTIFICATION_BYTES, SINGLE_NOTIFICATION_BYTES
 from .frontier import require_aged
+from . import oneoff
 
 
 def cohort(store, root):
@@ -63,10 +64,13 @@ def basis(store, root):
     from .frontier import delivery
     witnesses['consumers'] = {n: delivery(store, n) for n in sorted(deliveries)}
     witnesses['job_births'] = [store.one('SELECT * FROM prospective_job_positions WHERE job=?', (n,)) for n in sorted(jobs)]
+    recovery = oneoff.retirement_material(store, attempts)
+    witnesses['recovery'] = recovery
     return {'root': root, 'members': selected, 'basis': digest({'configuration': store.config, 'rows': witnesses}),
             'sources': {n: store.one('SELECT hash FROM events WHERE id=?', (n,))['hash'] for n in sorted(events)},
             'occurrences': {n: digest(store.one('SELECT * FROM alerts WHERE id=?', (n,))) for n in sorted(occurrences)},
-            'results': {a: digest(store.one('SELECT * FROM results WHERE attempt=?', (a,))) for a in sorted(attempts)}}
+            'results': {a: digest(store.one('SELECT * FROM results WHERE attempt=?', (a,))) for a in sorted(attempts)},
+            'recovery': {a: digest(material) for a, material in recovery.items()}}
 
 
 def qualify_notification(store, outbox, capability, events):
@@ -139,6 +143,8 @@ def apply(store, root, actor, receipt):
         if 'service' not in selection or actor != cap['issuer']:
             raise Refusal('genuine continuing issuer required; no legacy cleanup capability extension')
         custody = ('sources', 'results', 'occurrences') if current['occurrences'] else ('sources', 'results')
+        if current['recovery']:
+            custody += ('recovery',)
         if (not isinstance(receipt, dict) or set(receipt) != {'basis', 'qualified_at', 'holds', 'evidence', *custody}
                 or receipt['basis'] != current['basis'] or receipt['holds'] != {h: [] for h in HOLDS}
                 or type(receipt['qualified_at']) not in {int, float} or not 0 <= store.clock() - receipt['qualified_at'] <= 60):
@@ -168,6 +174,8 @@ def apply(store, root, actor, receipt):
                 raise Refusal('retire owned artifact/queue material first; do not delete required body custody')
         for attempt in members['attempts']:
             row = store.attempt(attempt)
+            if attempt in current['recovery']:
+                oneoff.require_retirement_recovery(store, row)
             # All old attempts, control recognition and foreign collectors stay
             # outside this prospective disposable-output operation.
             if json.loads(row['detail']).get('processing_capability') != cap['id']:
@@ -238,6 +246,11 @@ def apply(store, root, actor, receipt):
                               ('routine_runs','attempt'),('routine_stages','attempt'),('file_publications','attempt'),('ordinary_runs','attempt'),('ordinary_tool_records','attempt'),
                               ('ordinary_acceptance','attempt')]:
             delete(table,column,members['attempts'])
+        # Full launch/checkpoint/original/progress conservation is separately
+        # bound above. Delete only this qualified cohort, children before their
+        # FK parent. Required archives/consumers keep their own holds and clock.
+        for table in oneoff.RECOVERY_TABLES:
+            delete(table, 'attempt', members['attempts'])
         # Continuing review calls/history remain branch evidence through actual
         # branch/context closure, with their original snapshots and raw returns.
         for table, column in [('recovery_requests','job'),('recovery_dispositions','job'),('owner_results','job'),('qa_package_owners','job')]:

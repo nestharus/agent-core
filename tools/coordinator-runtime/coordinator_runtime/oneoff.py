@@ -31,6 +31,28 @@ CREATE TABLE IF NOT EXISTS oneoff_progress_recovery(
 COLLECTION = ('id', 'controller', 'kind', 'event', 'job', 'binding', 'profile',
               'session', 'turn', 'ended', 'exit', 'collected', 'capture',
               'cleanup', 'result', 'error', 'detail')
+RECOVERY_TABLES = ('oneoff_terminal_recovery', 'oneoff_collection_recovery',
+                   'oneoff_progress_recovery', 'oneoff_recovery')
+
+
+def retirement_records(store, attempt):
+    """Exact complete recovery material, independently conserved before disposal."""
+    records = {table: store.rows('SELECT * FROM ' + table + ' WHERE attempt=?' +
+                                (' ORDER BY sequence' if table == 'oneoff_progress_recovery' else ''),
+                                (attempt,)) for table in RECOVERY_TABLES}
+    return records if any(records.values()) else {}
+
+
+def retirement_material(store, attempts):
+    return {attempt: records for attempt in sorted(attempts)
+            if (records := retirement_records(store, attempt))}
+
+
+def require_retirement_recovery(store, row):
+    """A receipt cannot waive a known gap after queue membership has retired."""
+    if recovery_hold(store, row):
+        raise Refusal('original recovery integrity/capacity gap remains held')
+    recovery_view(store, row['id'])  # Includes exact launch binding and terminal/original integrity.
 
 
 def launch_context(store, row, prompt, spec, schema):

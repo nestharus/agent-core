@@ -1,6 +1,6 @@
 # Owned one-off recovery and custodial boundary
 
-Decision1086 continues the same1077 source task. This candidate is technical
+Decision1092 continues Decisions1086/1077 in the same source task. This is technical
 source for independent Review/Frame/WorkDecide, not adoption or effect rights.
 Whole one-off lifecycle remains REQUIRED. Initial core activation is separate.
 
@@ -22,7 +22,9 @@ Store.collect retains the original collection projection separately and seals
 its hash once. The immutable launch, terminal and original collection are never
 resealed after normal work. Admitted normal writers call oneoff.advance within
 their current transaction: routine readiness, ordinary acceptance/qualification,
-publication-lock waiting and original artifact capture-gap/recheck. Each bounded
+publication-lock waiting, original artifact capture-gap/recheck and informative
+failure-delivery alias normalization. Repeated identical normalization is a no-op;
+the original non-DONE blocked result remains unchanged. Each bounded
 derived transition records its actual disposition writer, basis, before/after
 hash and changes. The original disposition owner or existing explicit collected
 handoff is required. Unreceipted changes refuse recovery and hold retirement.
@@ -66,6 +68,19 @@ and every source/recovery/privacy/custody/human/current-use hold. It reports onl
 a processing window, never session deletion or physical reclamation authority.
 Journal recovery history is retained under admission/backpressure; indefinite
 bounded growth and sustained responsiveness are not established by this change.
+
+Final retirement.apply separately binds every selected capsule's complete launch,
+terminal checkpoint, original collection and ordered progress rows into its basis.
+A capsule-bearing cohort requires an exact per-attempt recovery conservation or
+disposability receipt in addition to source/result receipts. Needed recovery and
+evidence must be conserved under their actual purposes, consumers and holds;
+neither an archive label nor this interface supplies that authority. Known recovery
+gaps still refuse even after queue membership retires. Only the qualified cohort's
+recovery rows are deleted, children before their attempt parents with FKs enabled,
+inside the existing retirement transaction. Independent required archives keep
+their own processing/consumer/retention frontier. The returned full retirement
+receipt must be retained. This is logical journal recycling, never physical
+platform cleanup or an actual all-custodian consent result.
 
 oneoff.residual_handoff reports only an adapter-observed root, its original
 collector and missing facts to the existing runtime actor. It grants no new
