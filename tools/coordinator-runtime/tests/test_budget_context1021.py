@@ -47,8 +47,16 @@ class Context1021(Future1008):
             return job
         attempt=self.store.start_job(job['id'],job['token'])
         self.boards['Work'].bind_software_attempt(self.store,self.store.job(job['id']),attempt,None)
+        # Establish the real delegated completion preconditions of a producer
+        # response before testing its direct birth transaction. Equal stages
+        # conserve the canonical preimage without changing its bytes/inode.
+        (self.store.home/'artifacts'/attempt).mkdir(parents=True,exist_ok=True)
+        task=self.config['tasks'][job['task']]
+        routine.prepare(self.store,self.boards['Work'],self.store.job(job['id']),attempt,task)
+        publication.conserve_stages(self.store,attempt,task)
         collect(self.store,attempt,self.ready_result(),
                 tool_completion=dict(complete=True,items=[],nonzero_completions=0))
+        self.assertTrue(routine.reconcile(self.store,self.boards['Work'],self.store.job(job['id'])))
         return self.store.job(job['id']),attempt
 
     def select_at(self, rearm=False):
