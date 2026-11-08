@@ -83,6 +83,18 @@ def parser():
     processing_basis = sub.add_parser('processing-basis', help='Genuine Work: exact stopped software basis and future frontier')
     processing_basis.add_argument('--selected-retained', help='Public JSON list of exact event/role/source_hash/source_birth/task/mapping_version pins; metadata only, distinct from future-only')
     processing_basis.add_argument('--future-only', action='store_true', help='Metadata-only basis for continuing future intake; no retained processing authority')
+    for command in ('future-software-basis','select-future-software','future-software-status','stop-future-software'):
+        future = sub.add_parser(command, help='Actual Work: finite software timing on selected source-v1; preserve original admission and effect expiry')
+        if command == 'select-future-software':
+            future.add_argument('--selection', required=True)
+        else:
+            future.add_argument('capability')
+        if command == 'future-software-basis':
+            future.add_argument('--controller', required=True)
+            future.add_argument('--purpose', required=True)
+            future.add_argument('--plan', required=True)
+        if command == 'stop-future-software':
+            future.add_argument('--reason', required=True)
     for command in ('owner-lease-basis', 'select-owner-lease', 'owner-lease-status', 'stop-owner-lease'):
         lease = sub.add_parser(command, help='Actual Work finite continuation; original history and native rights stay frozen')
         if command == 'select-owner-lease':
@@ -415,6 +427,19 @@ def operate(args, store):
         if args.command == 'collect-owner-source-review':
             return report_repair.collect_amendment_review(store,boards,actor,read_record(args.selection))
         return report_repair.apply_amendment(store,boards,actor,read_record(args.selection))
+    if args.command in {'future-software-basis','select-future-software','future-software-status','stop-future-software'}:
+        from . import processing, report_repair, configuration
+        boards = {r:processing.ProcessingBoard(store.config,r) for r in store.config['roles']}
+        actor = actual_actor(store.config['roles']['Work']['owner'])
+        if args.command == 'future-software-basis':
+            with configuration.stopped(store), store.tx():
+                return report_repair.software_basis(store,boards,args.capability,args.controller,actor,args.purpose,read_record(args.plan))
+        if args.command == 'select-future-software':
+            return report_repair.apply_software(store,boards,actor,read_record(args.selection))
+        if args.command == 'stop-future-software':
+            return report_repair.stop_software(store,boards,actor,args.capability,args.reason)
+        report_repair.owner(store,boards,actor)
+        return report_repair.software_receipt(store,args.capability)
     if args.command in {'owner-lease-basis','select-owner-lease','owner-lease-status','stop-owner-lease'}:
         from . import processing, report_repair, configuration
         boards = {r:processing.ProcessingBoard(store.config,r) for r in store.config['roles']}

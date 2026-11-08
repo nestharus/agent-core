@@ -208,3 +208,61 @@ fixture so native profile/session/turn fields remain NULL. These tests do not
 qualify actual enrollment, provider metadata, managed consumers, substantive
 model returns, selected Reviews execution or operating cutover. Preserve failed
 test attempts alongside passes. Actual Work owns later operating observations.
+
+## Finite future software intake after source-v1 selection
+
+`future-software-basis`, `select-future-software`, `future-software-status`
+and `stop-future-software` implement the distinct
+`source-v1-future-software-v1` protocol. Genuine Work can explicitly select
+finite future software admission and managed wake on the same original
+capability after an independently reviewed, actually selected source-only-v1
+repair. This does not consume or assert a historical report/control operation.
+The existing `owner-lease-*` and source-amendment interfaces continue to require
+their original typed evidence. A future software receipt is not an owner lease.
+
+Use the original configuration and genuine Work context. Obtain a fresh basis
+while every same-capability software collector has stopped, returned, reached
+its actual parent-collected numeric END and been released:
+
+```text
+future-software-basis CAPABILITY --controller ORIGINAL_CONTROLLER --purpose PURPOSE --plan PLAN_JSON
+```
+
+The plan has exactly `from`, `until`, `lease_seconds`, `max_starts`,
+`max_new_inputs`, `max_windows` and `pause_bytes`. Times are finite UTC Unix
+seconds; `from` must be current at selection (at most 60 seconds old), and
+`until` must remain within the unchanged original prospective epoch. A plan
+contains at most 24 leases of at most 3600 seconds each. Limits are cumulative:
+starts on the original capability, input births since its original boundary,
+and all charged future windows on that capability. They are not new allowances
+added to old use. The window ceiling cannot exceed the original allocation
+policy's ceiling. Global configuration limits remain independently enforced.
+
+Prepare a JSON object with exactly `schema`, the whole returned `basis`,
+`plan`, `authority` (Work's actual decision) and `evidence` (one to 32 actual
+review/qualification references). Select with
+`select-future-software --selection SELECTION_JSON`. Any intervening cooperative
+journal write invalidates the unselected basis; obtain and review a fresh one.
+Selection binds the original journal inode, capability/selection/configuration,
+source-v1 receipt and exact public pins, original grants, enrollments and epoch.
+There is one immutable plan per capability and no automatic replacement.
+
+Each effective lease extends only software admission, managed wake and the
+existing framework report timing, up to the finite plan end. Activation is
+appended to a separate bounded ledger. Original policy bytes, allocation hashes,
+window rows/debits, source births, pending QA admissions, queues, holders,
+resource/native/effect deadlines and all unresolved duties remain conserved.
+The five-profile hot pool retains its current public membership control.
+Attempt creation checks the cumulative start ceiling before pool allocation.
+Every new source birth, including an attributed report or internal input,
+shares the original cumulative input boundary and alert/debt pressure; an
+existing event is not charged again.
+If a lower window ceiling is selected, the service conservatively pauses when
+any counter in its final charged window fills. Existing duties remain owned.
+
+`future-software-status CAPABILITY` returns this distinct plan, activations and
+stop receipt. `stop-future-software CAPABILITY --reason REASON` records genuine
+Work's immediate stop without releasing any original duty. All commands open
+the journal/schema; a name such as `basis` or `status` does not make it a
+filesystem-only read. Source implementation and isolated fictional tests do
+not establish actual selection, deployment, queue progress or cutover readiness.

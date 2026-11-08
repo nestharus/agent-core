@@ -329,6 +329,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             if old and old["hash"] != digest(event):
                 raise Refusal("same event identity has different immutable content")
             if not old:
+                from .report_repair import software_input
+                software_input(self)
                 if (self.processing and event.get('kind') == 'board'
                         and not self.processing.owed_control(event)):
                     from .service import admit_input
@@ -362,6 +364,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         return payload
 
     def _attempt(self, kind, event, job, binding, profile, *, continuing=None):
+        from .report_repair import software_start
+        software_start(self)
         if job:
             self.require_execution_open(job)
         self.require_active_sources(event, job)
