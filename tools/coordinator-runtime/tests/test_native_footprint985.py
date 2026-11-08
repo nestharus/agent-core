@@ -28,7 +28,8 @@ class SuspendedTransport(FictionalNativeTransport):
         with runtime.tx():
             runtime.db.execute("UPDATE review_calls SET state='launch-intent' WHERE attempt=?", (attempt,))
         self.started = True
-        await asyncio.Future()
+        self.pending = asyncio.Future()
+        return await self.pending
 
 
 class ActiveSource985(Unpackaged889):
@@ -53,7 +54,7 @@ class ActiveSource985(Unpackaged889):
         super().configure_selection(selected)
         policy = selected['service']['reviews']['reviews-proposer']
         policy['caller'] = '/public/caller.py'
-        policy['caller_sha256'] = reviews.RESOURCE_CALLER_SHA256
+        policy['caller_sha256'] = resource_scopes.RESOURCE_CALLER_SHA256
         selected['service']['legacy_resources']['Reviews']['native_review_return']['review_policy_sha256'] = digest(policy)
 
     @contextmanager
@@ -76,6 +77,7 @@ class ActiveSource985(Unpackaged889):
         self.dispatch.reviews.transport = self.transport = SuspendedTransport()
         loop = asyncio.new_event_loop()
         running = loop.create_task(self.dispatch.execute_review(job, self.attempt_id, self.e['body']['review']))
+        self.source_loop, self.source_running = loop, running
         async def until_started():
             while not getattr(self.transport, 'started', False):
                 if running.done():
@@ -190,10 +192,10 @@ class ActiveSource985(Unpackaged889):
                             dict(admitted_scope={'ordinary_effects':{'kind':'local-qa'}})]:
                 task=copy.deepcopy(self.config['tasks']['reviews-proposer']);task.update(changed)
                 with self.store.tx(), self.assertRaises(Refusal):
-                    reviews.original_resources(self.store,self.identity,task)
+                    resource_scopes.original_resources(self.store,self.identity,task)
             for key,value in [('write_roots',['/unmapped-write']),('operations',['execute-admitted-qa'])]:
                 task=copy.deepcopy(self.config['tasks']['reviews-proposer']);task['effect_authority'][key]=value
-                with self.store.tx(), self.assertRaises(Refusal):reviews.original_resources(self.store,self.identity,task)
+                with self.store.tx(), self.assertRaises(Refusal):resource_scopes.original_resources(self.store,self.identity,task)
             with self.assertRaisesRegex(Refusal,'missing original frozen'):
                 resource_scopes.original_modes(self.store,dict(id='old-opaque-source853',task='reviews-proposer'))
             faults.append(("UPDATE prospective_job_positions SET position=0 WHERE job=?",self.job['id']))
@@ -222,9 +224,12 @@ class ActiveSource985(Unpackaged889):
                 self.assertIn(self.independent/'publication.tmp',self.modes()[1])
             finally:
                 self.store.db.execute('ROLLBACK TO pubs985');self.store.db.execute('RELEASE pubs985')
-            self.store.db.execute("INSERT INTO ordinary_resources VALUES('unknown985','orphan985')")
-            self.assertTrue(resource_scopes.blocked(self.store,candidate))
-            self.store.db.execute("DELETE FROM ordinary_resources WHERE resource='unknown985'")
+            self.store.db.execute('SAVEPOINT orphan985')
+            try:
+                self.store.db.execute("INSERT INTO ordinary_resources VALUES('unknown985','orphan985')")
+                self.assertTrue(resource_scopes.blocked(self.store,candidate))
+            finally:
+                self.store.db.execute('ROLLBACK TO orphan985');self.store.db.execute('RELEASE orphan985')
             # A later opaque holder cannot be skipped after the native map passes.
             self.store.db.execute("UPDATE jobs SET effects='unknown' WHERE id=?",(self.job['id'],))
             self.store.db.execute('SAVEPOINT later985')

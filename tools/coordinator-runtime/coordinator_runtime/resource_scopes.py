@@ -79,6 +79,203 @@ def access_modes(task, exclusions):
     return ([root(p, exclusions) for p in reads], [root(p, exclusions) for p in writes])
 
 
+# Exact inspected public caller output contract; no producer-label exemption.
+RESOURCE_CALLER_SHA256 = '7d8be231fbdee40761128b07b969244b7c799220190858cfc57b0cb97f3616b5'
+
+
+def original_resources(runtime, identity, task):
+    """Project an original standalone software Source, without reading its return.
+
+    This is authority comparison, not collection or native sandbox certification.
+    The original rights survive an interrupted/return-unavailable context.
+    Only the current capability's originally selected standalone packet is mapped;
+    branch contexts and opaque native owners retain the generic refusal. All SQL
+    projections below are authority/material metadata, never source text, diff,
+    answer, receipt, attempt result or the contents of a native handle.
+    The caller holds the cooperative transaction and validates the whole map
+    against exclusions before acquiring any filesystem metadata.
+    """
+    from . import configuration, prospective
+    from .reviews import BINDING
+    if not runtime.db.in_transaction or not runtime.processing or not runtime.processing.boards:
+        raise Refusal('original Source mapping requires current cooperative software authority')
+    operations = task['effect_authority']['operations']
+    if (task.get('sandbox') != 'read-only' or task.get('effects') != 'none'
+            or task.get('network') is not False or task['effect_authority']['write_roots'] != []
+            or not isinstance(operations, list) or not operations
+            or set(operations) - {'read-source', 'read-reports', 'prepare-intents', 'consolidate-reports'}
+            or task.get('routine_completion') or task.get('admitted_scope', {}).get('ordinary_effects')):
+        raise Refusal('unknown or external original resource authority remains held')
+    job = runtime.one('SELECT id,role,phase,task,package,active_attempt,state,hold_reason,members FROM jobs WHERE id=?', (identity['id'],))
+    if (not job or job['task'] != identity['task'] or job['role'] != 'Reviews'
+            or job['phase'] != 'proposer' or job['package'] is not None
+            or not job['active_attempt']):
+        raise Refusal('original standalone software Source required')
+    canonical_uuid(job['active_attempt'])
+    attempt = runtime.one("SELECT job,kind,controller,profile,binding,state,exit,ended,collected,capture,"
+        "json_extract(detail,'$.processing_capability') AS capability,"
+        "json_type(detail,'$.software_authority') AS software_type,"
+        "json_extract(detail,'$.software_authority') AS software FROM attempts WHERE id=?", (job['active_attempt'],))
+    if (not attempt or attempt['kind'] != 'task' or attempt['job'] != job['id']
+            or attempt['software_type'] != 'object' or not attempt['software']):
+        raise Refusal('original software Source launch binding absent')
+    if job['hold_reason'] is not None:
+        # These are the existing service's exact incomplete-return custody
+        # reasons. Their presence does not grant rights: every original binding
+        # above still applies. Unknown/custom holds remain opaque. Numeric END
+        # and collection here identify a returned attempt, never physical close.
+        deferred = ('original Source incomplete; whole return retained in original attempt '
+                    + job['active_attempt'] + ' and review call; sole report integration deferred')
+        conserved = 'original Source incomplete; whole return conserved through sole report integration'
+        if (job['hold_reason'] not in {deferred, conserved} or job['state'] != 'held'
+                or attempt['state'] != 'collected'
+                or attempt['ended'] is None or attempt['collected'] is None
+                or attempt['capture'] != 'incomplete'):
+            raise Refusal('unknown original Source hold remains opaque')
+    proof = json.loads(attempt['software'])
+    if not isinstance(proof, dict):
+        raise Refusal('opaque original software Source launch proof')
+    cap, selection = runtime.processing.current()
+    if (attempt['capability'] != cap['id'] or cap['id'] != runtime.processing.key
+            or cap['issuer'] != runtime.config['roles']['Work']['owner']
+            or job['task'] not in selection['tasks'] or not proof.get('prospective_epoch')):
+        raise Refusal('original Source processing capability changed')
+    epoch = prospective.current(runtime, job['task'], proof['prospective_epoch'])
+    position = prospective.job_position(runtime, job, epoch) if epoch else None
+    if (not epoch or epoch['policy']['ordinary_effects'] is not False
+            or position is None or position <= epoch['job_boundary']):
+        raise Refusal('original Source epoch/birth absent or changed')
+    configured = runtime.config['tasks'][job['task']]
+    tasks = configuration.processing_tasks(runtime)
+    same = runtime.one('SELECT json(task)=json(?) AS task, admission IS NULL AS admission '
+        'FROM job_resource_policies WHERE job=?', (encode(configured), job['id']))
+    if (configured.get('role') != 'Reviews' or configured.get('phase') != 'proposer'
+            or configured.get('execution') != 'owner' or not same or not same['task'] or not same['admission']
+            or json.loads(attempt['binding']) != BINDING
+            or tasks is not None and job['task'] not in tasks):
+        raise Refusal('original Source task/admission differs from current rights')
+    # Standalone means genuinely absent original AND current admission. A later
+    # config cannot turn a packaged/branch Source into this bounded case.
+    if runtime.one('SELECT 1 AS present FROM admissions WHERE package=?', (job['package'],)):
+        raise Refusal('standalone Source cannot inherit an admission')
+    for role in ('Work', 'Reviews'):
+        runtime.processing.boards[role].verify_authority(runtime)
+    grant = runtime.processing.boards['Reviews'].software_authority(runtime, job['task'])
+    expected = dict(grant_id=grant['id'], issued_by=grant['issued_by'], authority=grant['authority'],
+        role_owner=grant['owner'], task_hash=digest(configured), admission_hash=None,
+        prospective_epoch=epoch['id'], delegated_by=epoch['selection']['grantor'],
+        delegation_authority=epoch['selection']['authority'], processing_capability=cap['id'])
+    if (proof != expected or grant.get('prospective_epoch') != epoch['id']
+            or task['effect_authority'].get('owner', configured['effect_authority']['owner']) != grant['owner']):
+        raise Refusal('original Source software grant differs from its launch')
+    members = json.loads(job['members'])
+    if not isinstance(members, list) or len(members) != 1:
+        raise Refusal('one original factual Source packet required')
+    member = members[0]
+    if not isinstance(member, dict) or not member.get('event') or not member.get('hash'):
+        raise Refusal('original Source member identity/hash required')
+    source = runtime.one("SELECT id,role,hold,hash,json_extract(payload,'$.kind') AS kind,"
+        "json_extract(payload,'$.post') AS post,"
+        "json_extract(payload,'$.branch_binding') AS branch FROM events WHERE id=?", (member['event'],))
+    birth = runtime.one('SELECT position FROM processing_source_positions WHERE event=?', (member['event'],))
+    if (not source or source['role'] != 'Reviews' or source['hold'] is not None
+            or source['hash'] != member.get('hash') or not birth
+            or birth['position'] <= max(epoch['event_boundary'], selection['basis']['event_boundary'])
+            or not configuration.event_allowed(runtime, source) or source['branch'] is not None
+            or not selection['future_intake'] or source['kind'] != 'board'
+            or source['post'] <= selection['basis']['roles']['Reviews']['future_after']):
+        raise Refusal('original Source member/birth/current input rights changed')
+    policy = selection.get('service', {}).get('reviews', {}).get(job['task'])
+    account = selection.get('service', {}).get('legacy_resources', {}).get('Reviews', {}).get('native_review_return', {})
+    # The factual packet projection follows every member hold/hash/birth/right
+    # check above. Even its metadata is unnecessary for a refused old input.
+    original = runtime.one("SELECT json_extract(payload,'$.body.review') AS packet FROM events WHERE id=?", (member['event'],))
+    packet = json.loads(original['packet']) if original and original['packet'] else None
+    if (not policy or policy.get('caller_sha256') != RESOURCE_CALLER_SHA256
+            or account.get('version') not in {'native-collected-review-v1','native-collected-partial-report-v1'}
+            or account.get('source_task') != job['task'] or account.get('package', 'absent') is not None
+            or account.get('grant') != grant['id'] or account.get('source_task_sha256') != digest(configured)
+            or account.get('review_policy_sha256') != digest(policy) or account.get('packet_sha256') != digest(packet)
+            or account.get('expires', 0) <= runtime.clock()):
+        raise Refusal('original selected native Source policy/packet absent or changed')
+    if (not isinstance(packet, dict) or set(packet) != {'component','origin','base','head','previous','answered_ids'}
+            or packet['component'] != account.get('component')
+            or any(not isinstance(packet[k], str) or not re.fullmatch('[a-f0-9]{40}', packet[k]) for k in ('base','head'))
+            or packet['previous'] is not None and (not isinstance(packet['previous'], str)
+                                                   or not re.fullmatch('[a-f0-9]{40}', packet['previous']))
+            or not isinstance(packet['answered_ids'], list)
+            or any(not isinstance(i, str) or not i.strip() for i in packet['answered_ids'])):
+        raise Refusal('original immutable Source packet required')
+    selected = policy['components'].get(packet['component'])
+    if not selected or selected['origin'] != packet['origin']:
+        raise Refusal('original selected Source component differs')
+    roots = [Path(p) for p in task['effect_authority']['read_roots']] + [Path(task['cwd'])]
+    paths = selected['paths'] + selected.get('relationship_paths', [])
+    if (not paths or any(Path(p).is_absolute() or '..' in Path(p).parts for p in paths)
+            or any(not any(p.is_relative_to(r) for r in roots) for p in
+                [*[Path(selected['repository'])/p for p in paths],
+                 *[Path(p) for p in policy['method_files']],
+                 *[Path(p) for p in selected.get('prior_histories', {})]])):
+        raise Refusal('original Source material exceeds frozen read authority')
+    if runtime.one('SELECT 1 AS present FROM attempts a WHERE a.job=? AND '
+            '(EXISTS (SELECT 1 FROM ordinary_runs r WHERE r.attempt=a.id) OR '
+            'EXISTS (SELECT 1 FROM routine_runs r WHERE r.attempt=a.id)) LIMIT 1', (job['id'],)):
+        raise Refusal('contradictory original ordinary/routine Source effects remain held')
+    # Exclude all report/capture/body columns, including the embedded diff.
+    fields = ('selected_task','packet','repository','method_files','prior_histories','history','read_authority','relationship_paths','history_sha256')
+    call = runtime.one('SELECT component,collector,json_extract(packet,' + ','.join('?' for _ in fields) +
+        ') AS material FROM review_calls WHERE attempt=?', (*['$.'+k for k in fields], job['active_attempt']))
+    acquired = dict(zip(fields, json.loads(call['material']))) if call and call['material'] else {}
+    context = runtime.one('SELECT component,capability,collector,profile,route,handle,state,created FROM review_contexts WHERE component=?', (packet['component'],))
+    bound = runtime.one("SELECT json_extract(context,'$.head') AS head,json_extract(context,'$.history_hash') AS history_hash,"
+        "json_extract(context,'$.component') AS component,json_extract(context,'$.capability') AS capability,"
+        "json_extract(context,'$.collector') AS collector,json_extract(context,'$.profile') AS profile,"
+        "json_extract(context,'$.route') AS route,json_extract(context,'$.handle') AS handle,"
+        "json_extract(context,'$.created') AS created FROM review_call_contexts WHERE attempt=?", (job['active_attempt'],))
+    if (not call or not context or not bound or call['component'] != context['component']
+            or call['collector'] != attempt['controller'] or context['collector'] != attempt['controller']
+            or context['capability'] != cap['id'] or context['profile'] != attempt['profile']
+            or context['route'] != policy['routes'].get(attempt['profile']) or context['state'] not in {'opening','live','interrupted'}
+            or any(bound[k] != context[k] for k in ('component','capability','collector','profile','route','handle','created'))
+            or bound['head'] != packet['previous']
+            or acquired != dict(selected_task=job['task'], packet=packet, repository=selected['repository'],
+                method_files=policy['method_files'], prior_histories=selected.get('prior_histories', {}),
+                history=selected['history'], read_authority=selected['authority'],
+                relationship_paths=selected.get('relationship_paths', []),history_sha256=bound['history_hash'])):
+        raise Refusal('original Source material/context/collector differs')
+    if job['hold_reason'] is not None and context['state'] != 'interrupted':
+        raise Refusal('original incomplete-return hold lacks its interrupted context')
+    sources = runtime.rows("SELECT s.key,json_extract(s.value,'$.git_blob') AS blob,"
+        "json_extract(s.value,'$.sha256') AS sha256,json_extract(s.value,'$.bytes') AS bytes "
+        "FROM review_calls c,json_each(c.packet,'$.source') s WHERE c.attempt=?", (job['active_attempt'],))
+    if not sources:
+        raise Refusal('missing original pinned Source material map')
+    pins = {packet['base'],packet['head'],packet['previous']} - {None}
+    for source in sources:
+        pin, separator, name = source['key'].partition(':')
+        path = Path(name)
+        if (not separator or pin not in pins or not name or path.is_absolute() or '..' in path.parts
+                or not any(path.is_relative_to(Path(p)) for p in paths)
+                or not isinstance(source['blob'],str) or not re.fullmatch('[a-f0-9]{40}',source['blob'])
+                or not isinstance(source['sha256'],str) or not re.fullmatch('[a-f0-9]{64}',source['sha256'])
+                or type(source['bytes']) is not int or source['bytes'] < 0):
+            raise Refusal('original pinned Source material metadata differs')
+    handle = Path(context['handle'])
+    canonical_uuid(handle.name)
+    if handle.parent != runtime.home/'review-handles' or not Path(selected['history']).is_relative_to(runtime.home/'review-history'):
+        raise Refusal('unmapped original native handle/history namespace')
+    facade = runtime.home/'review-inputs'/digest(packet['component'])/'material.json'
+    reads = [*task['effect_authority']['read_roots'], task['cwd'], selected['repository'],
+             policy['caller'], str(Path(__file__).with_name('review_reader.py')),
+             *policy['method_files'], *selected.get('prior_histories', {}), selected['history']]
+    writes = [str(handle), selected['history'], str(facade),
+              *[str(facade.with_suffix(s)) for s in ('.pending','.cursor','.item')]]
+    # Every pending/applied append remains charged; no entry body or settlement.
+    writes += [r['path'] for r in runtime.rows('SELECT h.path FROM review_history_commits h JOIN attempts a ON a.id=h.attempt WHERE a.job=?', (job['id'],))]
+    return reads, writes
+
+
+
 def original_modes(runtime, job):
     with (nullcontext() if runtime.db.in_transaction else runtime.tx()):
         return _original_modes(runtime, job)
@@ -133,7 +330,6 @@ def _original_modes(runtime, job):
     task = scoped_task(job['task'], task, admission)
     native = task.get('execution') == 'owner'
     if native:
-        from .reviews import original_resources
         reads, writes = original_resources(runtime, job, task)
     else:
         reads, writes = access_modes(task, runtime.config.get('artifact_exclusions', []))
@@ -494,6 +690,13 @@ def _blocked(runtime, row, task=None):
         # These scalar identities select immutable maps, never old return,
         # capture, error, receipt or full job/task bodies. UNKNOWN is unchanged.
         for job in runtime.rows("SELECT id,task FROM jobs WHERE effects NOT IN ('none','reconciled')"):
+            if row.get('id') != job['id']:
+                retain(job)
+        # A returned/interrupted Source still owns its original call/context,
+        # reader, history and output resources even if the executor's effect
+        # column is none/reconciled. No report or terminal state releases them.
+        for job in runtime.rows('SELECT j.id,j.task FROM jobs j WHERE EXISTS ('
+                'SELECT 1 FROM attempts a JOIN review_calls c ON c.attempt=a.id WHERE a.job=j.id)'):
             if row.get('id') != job['id']:
                 retain(job)
         # Effect reconciliation alone cannot clear an interrupted or incomplete
