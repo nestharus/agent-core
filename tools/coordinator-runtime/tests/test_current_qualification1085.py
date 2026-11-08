@@ -53,6 +53,17 @@ class CurrentGrowth1085(unittest.TestCase):
 
 
 class RetainedCurrent1085(unittest.TestCase):
+    def test_generated_commands_fit_the_actual_public_command_contract(self):
+        from coordinator_runtime.ordinary import command_policy
+        manifest = json.loads(Path('/procedure/manifest.json').read_text())
+        commands = json.loads(Path('/procedure/COMMANDS.json').read_text())
+        home = Path('/fixtures/current-command-policy')
+        home.mkdir()
+        runtime = enrolled(config_at(home))
+        self.addCleanup(runtime.close)
+        for role in ('command', 'readback'):
+            command_policy(runtime, commands[role], [manifest['instance']], commands['public_executables'][role])
+
     def test_current_retained_file_and_real_input_backpressure(self):
         home = Path('/fixtures/current-oracle')
         home.mkdir(mode=0o700)
@@ -163,7 +174,7 @@ class ActualCollection1085(unittest.TestCase):
         m = dict(instance=str(self.area), tools={'/usr/bin/python3.12': {'sha256': 'fictional-tool-pin'}})
         expected = 'fictional-exact-manifest'
         commands = command_bindings(m, expected)
-        for role in commands:
+        for role in ('command', 'readback'):
             (self.area/(role+'_entry.py')).write_text(entry_text(role, self.area, expected))
         path = self.area/'COMMANDS.json'
         path.write_text(json.dumps(commands))

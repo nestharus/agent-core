@@ -33,6 +33,7 @@ SEAMS = ['fictional principals, Board membership, clocks and native/model/collec
          'owned release copies measured by production release(); semantic approval is fictional',
          'support.fixture_publication uses four public Board files and tracked fictional retention',
          'tiny owned Git repositories where the selected ordinary contract requires Git; candidate has no Git',
+         'windows76 current adapter supplies fresh fixture arguments and calls its explicit imports initializer; not its original direct-main invocation',
          'no actual installed eligibility, custodian entitlement, QA/Branch acceptance or processing completion']
 
 
@@ -109,7 +110,12 @@ def command_bindings(m, expected):
         script = Path(m['instance'])/(role+'_entry.py')
         commands[role] = dict(argv=['/usr/bin/python3.12', '-B', str(script)],
                               executable_sha256=m['tools']['/usr/bin/python3.12']['sha256'],
-                              script_sha256=sha(entry_text(role, m['instance'], expected).encode()))
+                              script_sha256=sha(entry_text(role, m['instance'], expected).encode()),
+                              stdout=('current1085 command collected; separate readback required\n' if role == 'command' else
+                                      'current1085: complete selected current tests and retained file/SQLite effects verified\n'))
+    commands['public_executables'] = {role: {'path': '/usr/bin/python3.12',
+                                            **m['tools']['/usr/bin/python3.12']}
+                                       for role in ('command', 'readback')}
     return commands
 
 
@@ -117,7 +123,8 @@ def verify_commands(m, expected):
     d = Path(m['instance'])
     commands = command_bindings(m, expected)
     require(json.loads((d/'COMMANDS.json').read_text()) == commands, 'derived command binding changed')
-    for role, command in commands.items():
+    for role in ('command', 'readback'):
+        command = commands[role]
         require(pin(d/(role+'_entry.py'))['sha256'] == command['script_sha256'], 'derived entry binding changed')
 
 
@@ -166,7 +173,7 @@ def prepare(spec):
     commands = command_bindings(m, mh)
     write(d/'COMMANDS.json', commands)
     write(d/'BINDING.json', {'manifest': mh, 'commands': pin(d/'COMMANDS.json'),
-                            'entries': {r: pin(d/(r+'_entry.py')) for r in commands}})
+                            'entries': {r: pin(d/(r+'_entry.py')) for r in ('command', 'readback')}})
     return commands
 
 
@@ -195,12 +202,13 @@ def sandbox(m):
     for p in ('/usr', '/bin', '/lib', '/lib64'):
         argv += ['--ro-bind', p, p]
     argv += ['--proc', '/proc', '--dev', '/dev', '--ro-bind', c, c, '--ro-bind', c, '/src',
-             '--ro-bind', c, '/actualsrc', '--ro-bind', d, '/procedure', '--ro-bind', d+'/sdk', '/sdk',
+             '--ro-bind', c, '/actualsrc', '--ro-bind', d, d, '--ro-bind', d, '/procedure', '--ro-bind', d+'/sdk', '/sdk',
              '--bind', m['output'], '/fixtures', '--dir', '/tmp', '--dir', '/home', '--clearenv']
     env = dict(PATH='/usr/bin:/bin', HOME='/fixtures', TMPDIR='/fixtures/tmp', PYTHONDONTWRITEBYTECODE='1',
                QA629_FIXTURES='/fixtures/cases', RFQ673_FIXTURES='/fixtures/releases',
+               CAPACITY48_FIXTURES='/fixtures/capacity48',
                COORDINATOR_ORDINARY_FIXTURES='/fixtures/ordinary-effects33', COORDINATOR_TEST_BOARD_LIBRARY='/sdk',
-               PYTHONPATH='/procedure:/sdk:'+c+'/tools/coordinator-runtime:'+c+'/tools/coordinator-runtime/tests')
+               PYTHONPATH='/procedure:/sdk:/src/tools/coordinator-runtime:/src/tools/coordinator-runtime/tests')
     for key, value in env.items():
         argv += ['--setenv', key, value]
     return argv+['--chdir', c, '/usr/bin/python3.12', '-B', '/procedure/worker.py']

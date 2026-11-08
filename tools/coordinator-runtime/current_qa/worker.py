@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 from procedure import require, sha, SELECTORS
@@ -55,6 +56,18 @@ def fixture_publication():
     return dict(method='retention-same-inode-v1', library='/sdk', source_pins=source_pins('/sdk', []))
 
 
+def initialize_windows():
+    # This test module's direct harness has explicit argument/import setup.
+    # Supply those positive fictional inputs in the current adapter, leaving
+    # the original harness and original results untouched.
+    import test_windows76 as fixture
+    require(os.statvfs('/src').f_flag & os.ST_RDONLY, 'windows fixture needs source read-only')
+    home = Path('/fixtures/windows76')
+    home.mkdir()
+    fixture.ARGS = SimpleNamespace(fixtures=home, kernel_ro=True)
+    fixture.imports()
+
+
 def flatten(suite):
     for item in suite:
         yield from flatten(item) if isinstance(item, unittest.TestSuite) else [item]
@@ -76,11 +89,19 @@ def origins(m):
     modules = {}
     for name, module in list(sys.modules.items()):
         p = getattr(module, '__file__', None)
-        if p and Path(p).is_relative_to(c):
-            rel = str(Path(p).relative_to(c))
+        rel = candidate_relative(Path(p), c) if p else None
+        if rel is not None:
             require(rel in m['files'] and sha(Path(p).read_bytes()) == m['files'][rel]['sha256'], 'unlisted/changed import')
             modules[name] = rel
     return modules
+
+
+def candidate_relative(path, candidate):
+    if path.is_relative_to(candidate):
+        return str(path.relative_to(candidate))
+    if path.is_relative_to('/src'):
+        return str(path.relative_to('/src'))
+    return None
 
 
 def main():
@@ -92,6 +113,7 @@ def main():
 
 
 def run(m):
+    initialize_windows()
     suite = unittest.defaultTestLoader.loadTestsFromNames(SELECTORS)
     require(not unittest.defaultTestLoader.errors, 'selected current tests failed to load')
     tests = {test.id(): test for test in flatten(suite)}

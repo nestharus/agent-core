@@ -17,6 +17,9 @@ belongs in `files`; supplying that list is a trusted preparer obligation, not a
 cryptographic proof of completeness or origin. No Git is queried by the
 constructed command/readback. The actual candidate CWD and both candidate
 aliases are mounted read-only without `.git`; network and host HOME are absent.
+Runtime/test imports use `/src`, a read-only alias of that exact export, so
+supported fixture release paths and current source origins agree. Both actual
+candidate and alias imports must match the same complete pinned file map.
 
 The fixed current floor selects complete test modules for six continuing
 protection dimensions, before outcomes exist. Source acquisition/configuration
@@ -38,6 +41,10 @@ failures do not remove IDs and execution is not fail-fast. Every runtime module
 is bound and imported from the selected export. Import inclusion is not semantic
 coverage of every branch. Each actual selected ID, start, success/error/failure/
 skip, imported module and complete output is retained for independent assessment.
+Windows76's explicit argument/import initializer is supplied by this current
+adapter with a fresh owned fixture root. Capacity48 gets its required explicit
+fixture environment. Their original direct invocations/results are unchanged;
+an earlier run without these inputs remains failed, never credited as passing.
 
 Historical Future1008/Integration1012 and their derived Budget1021/Boundary1014
 floor still require original counterparts and exact historical deltas. They are
