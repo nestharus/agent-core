@@ -9,7 +9,7 @@ import re
 import secrets
 
 from common import (REGRESSIONS, SEAMS, canonical, file_pin, plain, relative,
-                    require, sha, verify_pin, write_json)
+                    require, sha, verify_pin, write_json, entry_script, commands_for)
 
 KEYS = {'candidate', 'candidate_identity', 'candidate_files', 'instance', 'output',
         'tools', 'selected_selectors', 'expected_ids', 'effects', 'historical_files',
@@ -92,19 +92,10 @@ def prepare(spec):
              input_provenance={'historical_files': spec['historical_files'], 'caller': spec['caller']})
     write_json(instance/'manifest.json', m)
     mh = sha((instance/'manifest.json').read_bytes())
-    commands = {}
     for role, module in [('command', 'execution'), ('readback', 'readback')]:
         script = instance/(role+'_entry.py')
         # The wrapper pins the complete manifest; tool admission separately pins this wrapper.
-        script.write_text('import sys\nif len(sys.argv) != 1: raise SystemExit("no runner arguments supported")\n'
-                          'from '+module+' import main\nmain('+repr(str(instance))+', '+repr(mh)+')\n')
-        commands[role] = {'argv': [m['python'], '-B', str(script)],
-                          'executable_sha256': spec['tools']['python']['pin']['sha256'],
-                          'script_sha256': file_pin(script)['sha256']}
-    commands['manifest_sha256'] = mh
-    commands['command']['stdout'] = json.dumps({'exit': 0, 'complete': True, 'output': str(output)})+'\n'
-    commands['readback']['stdout'] = 'portable QA1047: declared tests and retained effects verified\n'
-    commands['public_executables'] = {role: {'path': m['python'], **spec['tools']['python']['pin']}
-                                       for role in ('command', 'readback')}
+        script.write_text(entry_script(module, str(instance), mh))
+    commands = commands_for(m, mh)
     write_json(instance/'COMMANDS.json', commands)
     return commands

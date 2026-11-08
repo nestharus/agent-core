@@ -64,6 +64,25 @@ def write_json(path, data):
     Path(path).write_text(json.dumps(data, sort_keys=True, indent=2)+'\n')
 
 
+def entry_script(module, directory, manifest_hash):
+    return ('import sys\nif len(sys.argv) != 1: raise SystemExit("no runner arguments supported")\n'
+            'from '+module+' import main\nmain('+repr(directory)+', '+repr(manifest_hash)+')\n')
+
+
+def commands_for(m, manifest_hash):
+    commands = {}
+    for role, module in [('command', 'execution'), ('readback', 'readback')]:
+        commands[role] = {'argv': [m['python'], '-B', m['instance']+'/'+role+'_entry.py'],
+                          'executable_sha256': m['tools'][m['python']]['sha256'],
+                          'script_sha256': sha(entry_script(module, m['instance'], manifest_hash).encode())}
+    commands['manifest_sha256'] = manifest_hash
+    commands['command']['stdout'] = json.dumps({'exit': 0, 'complete': True, 'output': m['output']})+'\n'
+    commands['readback']['stdout'] = 'portable QA1047: declared tests and retained effects verified\n'
+    commands['public_executables'] = {role: {'path': m['python'], **m['tools'][m['python']]}
+                                       for role in ('command', 'readback')}
+    return commands
+
+
 def load_instance(directory, expected):
     d = plain(directory)
     body = plain(d/'manifest.json').read_bytes()
@@ -87,6 +106,12 @@ def verify_inputs(m):
     d = Path(m['instance'])
     for rel, pin in m['inputs'].items():
         verify_pin(d/relative(rel), pin)
+    expected = commands_for(m, sha(plain(d/'manifest.json').read_bytes()))
+    require(json.loads(plain(d/'COMMANDS.json').read_text()) == expected,
+            'derived command input identity mismatch')
+    for role in ('command', 'readback'):
+        require(file_pin(d/(role+'_entry.py'))['sha256'] == expected[role]['script_sha256'],
+                'derived entry script identity mismatch')
 
 
 def output_root(m):

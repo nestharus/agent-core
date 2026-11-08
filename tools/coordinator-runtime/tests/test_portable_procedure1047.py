@@ -101,6 +101,13 @@ class Procedure1047(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn('identity mismatch', r.stderr.decode())
 
+    def test_derived_command_input_mismatch_refuses(self):
+        commands = prepare(self.spec)
+        (Path(self.spec['instance'])/'COMMANDS.json').write_text('{}\n')
+        r = self.command(commands)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('derived command input identity mismatch', r.stderr.decode())
+
     def test_wrong_test_set_refuses(self):
         self.spec['expected_ids'] = self.spec['expected_ids'][:-1]
         commands = prepare(self.spec)
