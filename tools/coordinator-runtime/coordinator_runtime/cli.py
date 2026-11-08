@@ -300,6 +300,13 @@ def parser():
     recovery.add_argument('--token',required=True)
     recovery.add_argument('--attempt',required=True)
     recovery.add_argument('--receipt',required=True,help='use-diagnosis: exact diagnosis/selection with remaining:null; optional qualified publication_remainder basis and collector_continuity; remaining-work requests fresh diagnosis')
+    for command in ('software-preparation-recovery-basis', 'request-software-preparation-recovery'):
+        recovery=sub.add_parser(command,help='Actual current Work/case Root: bounded read-only preparation only, never native consent')
+        recovery.add_argument('capability')
+        recovery.add_argument('job')
+        recovery.add_argument('--token',required=True)
+        recovery.add_argument('--attempt',required=True)
+        if command.startswith('request-'):recovery.add_argument('--receipt',required=True)
     for command in ('work-read-metadata-closure-basis', 'fence-work-proposer-metadata', 'integration-metadata-closure-basis', 'retire-integration-metadata', 'integration-closure-basis', 'retire-integration', 'integration-prestart-basis', 'withdraw-integration-prestart', 'integration-no-start-basis', 'withdraw-integration-no-start', 'work-read-closure-basis', 'fence-work-proposer'):
         integration = sub.add_parser(command, help='Actual Work: closed execution only; all original duties retained')
         integration.add_argument('job')
@@ -720,6 +727,18 @@ def operate(args, store):
         actor = actual_actor(store.config["roles"][job["role"]]["owner"])
         store.reconcile_effects(args.job, args.token, actor, read_record(args.receipt))
         return {"job": args.job, "effects_reconciled": True}
+    if args.command in {'software-preparation-recovery-basis','request-software-preparation-recovery'}:
+        from . import processing, preparation_recovery
+        boards={r:processing.ProcessingBoard(store.config,r) for r in store.config['roles']}
+        store.processing=processing.Access(store,args.capability,boards)
+        actor=actual_actor(store.config['roles']['Work']['owner'])
+        boards['Work'].store.acting_session(actor)
+        if args.command=='software-preparation-recovery-basis':
+            return preparation_recovery.basis(store,args.job,args.token,args.attempt,actor)
+        receipt=read_record(args.receipt)
+        if not isinstance(receipt,dict) or 'software_preparation' not in receipt:
+            raise Refusal('explicit software preparation disposition required')
+        return store.request_recovery(args.job,args.token,args.attempt,actor,receipt,publication_board=boards['QA'])
     if args.command=='request-recovery':
         job=store.job(args.job,args.token)
         actor=actual_actor(store.enrollment(job['role'])['owner'])

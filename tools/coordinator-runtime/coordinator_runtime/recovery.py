@@ -70,7 +70,13 @@ class RecoveryJournal:
             local_integration.current_sources(self, row)
             old=self.attempt(attempt)
             self.require_active_sources(job=job)
-            if actor!=self.enrollment(row['role'])['owner']:
+            software=isinstance(receipt,dict) and 'software_preparation' in receipt
+            if software:
+                from .preparation_recovery import disposition
+                if receipt.get('mode')!='remaining-work':
+                    raise Refusal('case-Root preparation selects explicit new remaining work only')
+                effect=disposition(self,row,old,actor,receipt['software_preparation'])
+            elif actor!=self.enrollment(row['role'])['owner']:
                 raise Refusal('recovery request belongs to the actual enrolled role owner')
             if row['active_attempt']!=attempt or row['state']!='held':
                 raise Refusal('recovery request needs the exact active held attempt')
@@ -85,6 +91,7 @@ class RecoveryJournal:
             keys={'mode','reason','evidence','remaining'}
             reuse=isinstance(receipt,dict) and receipt.get('mode')=='use-diagnosis'
             expected=keys|{'diagnosis','selection'} if reuse else keys
+            if software:expected|={'software_preparation'}
             if reuse and 'collector_continuity' in receipt:expected|={'collector_continuity'}
             if reuse and 'publication_remainder' in receipt:expected|={'publication_remainder'}
             if not isinstance(receipt,dict) or set(receipt)!=expected:
@@ -97,6 +104,11 @@ class RecoveryJournal:
             for evidence in receipt['evidence']:required_text(evidence,'owner evidence',4000)
             if mode=='remaining-work':
                 required_text(receipt['remaining'],'bounded remaining target and why',16000)
+                if software:
+                    # Same transaction as the exact request. A later refusal
+                    # rolls this back; no original attempt/result is edited.
+                    self.db.execute("UPDATE jobs SET effects='reconciled',effect_receipt=? WHERE id=?",(encode(effect),job))
+                    row=self.job(job,token)
                 self.remaining_work_fence(row,old)
             elif receipt['remaining'] is not None:
                 raise Refusal('only remaining-work states a new target; other modes require remaining:null')
@@ -129,7 +141,9 @@ class RecoveryJournal:
             raise Refusal('unresolved publication intent cannot be bypassed by remaining work')
         if not json.loads(old['detail']).get('resume_disposition'):
             raise Refusal('same-session continuation disposition must remain explicit')
-        if self.enrollment(row['role'])['legacy_hold'] or any(
+        from .preparation_recovery import current_disposition
+        software=current_disposition(self,row,old)
+        if (self.enrollment(row['role'])['legacy_hold'] and not software) or any(
                 self.one('SELECT hold FROM events WHERE id=?',(m['event'],))['hold']
                 for m in json.loads(row['members'])):
             raise Refusal('source/legacy holds remain binding for remaining work')
