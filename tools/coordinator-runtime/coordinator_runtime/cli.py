@@ -872,7 +872,7 @@ def main_owned(args):
             return 0
         with observations.span('store-open'):
             store = Store(config, read_only=args.command == 'processing-service-control'
-                          or args.command == 'processing-source' and (args.diagnostics or args.reservation_only))
+                          or args.command == 'processing-source' and (args.diagnostics or args.reservation_only or args.plain_control_basis))
         try:
             value = operate(args, store)
             if args.command == "processing-service-control":

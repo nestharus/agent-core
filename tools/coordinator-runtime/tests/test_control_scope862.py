@@ -3,6 +3,7 @@
 No actual provider or live operation. Prompt semantics need later live inquiry.
 """
 import copy
+import io
 import json
 from unittest.mock import patch
 from test_plain_control821 import Completion821
@@ -13,6 +14,27 @@ from coordinator_runtime.contracts import Refusal, digest, encode
 
 
 class Scope862(Completion821):
+    def test_basis_actual_query_only_cli_and_joined_transaction(self):
+        source,_,_,_=self.unresolved()
+        with self.store.tx():
+            self.view(source)
+            self.assertTrue(self.store.db.in_transaction)
+        self.assertFalse(self.store.db.in_transaction)
+        opening=cli.Store; observed=[]
+        def opened(config, **kwargs):
+            value=opening(config, **kwargs)
+            observed.append((kwargs,value.one('PRAGMA query_only')))
+            return value
+        output=io.StringIO()
+        with patch.dict('os.environ',{'CODEX_SESSION_ID':self.issuer}), actor(self.boards['Work'].store,self.issuer), \
+                patch.object(cli,'load_config',return_value=self.config), patch.object(cli,'Store',side_effect=opened), \
+                patch('sys.stdout',output):
+            code=cli.main(['--config',str(self.area/'synthetic-cli-config.json'),
+                           'processing-source',self.cap,source['id'],'--plain-control-basis'])
+        self.assertEqual(code,0,output.getvalue())
+        self.assertEqual(observed,[({'read_only':True},{'query_only':1})])
+        self.assertEqual(json.loads(output.getvalue())['source']['hash'],digest(source))
+
     def unresolved(self):
         source, attempt, request, returned = self.returned()
         child = returned['response']

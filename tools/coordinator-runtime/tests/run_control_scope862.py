@@ -11,7 +11,7 @@ import sys
 import time
 
 repo = Path(__file__).resolve().parents[3]
-base = repo / '.qualification862-qualified'
+base = repo / '.qualification862-readonly'
 base.mkdir(mode=0o700, exist_ok=False)
 def usage():
     return sum(p.stat().st_size for p in base.rglob('*') if p.is_file())
@@ -55,6 +55,7 @@ records=[]
 
 groups = {
  'scope': ['test_control_scope862.Scope862.'+name for name in [
+  'test_basis_actual_query_only_cli_and_joined_transaction',
   'test_unresolved_cli_consumption_preserves_original_classifier_lineages',
   'test_unresolved_negatives_before_any_body',
   'test_basis_and_disposition_exclude_old_unselected_birth_before_body',

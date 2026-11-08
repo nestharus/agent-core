@@ -56,7 +56,10 @@ def classifier_metadata(runtime, attempt):
 
 def basis(runtime, event):
     """Authorized exact metadata, not an interpretation or eligibility receipt."""
-    with runtime.tx():
+    joined = runtime.db.in_transaction
+    if not joined:
+        runtime.db.execute('BEGIN')  # also supported by the query-only CLI view
+    try:
         row, birth = selected_metadata(runtime, event)
         control = runtime.one('SELECT event,capability,attempt,source_hash FROM processing_controls WHERE event=?',(event,))
         if not control or control['source_hash'] != row['hash']:
@@ -74,6 +77,9 @@ def basis(runtime, event):
                     responsibility=runtime.one('SELECT * FROM queue WHERE event=?',(event,)),
                     control_return=returned,consumer=child,
                     meaning='metadata pins only; whole original source/result and all current guards still required')
+    finally:
+        if not joined:
+            runtime.db.execute('ROLLBACK')  # read snapshot only; never commit effects
 
 
 def metadata(runtime, event, attempt, request):
