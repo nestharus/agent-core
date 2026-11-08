@@ -54,13 +54,13 @@ class Historical1041(unittest.TestCase):
         self.addCleanup(self.connection.close)
         self.connection.executescript(EXTENSION+BOARD_SCHEMA+'''
 CREATE TABLE sessions(session TEXT PRIMARY KEY,status TEXT);
-CREATE TABLE posts(seq INTEGER PRIMARY KEY,recipient TEXT);
+CREATE TABLE posts(seq INTEGER PRIMARY KEY,recipient TEXT,text TEXT DEFAULT 'FORBIDDEN POST BODY');
 CREATE TABLE thread_posts(post_seq INTEGER,thread_id INTEGER);
 CREATE TABLE threads(thread_id INTEGER,opener TEXT);
 ''')
         for actor in (self.owner,self.work):
             self.connection.execute("INSERT INTO sessions VALUES(?,'active')",(actor,))
-        self.connection.execute('INSERT INTO posts VALUES(1,?)',(self.owner,))
+        self.connection.execute('INSERT INTO posts(seq,recipient) VALUES(1,?)',(self.owner,))
         self.connection.execute('INSERT INTO thread_posts VALUES(1,1)')
         self.connection.execute('INSERT INTO threads VALUES(1,?)',(self.work,))
         self.principal=Principal(self.work)
@@ -172,7 +172,8 @@ CREATE TABLE threads(thread_id INTEGER,opener TEXT);
 
     @contextmanager
     def safe_queries(self):
-        denied={('jobs','token'),('attempts','session'),('attempts','result'),('attempts','error'),
+        denied={('jobs','token'),('attempts','session'),('attempts','result'),('attempts','error'),('enrollments','reconciliation'),
+            ('posts','text'),
             ('review_contexts','handle'),('review_contexts','run'),('review_contexts','route'),
             ('review_calls','receipt'),('review_calls','answer'),('results','result')}
         def authorizer(op,table,column,db,trigger):
@@ -187,9 +188,12 @@ CREATE TABLE threads(thread_id INTEGER,opener TEXT);
                 raise AssertionError('forbidden JSON projection')
             return original(sql,args)
         self.s.db.set_authorizer(authorizer)
+        self.connection.set_authorizer(authorizer)
         try:
             with patch.object(self.s,'one',side_effect=bounded): yield
-        finally: self.s.db.set_authorizer(None)
+        finally:
+            self.s.db.set_authorizer(None)
+            self.connection.set_authorizer(None)
 
     def test_existing_unrecorded_revoked_source_supported_without_renewal(self):
         with self.safe_queries():
@@ -312,7 +316,8 @@ CREATE TABLE threads(thread_id INTEGER,opener TEXT);
         from coordinator_runtime import cli
         key=self.authorize()
         args=cli.parser().parse_args(['historical-metadata-project',key])
-        with patch.object(processing,'ProcessingBoard',side_effect=lambda config,role:self.boards[role]):
+        with patch.object(processing,'ProcessingBoard',side_effect=lambda config,role:self.boards[role]), \
+                patch.object(cli,'actual_actor',side_effect=self.principal.acting_session):
             with patch.object(self.s.processing,'current',side_effect=AssertionError('expired execution called')):
                 self.assertEqual(cli.operate(args,self.s)['verification'],'verified-scoped-journal-relationships')
         with self.s.tx(),self.assertRaises(Refusal):

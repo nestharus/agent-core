@@ -36,6 +36,11 @@ def actual_actor(owner):
     return actual
 
 
+def historical_actor(config, command):
+    role = 'Reviews' if command in {'historical-metadata-authorize','historical-metadata-revoke'} else 'Work'
+    return actual_actor(config['roles'][role]['owner'])
+
+
 def qualify_schema(codex, output):
     directory = private_directory(output)
     if list(directory.iterdir()):
@@ -423,6 +428,7 @@ async def serve(store):
 def operate(args, store):
     if args.command.startswith('historical-metadata-'):
         from . import historical_verification as historical, processing
+        historical_actor(store.config,args.command)
         boards = {r:processing.ProcessingBoard(store.config,r) for r in ('Work','Reviews')}
         if args.command == 'historical-metadata-authorize':
             return historical.authorize(store,boards,read_record(args.selection))
@@ -934,6 +940,8 @@ def main_owned(args):
             print_json(value)
             return 0
         with observations.span('store-open'):
+            if args.command.startswith('historical-metadata-'):
+                historical_actor(config,args.command)
             store = Store(config, read_only=args.command == 'processing-service-control'
                           or args.command == 'processing-source' and (args.diagnostics or args.reservation_only or args.plain_control_basis))
         try:

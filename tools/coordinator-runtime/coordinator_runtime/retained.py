@@ -45,7 +45,7 @@ class RetainedBoard(Board):
     def _original(self, conn, runtime):
         from .configuration import assert_current
         assert_current(runtime)
-        enrollment = runtime.one('SELECT * FROM enrollments WHERE role=?', (self.role,))
+        enrollment = runtime.one('SELECT grant_id,intake FROM enrollments WHERE role=?', (self.role,))
         grant = conn.execute('SELECT * FROM coordinator_grants_v1 WHERE id=?',
                              (enrollment['grant_id'],)).fetchone() if enrollment else None
         stat = runtime.path.stat()
