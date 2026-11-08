@@ -74,3 +74,35 @@ Preserve every failed/partial attempt, actual output and effect. Whole-processin
 completion+24h AND every hold governs eventual retirement. Writer release and
 numeric END do not start that clock. Work owns independent consequence Review,
 Frame, Decide, final lifecycle composition, actual QA/Branch and adoption.
+
+
+## Current1098 continuation
+
+Decision1098 keeps all existing current selections and adds complete current
+collection and relationship modules. No selected failure is filtered out. The
+new relationship fixture takes its before map from measured current source,
+retains a byte-backed after operand differing only by an inert comment in an
+allowed repair module, and executes the unchanged repair/future APIs. It reuses
+all Future1008 and Context1021 behavior assertions with that distinct setup.
+The edited operand is not executed; semantic source approval, installation
+identity, Board principals, clocks and collector receipts remain fictional.
+This does not satisfy a missing original historical counterpart or retrofit any
+old failed/unexecuted result. The original public-history fixtures are unchanged.
+
+| Continuing relationship | Current controls and discriminating observations |
+| --- | --- |
+| Source growth versus narrow source repair | CurrentGrowth1085 adds a measured module, observes same-config refusal, applies a changed configuration, and conserves inode, grants, sources, outboxes and UNKNOWN effects. The relationship fixture uses a distinct measured existing-module delta through unchanged source-v1 guards. |
+| Activation, rearm and continuing windows | FutureCurrent1098 exercises finite current selection, managed wakes and four-role new intake; ContextCurrent1098 exhausts a current window before start/direct birth, checks rollover and cumulative debit, and verifies first activation versus later rearm without replacing retained window rows. |
+| Failed nested allocation | ContextCurrent1098 refuses execution-pool allocation after budget allocation and asserts rollback of activation, windows and original reserved job state. Start/input/time ceilings retain originals instead of resetting debit. |
+| Direct response birth | ContextCurrent1098 completes an owned producer with conserved stage/effect prerequisites, calls the real direct INSERT response path and checks event-window charge, monotonic birth count and unchanged source attempt/start debit. |
+| Frozen materialization | ContextCurrent1098 captures an owned producer artifact, freezes the witness in a distinct consumer, calls actual job_prompt outside transactions, checks bytes/hash/inode/conservation and idempotence, and refuses insufficient bytes, wrong source and expired epoch while retaining the origin. |
+| Routine staging and backup | ContextCurrent1098 creates real stages, conserves equal preimages, reconciles an actual gzip backup with custody, and checks canonical bytes/inode and effect state. Capacity, changed rights and expiry controls retain stages, result and UNKNOWN debt on refusal. |
+| Finite eligible fairness | Fairness1093 traverses all twenty distinct continuously eligible alerts through available recurring visits and conserves the original alerts; it assumes a stable finite backlog and promptly returning worker, without a customer time SLO or permanent-busy guarantee. Historical 0/16 remains its original failed claim. |
+| Original collection | SetupCollection1093 injects selector construction/registration, transcript allocation, drain and close faults; complete nonzero, overflow, EOF-before-END, ignored TERM and launch failure remain distinct. Every actually launched direct original must be stopped/waited or retain explicit collection debt. |
+| Purpose-specific readback | Witness1098 independently checks exact file and row state, rejects changed rows and nonempty sidecars before immutable queries. EFFECT-OBSERVATION records the dedicated witness even when execution fails; other unresolved fixture databases stay explicit. No whole-processing/consumer closure follows. |
+
+Run the complete constructed command and separate readback against the final
+exact export, with external deadlines covering load, execution and collection.
+Keep every attempted outcome and capture. Passing focused controls, byte binding,
+imports and this map alone do not establish adequate current protection,
+independent acceptance, ordinary activation or completion of the wider rollout.

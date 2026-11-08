@@ -3,6 +3,7 @@
 Declared roles: orchestration, validator, accessor, parser, formatter.
 No historical fixture identity is manufactured; no runtime authority is issued.
 """
+from contextlib import ExitStack
 import hashlib
 import json
 import os
@@ -24,7 +25,7 @@ PROTECTIONS = {
                                       'test_processing194', 'test_processing206'],
     'retained-resources-and-capacity': ['test_capacity48', 'test_bounded311', 'test_retained168',
                                        'test_retained329', 'test_windows76'],
-    'collection-and-currentness': ['test_post_await_admission743', 'test_ordinary_boundaries749'],
+    'collection-and-currentness': ['test_post_await_admission743', 'test_ordinary_boundaries749', 'test_current_collection1093', 'test_current_relationships1098'],
     'independent-same-package-receivers': ['test_qa_branch672'],
 }
 SELECTORS = sorted({s for group in PROTECTIONS.values() for s in group})
@@ -83,9 +84,12 @@ def footprint(root):
         require(s.st_uid == os.getuid(), 'foreign owned-output entry')
         count += 1
         total += s.st_size
-        if stat.S_ISDIR(s.st_mode):
-            pending.extend(path.iterdir())
+        pending.extend(directory_children(path, s.st_mode))
     return dict(entries=count, logical_bytes=total)
+
+
+def directory_children(path, mode):
+    return list(path.iterdir()) if stat.S_ISDIR(mode) else []
 
 
 def resources(m):
@@ -112,7 +116,7 @@ def command_bindings(m, expected):
                               executable_sha256=m['tools']['/usr/bin/python3.12']['sha256'],
                               script_sha256=sha(entry_text(role, m['instance'], expected).encode()),
                               stdout=('current1085 command collected; separate readback required\n' if role == 'command' else
-                                      'current1085: complete selected current tests and retained file/SQLite effects verified\n'))
+                                      'current1093: complete selected tests; dedicated retained file/SQLite witness verified; other fixture observations remain separate\n'))
     commands['public_executables'] = {role: {'path': '/usr/bin/python3.12',
                                             **m['tools']['/usr/bin/python3.12']}
                                        for role in ('command', 'readback')}
@@ -214,51 +218,116 @@ def sandbox(m):
     return argv+['--chdir', c, '/usr/bin/python3.12', '-B', '/procedure/worker.py']
 
 
+def terminate_owned(proc):
+    try:
+        proc.terminate()
+    except ProcessLookupError:
+        pass  # An already exited original still requires wait().
+
+
+def kill_owned(proc):
+    try:
+        proc.kill()
+    except ProcessLookupError:
+        pass
+
+
 def stop(proc):
     # Only the directly owned foreground subprocess; finite collection tail.
-    proc.terminate()
+    terminate_owned(proc)
     try:
         return proc.wait(timeout=3)
     except subprocess.TimeoutExpired:
-        proc.kill()
+        kill_owned(proc)
     return proc.wait(timeout=5)
+
+
+def capture_owned(proc, out, record, deadline, maximum):
+    # ExitStack closes every acquired resource, including partial setup. Its
+    # exceptions return to collect(), whose child responsibility already exists.
+    with ExitStack() as closing:
+        closing.callback(proc.stdout.close)
+        ready = closing.enter_context(selectors.DefaultSelector())
+        ready.register(proc.stdout, selectors.EVENT_READ)
+        stream = closing.enter_context((out/'transcript.txt').open('xb'))
+        drain(proc, ready, stream, record, deadline, maximum)
+
+
+def collection_failure(record, stage, exc):
+    record['reason'] = record['reason'] or stage+' failure: '+type(exc).__name__+': '+str(exc)
+    record.setdefault('failures', []).append(dict(stage=stage, type=type(exc).__name__, message=str(exc)))
+
+
+def finish_owned(proc, record, start, seconds):
+    try:
+        finish_collection(proc, record, start, seconds)
+    except BaseException as exc:
+        collection_failure(record, 'collection', exc)
+        retry_owned_stop(proc, record)
+
+
+def retry_owned_stop(proc, record):
+    try:
+        record['exit'] = stop(proc)
+    except BaseException as exc:
+        # No inferred END: a failed original collection remains explicit debt.
+        collection_failure(record, 'collection-retry', exc)
+
+
+def capture_digest(out, record):
+    try:
+        record['transcript_sha256'] = sha((out/'transcript.txt').read_bytes())
+    except BaseException as exc:
+        record['transcript_sha256'] = None
+        collection_failure(record, 'capture-readback', exc)
 
 
 def collect(argv, out, seconds, maximum):
     start = time.monotonic()
-    proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    record = dict(argv=argv, exit=None, complete=False, reason=None, observed_bytes=0, retained_bytes=0)
-    ready = selectors.DefaultSelector()
-    ready.register(proc.stdout, selectors.EVENT_READ)
-    stream = (out/'transcript.txt').open('xb')
+    record = dict(argv=argv, exit=None, complete=False, reason=None, observed_bytes=0, retained_bytes=0,
+                  launched=False, pid=None)
+    proc = None
     try:
-        drain(proc, ready, stream, record, start+seconds, maximum)
+        proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        record.update(launched=True, pid=proc.pid)
+        capture_owned(proc, out, record, start+seconds, maximum)
+    except BaseException as exc:
+        collection_failure(record, 'launch' if proc is None else 'capture', exc)
     finally:
-        finish_collection(proc, record, start, seconds)
-        stream.close()
-        ready.close()
-        proc.stdout.close()
+        finish_if_launched(proc, record, start, seconds)
     record['seconds'] = time.monotonic()-start
-    record['transcript_sha256'] = sha((out/'transcript.txt').read_bytes())
-    record['complete'] = record['reason'] is None and record['observed_bytes'] == record['retained_bytes']
+    capture_digest(out, record)
+    record['complete'] = (record['reason'] is None and record['exit'] is not None
+                          and record['observed_bytes'] == record['retained_bytes'])
     return record
 
 
+def finish_if_launched(proc, record, start, seconds):
+    if proc is not None:
+        finish_owned(proc, record, start, seconds)
+
+
 def drain(proc, ready, stream, r, deadline, maximum):
-    while time.monotonic() < deadline:
-        body = next_body(ready)
-        if body is None:
-            continue
-        if body == b'':
-            return
-        r['observed_bytes'] += len(body)
-        remaining = maximum-r['retained_bytes']
-        stream.write(body[:remaining])
-        r['retained_bytes'] += len(body[:remaining])
-        if len(body) > remaining:
-            r['reason'] = 'capture overflow; retained prefix incomplete'
-            return
-    r['reason'] = 'whole-command deadline'
+    finished = False
+    while not finished and time.monotonic() < deadline:
+        finished = retain_capture_body(next_body(ready), stream, r, maximum)
+    if not finished:
+        r['reason'] = 'whole-command deadline'
+
+
+def retain_capture_body(body, stream, record, maximum):
+    if body is None:
+        return False
+    if body == b'':
+        return True
+    record['observed_bytes'] += len(body)
+    kept = body[:maximum-record['retained_bytes']]
+    stream.write(kept)
+    record['retained_bytes'] += len(kept)
+    if len(kept) == len(body):
+        return False
+    record['reason'] = 'capture overflow; retained prefix incomplete'
+    return True
 
 
 def next_body(ready):
@@ -318,16 +387,18 @@ def database_readback(path):
     return dict(path=str(path), quick_check='ok')
 
 
-def retained_databases(root):
-    pending, result = [root], []
+def retained_entries(root):
+    pending = [root]
     while pending:
         path = pending.pop()
         mode = path.lstat().st_mode
-        if stat.S_ISDIR(mode):
-            pending.extend(path.iterdir())
-        elif stat.S_ISREG(mode) and path.suffix in {'.sqlite3', '.db'}:
-            result.append(observe_database(path))
-    return result
+        pending.extend(directory_children(path, mode))
+        yield path, mode
+
+
+def retained_databases(root):
+    return [observe_database(path) for path, mode in retained_entries(root)
+            if stat.S_ISREG(mode) and path.suffix in {'.sqlite3', '.db'}]
 
 
 def observe_database(path):
@@ -335,6 +406,24 @@ def observe_database(path):
         return database_readback(path)
     except (ValueError, sqlite3.DatabaseError) as exc:
         return dict(path=str(path), unresolved=str(exc))
+
+
+def dedicated_witness(out):
+    require((out/'current-oracle/original.txt').read_bytes() == b'current original retained\n', 'lost original file')
+    database = out/'current-oracle/state/runtime.sqlite3'
+    database_readback(database)
+    with sqlite3.connect(database.as_uri()+'?mode=ro&immutable=1', uri=True) as db:
+        rows = db.execute('SELECT role,state,ack,processed_at FROM events').fetchall()
+    require(rows == [('Work', 'received', 'pending', None)], 'retention/backpressure or processing changed')
+    return dict(verified=True, claim='dedicated original file and SQLite row only',
+                actual_acceptance=False, processing_completion=False)
+
+
+def observe_witness(out):
+    try:
+        return dedicated_witness(out)
+    except (OSError, ValueError, sqlite3.DatabaseError) as exc:
+        return dict(verified=False, unresolved=str(exc))
 
 
 def readback(directory, expected):
@@ -347,19 +436,17 @@ def readback(directory, expected):
     events = [json.loads(line) for line in (out/'events.jsonl').read_text().splitlines()]
     # Retain failure-conscious independent observations even when execution
     # cannot satisfy the success gate. No journal checkpoint or deletion.
+    witness = observe_witness(out)
     write(out/'EFFECT-OBSERVATION.json', dict(resources=resources(m), databases=retained_databases(out),
+          dedicated_witness=witness,
           selected=events[0]['ids'] if events and events[0]['kind'] == 'scope' else [],
           starts=[e['id'] for e in events if e['kind'] == 'start'],
           outcomes=[e for e in events if e['kind'] in {'success', 'error', 'failure', 'skip',
                                                      'expected-failure', 'unexpected-success'}],
           execution_exit=r['exit'], complete=r['complete']))
     ids = validate_outcomes(m, r, events, expected)
-    require((out/'current-oracle/original.txt').read_bytes() == b'current original retained\n', 'lost original file')
-    database = out/'current-oracle/state/runtime.sqlite3'
-    database_readback(database)
-    with sqlite3.connect(database.as_uri()+'?mode=ro&immutable=1', uri=True) as db:
-        rows = db.execute('SELECT role,state,ack,processed_at FROM events').fetchall()
-        require(rows == [('Work', 'received', 'pending', None)], 'retention/backpressure or processing changed')
+    require(witness['verified'], 'dedicated retained witness unresolved')
     write(out/'READBACK.json', dict(version=VERSION, ids=ids, resources=resources(m), file_and_SQLite_oracle=True,
+                                   readback_claim='dedicated original file and SQLite row only; EFFECT-OBSERVATION retains other unresolved fixture states',
                                    actual_acceptance=False, processing_completion=False))
-    print('current1085: complete selected current tests and retained file/SQLite effects verified')
+    print('current1093: complete selected tests; dedicated retained file/SQLite witness verified; other fixture observations remain separate')
