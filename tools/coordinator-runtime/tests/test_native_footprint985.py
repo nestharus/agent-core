@@ -102,6 +102,12 @@ class ActiveSource985(Unpackaged889):
     @contextmanager
     def no_bodies(self):
         with ExitStack() as stack:
+            original_one = self.store.one
+            def one(sql,args=()):
+                if '$.body.review' in sql and original_one('SELECT hold FROM events WHERE id=?',(self.e['id'],))['hold']:
+                    raise AssertionError('held factual packet acquired before scalar admission')
+                return original_one(sql,args)
+            stack.enter_context(patch.object(self.store,'one',side_effect=one))
             for name in ('event', 'attempt'):
                 stack.enter_context(patch.object(self.store, name, side_effect=AssertionError('protected body acquired')))
             stack.enter_context(patch.object(reviews, 'collected_proof', side_effect=AssertionError('premature collection proof')))

@@ -197,7 +197,7 @@ def original_resources(runtime, identity, task):
     if not isinstance(member, dict) or not member.get('event') or not member.get('hash'):
         raise Refusal('original Source member identity/hash required')
     source = runtime.one("SELECT id,role,hold,hash,json_extract(payload,'$.kind') AS kind,"
-        "json_extract(payload,'$.post') AS post,json_extract(payload,'$.body.review') AS packet,"
+        "json_extract(payload,'$.post') AS post,"
         "json_extract(payload,'$.branch_binding') AS branch FROM events WHERE id=?", (member['event'],))
     birth = runtime.one('SELECT position FROM processing_source_positions WHERE event=?', (member['event'],))
     if (not source or source['role'] != 'Reviews' or source['hold'] is not None
@@ -209,7 +209,10 @@ def original_resources(runtime, identity, task):
         raise Refusal('original Source member/birth/current input rights changed')
     policy = selection.get('service', {}).get('reviews', {}).get(job['task'])
     account = selection.get('service', {}).get('legacy_resources', {}).get('Reviews', {}).get('native_review_return', {})
-    packet = json.loads(source['packet']) if source['packet'] else None
+    # The factual packet projection follows every member hold/hash/birth/right
+    # check above. Even its metadata is unnecessary for a refused old input.
+    original = runtime.one("SELECT json_extract(payload,'$.body.review') AS packet FROM events WHERE id=?", (member['event'],))
+    packet = json.loads(original['packet']) if original and original['packet'] else None
     if (not policy or policy.get('caller_sha256') != RESOURCE_CALLER_SHA256
             or account.get('version') not in {'native-collected-review-v1','native-collected-partial-report-v1'}
             or account.get('source_task') != job['task'] or account.get('package', 'absent') is not None
