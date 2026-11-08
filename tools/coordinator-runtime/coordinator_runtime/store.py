@@ -262,6 +262,10 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         return counts
 
     def budget(self, kind, incoming=0, *, event=None, job=None):
+        from .report_repair import software_budget
+        activation = software_budget(self, kind, incoming)
+        if activation:
+            incoming += 1024  # Real writable activation custody, never a read/start.
         if event or job:
             if not self.db.in_transaction:
                 raise Refusal('duty credit allocation requires the source write transaction')
@@ -274,6 +278,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         elif kind is not None and usage[kind] >= limits.get(f"max_{kind}", limits["max_events"]):
             raise Backpressure(f"cumulative {kind} bound reached; held work is retained")
         admitted.check(self, usage, kind)
+        if activation:
+            self.db.execute('INSERT INTO future_software_activations_v1 VALUES(?,?,?,?,?)', activation)
 
     def enroll(self, role, grant):
         selected = self.config["roles"][role]
@@ -330,9 +336,10 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 raise Refusal("same event identity has different immutable content")
             if not old:
                 from .report_repair import software_input
-                software_input(self)
-                if (self.processing and event.get('kind') == 'board'
-                        and not self.processing.owed_control(event)):
+                owed_control = bool(self.processing and event.get('kind') == 'board'
+                                    and self.processing.owed_control(event))
+                software_input(self, event, owed_control=owed_control)
+                if self.processing and event.get('kind') == 'board' and not owed_control:
                     from .service import admit_input
                     admit_input(self)
                 windows.charge(self, None, new_input=True)

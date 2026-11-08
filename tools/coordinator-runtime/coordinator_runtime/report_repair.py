@@ -952,8 +952,13 @@ def lease_selection(runtime, key, selection):
 def lease_deadline(runtime):
     if not runtime.processing:
         return None
-    request = lease_record(runtime, runtime.processing.key) or software_record(runtime, runtime.processing.key)
-    if not request:
+    request = software_record(runtime, runtime.processing.key)
+    if request:
+        # Future admission is separate from the original owned allocation tail.
+        # current() authenticates source/config/grants/revocation and that epoch.
+        runtime.processing.current()
+        return json.loads(request['basis']['prospective']['selection'])['expires']
+    if not lease_record(runtime, runtime.processing.key):
         return None
     _, selection = runtime.processing.current()
     return selection['service']['admission']['until']
@@ -1546,10 +1551,11 @@ def software_identity(runtime, key, selection, request):
 
 
 def software_counters(runtime, key, selection):
-    from . import windows
+    from . import windows, processing
     return {'starts':runtime.one('SELECT starts FROM processing_capabilities WHERE id=?', (key,))['starts'],
-            'new_inputs':runtime.one('SELECT COUNT(*) n FROM processing_source_positions WHERE position>?',
-                                   (selection['basis']['event_boundary'],))['n'],
+            # The monotonic original birth frontier survives lawful row retirement.
+            # Retained-row cardinality is residency, never refundable lifetime credit.
+            'new_inputs':processing.source_boundary(runtime) - selection['basis']['event_boundary'],
             'windows':runtime.one('SELECT COUNT(*) n FROM service_window_allocations WHERE capability=?', (key,))['n'],
             'window':windows.current(runtime)}
 
@@ -1623,57 +1629,108 @@ def software_basis(runtime, boards, key, controller, actor, purpose, plan):
 
 
 def software_selection(runtime, key, selection):
-    """Effective software timing only; original policies and window links persist."""
+    """Pure effective admission/wake view; original use and policy identity persist.
+
+    Ending prospective intake does not grant or revoke original owned rights.
+    Every existing source/task/effect checker still authenticates its own scope.
+    """
     import copy
-    from . import windows
     request = software_record(runtime,key)
     if not request:
         return selection
-    if (not software_identity(runtime,key,selection,request)
-            or runtime.one('SELECT capability FROM future_software_stops_v1 WHERE capability=?',(key,))):
-        raise Refusal('future software stopped or original source/config/grants/epoch/journal changed')
-    plan = request['plan']; now = runtime.clock()
-    if not plan['from'] <= now < plan['until']:
-        raise Refusal('finite future software window inactive/exhausted; original duties retained')
+    if not software_identity(runtime,key,selection,request):
+        raise Refusal('future software original source/config/grants/epoch/journal changed')
+    now = runtime.clock()
+    epoch_until = json.loads(request['basis']['prospective']['selection'])['expires']
+    if now >= epoch_until:
+        raise Refusal('original future software epoch expired; original duties retained')
+    plan = request['plan']
+    active = (plan['from'] <= now < plan['until'] and not runtime.one(
+        'SELECT capability FROM future_software_stops_v1 WHERE capability=?',(key,)))
+    until = min(plan['until'],plan['from']+(int((now-plan['from']) // plan['lease_seconds'])+1)*plan['lease_seconds']) if active else 0
     counters = software_counters(runtime,key,selection)
-    if counters['starts'] > plan['max_starts'] or runtime.usage()['bytes'] >= plan['pause_bytes']:
-        raise Refusal('future software cumulative allocation/byte pressure; no refund')
     row = counters['window']; used = json.loads(row['used'])
-    # A lower explicit ceiling may pause conservatively when ANY original axis
-    # is full. Never change the immutable original allocation authority hash.
     due = (row['new_inputs'] >= runtime.config['window_service']['max_new_inputs']
-           or any(used[k] >= (runtime.config['window_service']['max_decisions'] if k == 'decisions' else
-                             runtime.config['limits'].get('max_'+k,runtime.config['limits']['max_events'])) for k in windows.KINDS))
-    if counters['windows'] > plan['max_windows'] or counters['windows'] >= plan['max_windows'] and due:
-        raise Refusal('future software cumulative window ceiling; old charged windows retained')
-    ordinal = int((now-plan['from']) // plan['lease_seconds'])+1
-    until = min(plan['until'],plan['from']+ordinal*plan['lease_seconds'])
-    from contextlib import nullcontext
-    if not runtime.one('SELECT ordinal FROM future_software_activations_v1 WHERE capability=? AND ordinal=?',(key,ordinal)):
-        with (nullcontext() if runtime.db.in_transaction else runtime.tx()):
-            runtime.budget(None,1024)
-            runtime.db.execute('INSERT OR IGNORE INTO future_software_activations_v1 VALUES(?,?,?,?,?)',
-                               (key,ordinal,runtime.controller,now,until))
+           or used['events'] >= runtime.config['limits']['max_events'])
+    # These pauses govern prospective admission only. Real writes separately
+    # conserve each remaining original allocation axis in software_budget.
+    if (counters['new_inputs'] >= plan['max_new_inputs']
+            or counters['starts'] > plan['max_starts']
+            or runtime.usage()['bytes'] >= plan['pause_bytes']
+            or counters['windows'] > plan['max_windows']
+            or counters['windows'] >= plan['max_windows'] and due):
+        until = 0
     effective = copy.deepcopy(selection)
     effective['service']['admission'].update(until=until,max_new_inputs=plan['max_new_inputs'],pause_bytes=plan['pause_bytes'])
     if effective['service'].get('wake'):
         effective['service']['wake']['until'] = until
-    policy = effective['service'].get('legacy_resources',{}).get('Reviews',{}).get('reviews_report')
-    if policy:
-        policy['expires'] = until
+    # reviews_report remains the frozen original record, including its expiry.
     return effective
 
 
-def software_input(runtime):
-    """All new source births share the opt-in cumulative input allocation.
+def software_input(runtime, event, *, owed_control=False):
+    """New prospective acquisition needs time; authentic old inputs keep rights.
 
-    Reobserving an existing source never charges another birth. This separate
-    guard also covers attributed reports and internal inputs, which historically
-    bypass the Board-only admission check; old protocols retain that behavior.
+    Store.ingest has already checked the exact event/capability/recipient. An
+    authenticated receiving control or Work-attributed original report remains
+    subject to the universal birth guard, original finite policy and epoch.
     """
     if runtime.processing and software_record(runtime,runtime.processing.key):
-        from .service import admit_input
-        admit_input(runtime)
+        if event.get('processing_report') == runtime.processing.key:
+            _, selection = runtime.processing.current()
+            policy = selection['service'].get('legacy_resources',{}).get('Reviews',{}).get('reviews_report')
+            original = event.get('body',{}).get('original',{})
+            if (not policy or runtime.clock() >= policy['expires']
+                    or {p['reference']:p['sha256'] for p in policy['reports']}.get(original.get('reference')) != digest(original)):
+                raise Refusal('original finite report selection expired/changed; no future report renewal')
+        elif not owed_control:
+            from .service import admit_input
+            admit_input(runtime)
+
+
+def software_budget(runtime, kind, incoming):
+    """All existing source writers converge here, inside their own transaction.
+
+    Refusal rolls back the proposed birth, not a separately collected original.
+    No tail reservation or credit is invented. Missing real headroom keeps the
+    original producer/job/control/delivery debt with its existing owner.
+    """
+    request = software_record(runtime,runtime.processing.key) if runtime.processing else None
+    if not request:
+        if (kind in {'events','attempts','jobs','outboxes','decisions'}
+                and runtime.one("SELECT name FROM sqlite_master WHERE name='future_software_plans_v1'")
+                and runtime.one('SELECT capability FROM future_software_plans_v1 LIMIT 1')):
+            raise Refusal('explicit original future software capability required for allocation; original debt retained')
+        return None
+    if not runtime.db.in_transaction:
+        raise Refusal('future software writable allocation requires original transaction')
+    _, selection = runtime.processing.current()
+    plan = request['plan']; counters = software_counters(runtime,runtime.processing.key,selection)
+    from . import windows
+    row = counters['window']; used = json.loads(row['used'])
+    limit = (runtime.config['window_service']['max_decisions'] if kind == 'decisions' else
+             runtime.config['limits'].get('max_'+str(kind),runtime.config['limits']['max_events']))
+    if (counters['windows'] > plan['max_windows'] or counters['windows'] >= plan['max_windows']
+            and kind in windows.KINDS and used[kind] >= limit):
+        raise Refusal('future software cumulative window ceiling; original debt retained')
+    now = runtime.clock()
+    activation = None
+    if selection['service']['admission']['until'] > now:
+        ordinal = int((now-plan['from']) // plan['lease_seconds'])+1
+        if not runtime.one('SELECT ordinal FROM future_software_activations_v1 WHERE capability=? AND ordinal=?',
+                           (runtime.processing.key,ordinal)):
+            activation = (runtime.processing.key,ordinal,runtime.controller,now,
+                          min(plan['until'],plan['from']+ordinal*plan['lease_seconds']))
+    if kind == 'events':
+        from .contracts import Backpressure
+        usage = runtime.usage()
+        debt = runtime.one('SELECT COUNT(*) n FROM alert_debt WHERE represented=0')['n']
+        if (counters['new_inputs'] >= plan['max_new_inputs']
+                or usage['bytes']+incoming+(1024 if activation else 0) >= plan['pause_bytes']
+                or usage['alerts'] >= runtime.config['limits']['max_alerts']
+                or debt >= runtime.config['limits'].get('max_alert_debt',runtime.config['limits']['max_alerts'])):
+            raise Backpressure('universal future software birth/byte/alert/debt ceiling; original outcome and owned debt retained')
+    return activation
 
 
 def software_start(runtime):
@@ -1733,6 +1790,8 @@ def stop_software(runtime,boards,actor,key,reason):
     required_text(reason,'actual Work immediate future software stop',4000)
     if not software_record(runtime,key) or actor != runtime.config['software_delegation']['grantor']:
         raise Refusal('same genuine Work future software plan required')
+    from .processing import Access
+    runtime.processing = Access(runtime,key,boards)
     with runtime.tx():
         runtime.budget(None,len(reason.encode())+1024)
         runtime.db.execute('INSERT OR IGNORE INTO future_software_stops_v1 VALUES(?,?,?,?)',(key,actor,reason,runtime.clock()))

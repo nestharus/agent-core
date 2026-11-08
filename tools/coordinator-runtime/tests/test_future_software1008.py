@@ -58,7 +58,8 @@ class Future1008(Continuity):
             coverage=dict(status='PARTIAL',unread=['actual native Source']),effects='known-report-only')
         policy=dict(version='reviews-report-v1',authority='Original fictional framework report right',expires=at('10:44:25'),
             task='reviews-integrator',task_sha256=digest(self.config['tasks']['reviews-integrator']),
-            reports=[dict(reference=self.report['reference'],sha256=digest(self.report))])
+            reports=[dict(reference=self.report['reference'],sha256=digest(self.report)),
+                dict(reference='fictional-overlimit-report',sha256=digest({**self.report,'reference':'fictional-overlimit-report'}))])
         original=processing.select
         def select(runtime,boards,selection):
             selection['software_admission']=dict(authority='Original fictional QA admission',max_packages=2,
@@ -283,7 +284,9 @@ class Future1008(Continuity):
 
     def test_original_birth_boundary_input_exhaustion_and_byte_pause(self):
         raw=json.loads(self.before['processing_capabilities'][0]['selection'])
-        count=self.store.one('SELECT COUNT(*) n FROM processing_source_positions WHERE position>?',(raw['basis']['event_boundary'],))['n']
+        # Decision1014 conserves the original monotonic birth frontier,
+        # including retired/gapped positions; row residency cannot grant credit.
+        count=repair.software_counters(self.store,self.cap,raw)['new_inputs']
         self.plan['max_new_inputs']=count+1;self.plan_file.write_text(encode(self.plan))
         self.future_apply()
         usage=self.store.usage()

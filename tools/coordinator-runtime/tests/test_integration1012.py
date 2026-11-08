@@ -208,10 +208,12 @@ class Integration1012(Retained995):
                         self.store.collect(owed,dict(exit=0,capture='complete',cleanup='done',error=None,
                             result=answer,detail={'fictional_owed_classifier':True}))
                         self.assertIsNotNone(self.store.attempt(owed)['collected'])
-                        with self.assertRaises(Refusal):self.store.commit_classification(owed)
-                        self.assertIsNone(self.store.one('SELECT * FROM queue WHERE event=?',(owed_event['id'],)))
-                        self.owed_completion = dict(attempt=owed,collected=True,commit='refused after finite expiry',
-                            meaning='Collected result retained; renewed routing permission not manufactured')
+                        # Decision1014 separates prospective end from authentic
+                        # owned routing within the unchanged original epoch.
+                        self.store.commit_classification(owed)
+                        self.assertIsNotNone(self.store.one('SELECT * FROM queue WHERE event=?',(owed_event['id'],)))
+                        self.owed_completion = dict(attempt=owed,collected=True,commit='committed within original epoch',
+                            meaning='Old owned routing uses real remaining allocation; future intake stays stopped')
                     finally:wake.close()
                 routes = Path(self.config['execution_pool_routes']);pool = routes.read_bytes()
                 self.assertEqual(len(self.store.execution_pool.status()['enabled']),5)

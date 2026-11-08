@@ -247,9 +247,12 @@ Selection binds the original journal inode, capability/selection/configuration,
 source-v1 receipt and exact public pins, original grants, enrollments and epoch.
 There is one immutable plan per capability and no automatic replacement.
 
-Each effective lease extends only software admission, managed wake and the
-existing framework report timing, up to the finite plan end. Activation is
-appended to a separate bounded ledger. Original policy bytes, allocation hashes,
+Each effective lease extends only software admission and managed wake, up to
+the finite plan end. The original framework report identity and expiry stay
+frozen; this protocol grants no report-policy renewal. Effective-view queries
+are observational before first activation and across rearm. An actual owned
+writable allocation charges activation custody in its transaction; activation
+is neither a model start nor evidence of processing. Original policy bytes, allocation hashes,
 window rows/debits, source births, pending QA admissions, queues, holders,
 resource/native/effect deadlines and all unresolved duties remain conserved.
 The five-profile hot pool retains its current public membership control.
@@ -257,8 +260,16 @@ Attempt creation checks the cumulative start ceiling before pool allocation.
 Every new source birth, including an attributed report or internal input,
 shares the original cumulative input boundary and alert/debt pressure; an
 existing event is not charged again.
-If a lower window ceiling is selected, the service conservatively pauses when
-any counter in its final charged window fills. Existing duties remain owned.
+The lifetime birth debit uses the monotonic original frontier, including
+already-retired history and conservatively charged position gaps. It does not
+reconstruct a smaller historical debit from current residency. All existing producer, control, Source-failure and
+delivery writers share the Store event budget. Stop, plan expiry and admission
+pressure end prospective intake/wake; authentic already-owned actions retain
+their original finite rights and real remaining allocations. No free tail
+credits are granted. If a birth cannot fit, its transaction refuses and the
+original collected result, source and processing debt remain owned. A full
+window axis refuses its own further allocation without fencing unrelated reads
+or remaining axes; no window, start or birth debit is refunded.
 
 `future-software-status CAPABILITY` returns this distinct plan, activations and
 stop receipt. `stop-future-software CAPABILITY --reason REASON` records genuine
