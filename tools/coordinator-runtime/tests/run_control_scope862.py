@@ -11,7 +11,7 @@ import sys
 import time
 
 repo = Path(__file__).resolve().parents[3]
-base = repo / '.qualification862-final'
+base = repo / '.qualification862-qualified'
 base.mkdir(mode=0o700, exist_ok=False)
 def usage():
     return sum(p.stat().st_size for p in base.rglob('*') if p.is_file())
@@ -96,6 +96,7 @@ for label in (sys.argv[1:] or list(groups)):
                 '--bind',str(fixture),'/fixtures','--dir','/tmp','--dir','/home','--clearenv']
     for k,v in dict(PATH='/usr/bin:/bin',HOME='/fixtures',TMPDIR='/fixtures/tmp',
                     PYTHONDONTWRITEBYTECODE='1',QA629_FIXTURES='/fixtures',
+                    CAPACITY48_FIXTURES='/fixtures/capacity48',
                     COORDINATOR_TEST_BOARD_LIBRARY='/src/tools/message-board',
                     PYTHONPATH='/sdk:/src/tools/coordinator-runtime:/src/tools/coordinator-runtime/tests').items():
         command += ['--setenv',k,v]
