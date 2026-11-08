@@ -80,6 +80,11 @@ def access_modes(task, exclusions):
 
 
 def original_modes(runtime, job):
+    with (nullcontext() if runtime.db.in_transaction else runtime.tx()):
+        return _original_modes(runtime, job)
+
+
+def _original_modes(runtime, job):
     """Project only the immutable access map; never acquire old task/return bodies.
 
     Missing originals refuse. Neither a current configuration/admission nor a
@@ -126,21 +131,36 @@ def original_modes(runtime, job):
         for value in scope.get('read_roots', []) + scope.get('write_roots', []) + [scope.get('cwd')]:
             root(value, runtime.config.get('artifact_exclusions', []), metadata=False)
     task = scoped_task(job['task'], task, admission)
-    reads, writes = access_modes(task, runtime.config.get('artifact_exclusions', []))
+    native = task.get('execution') == 'owner'
+    if native:
+        from .reviews import original_resources
+        reads, writes = original_resources(runtime, job, task)
+    else:
+        reads, writes = access_modes(task, runtime.config.get('artifact_exclusions', []))
     # The runtime creates fresh per-attempt writable staging; these original
     # directories stay charged without acquiring their names, contents or sizes.
     staging = []
-    if task['effects'] != 'none':
+    if native or task['effects'] != 'none':
         for attempt in runtime.rows("SELECT id FROM attempts WHERE job=? AND kind='task'", (job['id'],)):
             canonical_uuid(attempt['id'])
-            staging.append(root(str(runtime.home/'artifacts'/attempt['id']), runtime.config.get('artifact_exclusions', [])))
+            staging.append(root(str(runtime.home/'artifacts'/attempt['id']), runtime.config.get('artifact_exclusions', []), metadata=False))
+            if native:
+                # Opening attempts own this possible handle too. It is never
+                # part of the unique artifacts-child staging exemption.
+                writes.append(str(runtime.home/'review-handles'/attempt['id']))
         writes.extend(staging)
     # A retained publication is a write dependency even after execution closure.
     for item in runtime.rows('SELECT p.target,p.temp FROM file_publications p JOIN attempts a ON a.id=p.attempt WHERE a.job=?', (job['id'],)):
         for value in (item['target'], item['temp']):
             if value is not None:
-                writes.append(root(value, runtime.config.get('artifact_exclusions', [])))
-    return reads, writes, staging
+                writes.append(root(value, runtime.config.get('artifact_exclusions', []), metadata=False))
+    # Native model read-only rights still have executor writes. Validate the
+    # entire assembled map (including publication temporaries) before metadata.
+    exclusions = runtime.config.get('artifact_exclusions', [])
+    for value in reads + writes:
+        root(str(value), exclusions, metadata=False)
+    return ([root(str(p), exclusions) for p in reads],
+            [root(str(p), exclusions) for p in writes], staging)
 
 
 def validate(runtime, policy, selection=None):
