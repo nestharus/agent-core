@@ -36,10 +36,24 @@ class Reconcile847(Reacquisition836):
         return current
 
     def later_traps(self):
-        stack = self.traps()
-        # ALL later attempt acquisitions, including the consumer, are forbidden.
-        stack.enter_context(patch.object(self.store, 'attempt',
-            side_effect=AssertionError('later attempt/result/detail acquired before refusal')))
+        stack = ExitStack()
+        attempt, event, one = self.store.attempt, self.store.event, self.store.one
+        consumer = self.store.one("SELECT active_attempt FROM jobs WHERE task='reviews-integrator'")['active_attempt']
+        def read_attempt(key, *args, **kwargs):
+            if key == consumer:
+                raise AssertionError('later consumer attempt/result/detail acquired before refusal')
+            return attempt(key, *args, **kwargs)
+        def read_event(key):
+            if key in (self.e['id'], self.returned['id']):
+                raise AssertionError('native Source/return body acquired before refusal')
+            return event(key)
+        def read_one(sql, args=()):
+            if 'review_calls' in sql.lower():
+                raise AssertionError('native receipt/answer acquired before refusal')
+            return one(sql, args)
+        stack.enter_context(patch.object(self.store, 'attempt', side_effect=read_attempt))
+        stack.enter_context(patch.object(self.store, 'event', side_effect=read_event))
+        stack.enter_context(patch.object(self.store, 'one', side_effect=read_one))
         return stack
 
     def assert_ticks_held(self, job):
