@@ -66,6 +66,23 @@ These checks conserve claims; they do not attest reading or meaning. Whole raw
 returns, failures, coverage and dissent go through the sole Reviews integrator to
 Work. The native caller's run/input/END/close meanings remain distinct.
 
+The Source prompt requests nonempty string `summary`, `report` and
+`history_entry` fields. At the consumer boundary, a nonempty JSON object or list
+in `report` or `history_entry` is also accepted as a complete JSON text
+projection, retaining every nested value. Scalar, empty, invalid and oversized
+reports still refuse; bounds count UTF-8 bytes. The original answer string and
+its structured fields remain unchanged in the call, turns and history. This
+projection changes no coverage, provenance, collection or reading requirement.
+
+An honest startup `PARTIAL` remains incomplete. Source currently returns it
+informatively instead of automatically continuing acquisition; it keeps the
+Source job held and its context in custody. The existing collector-authenticated
+informative report route can convey it under its actual selected authority.
+The separate `native_review_return` resource exception requires completed
+architecture and remaining stages with `DONE`; a startup `PARTIAL` cannot borrow
+that qualification. Transport acceptance supplies neither a completed review nor
+authority to widen the receiving route or acquire additional history.
+
 `branch-begin CAP BRANCH --receipt FILE` reserves an actually linked context turn.
 Receipt: `id, kind, component, address, profile, material, writer`. Kind is builder
 or review; material is exact `head, tree, parents`. Writer is null or the actual
@@ -146,6 +163,18 @@ not provider replay, original caller collection or procedure completion. Root cl
 intents/receipts remain whole and repeated explicit close uses a new owned output
 path. Prelaunch refusals record affirmative no-start; possible admission stays
 unknown; collected numeric caller results remain actual original waits.
+
+There is currently no supported same-owner command to continue an interrupted
+Source input. `processing-service-control CAP recover` reconciles the service's
+originals; its generic recovery scheduler skips Reviews. `recover-review` records
+unknown activity or admits a new encounter after an inactive disposition; it
+does not resume the original conversation. `close-review` remains the original
+collector's closure route. A prospective report-wire correction neither repairs
+an earlier failed attempt nor authorizes a replacement context. Same-context
+recovery would need an explicit extension of this existing recovery/control path
+with append-only recovery evidence, original-collector checks, unchanged pinned
+material and current permissions, original lifetime and remaining-custody bounds.
+It is not implemented by report normalization.
 
 All future inputs, including later turns on bound reviewers/builders/app-server
 contexts, obey current user pool membership. Running/admitted calls retain their

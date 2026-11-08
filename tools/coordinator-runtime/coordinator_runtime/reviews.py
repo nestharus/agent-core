@@ -116,6 +116,21 @@ def sha(body):
     return hashlib.sha256(body).hexdigest()
 
 
+def report_text(value, label, maximum):
+    """Project structured prose to bounded JSON text without changing originals.
+
+    Models may use arbitrary JSON objects/lists for attributed reports. Keep
+    every key and nested value; scalar/empty/non-JSON data is still refused.
+    The exact answer remains in review_calls, turns and attributed history.
+    """
+    if isinstance(value, (dict, list)) and value:
+        try:
+            value = encode(value)
+        except (TypeError, ValueError, RecursionError) as exc:
+            raise Refusal(label + ': valid bounded JSON report required') from exc
+    return required_text(value, label, maximum)
+
+
 def proposal_result(returned, component, acquired, collector, attempt, turns):
     """Keep the original report on the sole internal integration route.
 
@@ -287,7 +302,11 @@ def prompt(policy, acquired, read_command):
             '(architecture or complete). coverage must contain exactly families (all nine family slugs '
             'mapped to full/partial/unread/not-applicable), core_files_not_read (list), observations '
             '(located observation objects with unique id), answered_ids (actual supplied IDs with '
-            'correspondence explained in the report), and limits (list). Mark partial/unread work explicitly; '
+            'correspondence explained in the report), and limits (list). '
+            'summary, report and history_entry must be nonempty strings; report and history_entry '
+            'must contain the full attributed text, with structured material serialized as JSON text. '
+            'The admitted complete-return limit counts UTF-8 bytes, not characters. '
+            'Mark partial/unread work explicitly; '
             'labels and facade emission do not establish reading. DONE concerns this inquiry only, never consumer acceptance. '
             'A remaining-family return must use stage=complete. Do not discard earlier observations.\n' +
             encode({k: v for k, v in acquired.items() if k != 'commands'}) + '\nREAD_COMMAND=' + read_command)
@@ -613,8 +632,12 @@ class Executor:
                 if (not isinstance(returned, dict) or set(returned) != {'semantic', 'summary', 'report', 'history_entry', 'coverage', 'stage'}
                         or returned['semantic'] not in {'DONE', 'PARTIAL', 'FAILED', 'UNKNOWN'}):
                     raise Refusal('selected reviewer returned an incomplete wire contract; original preserved')
-                for field in ('summary', 'report', 'history_entry'):
-                    required_text(returned[field], 'full reviewer ' + field, runtime.config['limits']['max_result_bytes'])
+                maximum = runtime.config['limits']['max_result_bytes']
+                required_text(returned['summary'], 'full reviewer summary', maximum)
+                # Normalize only a derived view. The saved full_answer and
+                # original decoded fields remain independently recoverable.
+                returned = {**returned, **{field: report_text(returned[field], 'full reviewer ' + field, maximum)
+                                          for field in ('report', 'history_entry')}}
                 coverage(returned,packet,not turns[:-1])
                 if len(turns)==1 and returned['stage']!='architecture':
                     raise Refusal('ordinary architecture return is required before remaining families')
