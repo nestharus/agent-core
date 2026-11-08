@@ -198,6 +198,7 @@ def parser():
             view = item.add_mutually_exclusive_group()
             view.add_argument('--diagnostics', action='store_true', help='Bounded current prospective source/classifier metadata; no source or capture bodies')
             view.add_argument('--reservation-only', action='store_true', help='Read-only exact current reservation outcome; no source, error or capture body acquisition')
+            view.add_argument('--plain-control-basis', action='store_true', help='Exact current control birth/hash/consumer metadata; no body or completion authority')
         if name == 'processing-apply-control':
             item.add_argument('--attempt', required=True)
         if name == 'processing-release':
@@ -582,6 +583,9 @@ def operate(args, store):
             boards[store.event(args.event)['role']].verify_authority(store)
             return admit(store, args.event)
         if args.command in {'processing-source', 'processing-apply-control'}:
+            if args.command == 'processing-source' and args.plain_control_basis:
+                from .plain_control import basis
+                return basis(store, args.event)
             if args.command == 'processing-source' and args.reservation_only:
                 return processing.reservation_diagnostics(store, boards, args.capability, args.event)
             if args.command == 'processing-source' and args.diagnostics:
