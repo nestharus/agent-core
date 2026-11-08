@@ -41,6 +41,14 @@ class Result(unittest.TextTestResult):
         emit(self.events, 'skip', id=test.id(), reason=reason)
         super().addSkip(test, reason)
 
+    def addExpectedFailure(self, test, err):
+        emit(self.events, 'expected-failure', id=test.id())
+        super().addExpectedFailure(test, err)
+
+    def addUnexpectedSuccess(self, test):
+        emit(self.events, 'unexpected-success', id=test.id())
+        super().addUnexpectedSuccess(test)
+
 
 def fixture_publication():
     from coordinator_runtime.retention_dependency import source_pins

@@ -97,6 +97,30 @@ def resources(m):
     return scope
 
 
+def entry_text(role, directory, expected):
+    func = {'command': 'execute', 'readback': 'readback'}[role]
+    return ('import sys\nif len(sys.argv)!=1: raise SystemExit("no runner arguments")\n'
+            'from procedure import '+func+'\n'+func+'('+repr(str(directory))+', '+repr(expected)+')\n')
+
+
+def command_bindings(m, expected):
+    commands = {}
+    for role in ('command', 'readback'):
+        script = Path(m['instance'])/(role+'_entry.py')
+        commands[role] = dict(argv=['/usr/bin/python3.12', '-B', str(script)],
+                              executable_sha256=m['tools']['/usr/bin/python3.12']['sha256'],
+                              script_sha256=sha(entry_text(role, m['instance'], expected).encode()))
+    return commands
+
+
+def verify_commands(m, expected):
+    d = Path(m['instance'])
+    commands = command_bindings(m, expected)
+    require(json.loads((d/'COMMANDS.json').read_text()) == commands, 'derived command binding changed')
+    for role, command in commands.items():
+        require(pin(d/(role+'_entry.py'))['sha256'] == command['script_sha256'], 'derived entry binding changed')
+
+
 def prepare(spec):
     required = {'candidate', 'identity', 'files', 'area', 'instance', 'output', 'tools', 'limits',
                 'authority_basis', 'history_disposition', 'coverage_rationale'}
@@ -136,14 +160,10 @@ def prepare(spec):
     m['sdk'] = {p.name: pin(p) for p in (d/'sdk').iterdir()}
     write(d/'manifest.json', m)
     mh = sha((d/'manifest.json').read_bytes())
-    commands = {}
-    for role, func in [('command', 'execute'), ('readback', 'readback')]:
+    for role in ('command', 'readback'):
         script = d/(role+'_entry.py')
-        script.write_text('import sys\nif len(sys.argv)!=1: raise SystemExit("no runner arguments")\n'
-                          'from procedure import '+func+'\n'+func+'('+repr(str(d))+', '+repr(mh)+')\n')
-        commands[role] = dict(argv=['/usr/bin/python3.12', '-B', str(script)],
-                              executable_sha256=m['tools']['/usr/bin/python3.12']['sha256'],
-                              script_sha256=pin(script)['sha256'])
+        script.write_text(entry_text(role, d, mh))
+    commands = command_bindings(m, mh)
     write(d/'COMMANDS.json', commands)
     write(d/'BINDING.json', {'manifest': mh, 'commands': pin(d/'COMMANDS.json'),
                             'entries': {r: pin(d/(r+'_entry.py')) for r in commands}})
@@ -161,6 +181,7 @@ def load(directory, expected):
     verify_files(d, m['scripts'])
     verify_files(d/'sdk', m['sdk'])
     verify_files('/', {p.lstrip('/'): v for p, v in m['tools'].items()})
+    verify_commands(m, expected)
     binding = json.loads((d/'BINDING.json').read_text())
     require(binding['manifest'] == expected and binding['commands'] == pin(d/'COMMANDS.json'), 'command binding changed')
     for role in ('command', 'readback'):
@@ -282,6 +303,7 @@ def validate_outcomes(m, r, events, expected):
 def database_readback(path):
     for suffix in ('-wal', '-shm', '-journal'):
         side = Path(str(path)+suffix)
+        require(not side.is_symlink(), 'linked SQLite sidecar refused before target metadata')
         require(not side.exists() or side.stat().st_size == 0, 'nonempty retained SQLite sidecar: '+str(side))
     with sqlite3.connect(path.as_uri()+'?mode=ro&immutable=1', uri=True) as db:
         require(db.execute('PRAGMA quick_check').fetchall() == [('ok',)], 'retained SQLite corruption')
@@ -320,7 +342,8 @@ def readback(directory, expected):
     write(out/'EFFECT-OBSERVATION.json', dict(resources=resources(m), databases=retained_databases(out),
           selected=events[0]['ids'] if events and events[0]['kind'] == 'scope' else [],
           starts=[e['id'] for e in events if e['kind'] == 'start'],
-          outcomes=[e for e in events if e['kind'] in {'success', 'error', 'failure', 'skip'}],
+          outcomes=[e for e in events if e['kind'] in {'success', 'error', 'failure', 'skip',
+                                                     'expected-failure', 'unexpected-success'}],
           execution_exit=r['exit'], complete=r['complete']))
     ids = validate_outcomes(m, r, events, expected)
     require((out/'current-oracle/original.txt').read_bytes() == b'current original retained\n', 'lost original file')

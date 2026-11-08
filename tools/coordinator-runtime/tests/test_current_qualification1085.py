@@ -10,7 +10,8 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'current_qa'))
-from procedure import SELECTORS, PROTECTIONS, VERSION, validate_outcomes, sandbox
+from procedure import (SELECTORS, PROTECTIONS, VERSION, validate_outcomes, sandbox,
+                       entry_text, command_bindings, verify_commands, sha, collect)
 from coordinator_runtime import configuration, processing
 from coordinator_runtime.contracts import Backpressure, Refusal, digest, encode
 from support import config_at, enrolled, event
@@ -125,3 +126,51 @@ class CollectionContract1085(unittest.TestCase):
         self.assertEqual(len(PROTECTIONS), 6)
         self.assertEqual(VERSION, 'current-contract1085-v1')
         self.assertEqual(set(SELECTORS), {s for group in PROTECTIONS.values() for s in group})
+
+
+class ActualCollection1085(unittest.TestCase):
+    def setUp(self):
+        self.area = Path('/fixtures')/self.id()
+        self.area.mkdir()
+
+    def invoke(self, name, code, maximum=4096, seconds=3):
+        script = self.area/(name+'.py')
+        script.write_text(code)
+        out = self.area/name
+        out.mkdir()
+        record = collect(['/usr/bin/python3.12', '-B', str(script)], out, seconds, maximum)
+        (out/'actual-collection.json').write_text(json.dumps(record))
+        return record, (out/'transcript.txt').read_bytes()
+
+    def test_actual_nonzero_END_is_collected_with_complete_failure_output(self):
+        record, body = self.invoke('failure', 'print("owned failure")\nraise SystemExit(7)\n')
+        self.assertEqual(record['exit'], 7)
+        self.assertTrue(record['complete'])
+        self.assertEqual(body, b'owned failure\n')
+
+    def test_actual_overflow_and_timeout_keep_failure_and_finite_collection(self):
+        record, body = self.invoke('overflow', 'print("x"*8192)\n', maximum=32)
+        self.assertFalse(record['complete'])
+        self.assertIn('overflow', record['reason'])
+        self.assertEqual(len(body), 32)
+        record, body = self.invoke('timeout', 'import time\ntime.sleep(30)\n', seconds=1)
+        self.assertFalse(record['complete'])
+        self.assertIn('deadline', record['reason'])
+        self.assertIsInstance(record['exit'], int)
+        self.assertLess(record['seconds'], 10)
+
+    def test_entry_and_command_cannot_be_rebound_together(self):
+        m = dict(instance=str(self.area), tools={'/usr/bin/python3.12': {'sha256': 'fictional-tool-pin'}})
+        expected = 'fictional-exact-manifest'
+        commands = command_bindings(m, expected)
+        for role in commands:
+            (self.area/(role+'_entry.py')).write_text(entry_text(role, self.area, expected))
+        path = self.area/'COMMANDS.json'
+        path.write_text(json.dumps(commands))
+        verify_commands(m, expected)
+        changed = b'raise SystemExit(0)\n'
+        (self.area/'readback_entry.py').write_bytes(changed)
+        commands['readback']['script_sha256'] = sha(changed)
+        path.write_text(json.dumps(commands))
+        with self.assertRaisesRegex(ValueError, 'derived command binding changed'):
+            verify_commands(m, expected)
