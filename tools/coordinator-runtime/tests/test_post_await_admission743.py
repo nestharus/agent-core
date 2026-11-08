@@ -175,7 +175,7 @@ class Acceptance(ContextFixture, unittest.IsolatedAsyncioTestCase):
     prepared = OrdinaryEffects.prepared
 
     async def waiting(self):
-        self.git('remote', 'add', 'origin', 'https://example.invalid/owned-fixture')
+        self.git('remote', 'set-url', 'origin', 'https://example.invalid/owned-fixture')
         self.boundary()
         self.policy = self.admission()
         self.effect_job, self.effect_attempt = self.prepared()

@@ -128,8 +128,9 @@ async def metadata(command, env, limit=1048576, cwd=None):
 
 async def end_owned(child, grace):
     """Numeric return comes only from this exact subprocess.wait(), including escalation."""
-    if child.stdin and not child.stdin.is_closing():
-        child.stdin.close()
+    with suppress(Exception):
+        if child.stdin and not child.stdin.is_closing():
+            child.stdin.close()
     try:
         return await asyncio.wait_for(asyncio.shield(child.wait()), grace)
     except asyncio.TimeoutError:
@@ -140,7 +141,7 @@ async def end_owned(child, grace):
     except asyncio.TimeoutError:
         with suppress(ProcessLookupError):
             child.kill()
-    return await child.wait()
+    return await asyncio.wait_for(child.wait(), grace)
 
 
 def mcp_rows(text):
@@ -543,8 +544,12 @@ def thread_request(spec,binding):
 class AppServer:
     def __init__(self, config, fixture_command=None):
         self.config, self.fixture_command = config, fixture_command
+        # Exact handles survive exceptional wait failure; no PID reconstruction.
+        self.pending_collections = {}
+        self.owned_collections = {}
 
     async def run(self, store, attempt, prompt, spec, schema=None):
+        await self.collect_pending()
         row = store.attempt(attempt)
         binding, profile = json.loads(row["binding"]), row["profile"]
         outcome = {"exit": None, "capture": "unknown", "cleanup": "unknown", "result": None,
@@ -575,6 +580,7 @@ class AppServer:
                 child = await asyncio.create_subprocess_exec(*argv, cwd=spec["cwd"], env=environment(profile),
                     stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.DEVNULL, limit=1048577)
+                self.owned_collections[attempt] = (child, outcome)
                 outcome["detail"]["creation"] = "owned"
                 store.begin(attempt, {**preflight_result, "argv": argv, "process_handle": "owned-asyncio-subprocess",
                                       "pid_information_only": child.pid, 'execution_pool_admission': admission})
@@ -596,41 +602,103 @@ class AppServer:
             if isinstance(exc, MetadataFailure):
                 outcome['detail']['metadata_failure'] = exc.projection
         finally:
-            if child is not None:
-                try:
-                    from .oneoff import checkpoint
-                    checkpoint(store, attempt, outcome, {
-                        'tools': list(peer.tools.values()) if peer else [],
-                        'capture_issues': list(peer.capture_issues) if peer else ['peer-unavailable']})
-                except Exception as exc:
-                    outcome['error'] = outcome['error'] or 'pre-teardown recovery checkpoint refused: '+type(exc).__name__
-                    outcome['detail']['recovery_checkpoint'] = 'unqualified-held'
-            await self.unsubscribe(peer, store, attempt, outcome)
-            try:
-                await self.teardown(child, peer, outcome)
-            except Exception as exc:
-                # Keep an observed numeric exit even if later capture handling
-                # fails. If waiting itself failed, retain this exact owned
-                # process and make one bounded collection attempt, never detach.
-                if child is not None and outcome["exit"] is None:
-                    try:
-                        outcome["exit"] = await end_owned(child, self.config["deadlines"]["shutdown"])
-                    except Exception:
-                        pass
-                outcome["detail"]["teardown"] = ("actual-owned-process-exit-collected" if outcome["exit"] is not None else "unconfirmed")
-                outcome["detail"]["teardown_failure"] = type(exc).__name__
-                outcome["cleanup"] = "owned-teardown-needs-reconciliation"
-            if watcher:
-                watcher.cancel()
-                with suppress(asyncio.CancelledError):await watcher
-            if child is None and outcome['cleanup']=='no-session-created':
-                outcome['detail']['session_residuals']['state']='no-runtime-start'
+            # The joined task owns the same handles until collection or explicit
+            # capable debt. Cancellation of the caller cannot cancel finalization.
+            finishing = asyncio.create_task(self.finish_owned(child, peer, watcher, store, attempt, outcome))
+            await self.join_finalization(finishing, outcome)
         if peer:
             outcome["detail"]["protocol_progress_dropped"] = peer.progress_dropped
             outcome["detail"]["protocol_correlation_dropped"] = peer.correlation_dropped
             peer.command_inputs.clear()
             peer.command_input_bytes = 0
         return outcome
+
+    @staticmethod
+    async def join_finalization(finishing, outcome):
+        cancelled = None
+        while not finishing.done():
+            try:
+                await asyncio.shield(finishing)
+            except asyncio.CancelledError as exc:
+                cancelled = exc
+        finishing.result()
+        if cancelled is not None:
+            cancelled.collection_outcome = outcome
+            raise cancelled
+
+    @staticmethod
+    def checkpoint_owned(peer, store, attempt, outcome):
+        try:
+            from .oneoff import checkpoint
+            checkpoint(store, attempt, outcome, {
+                'tools': list(peer.tools.values()) if peer else [],
+                'capture_issues': list(peer.capture_issues) if peer else ['peer-unavailable']})
+        except Exception as exc:
+            outcome['error'] = outcome['error'] or 'pre-teardown recovery checkpoint refused: '+type(exc).__name__
+            outcome['detail']['recovery_checkpoint'] = 'unqualified-held'
+
+    async def finish_owned(self, child, peer, watcher, store, attempt, outcome):
+        try:
+            await self.finish_evidence(child, peer, store, attempt, outcome)
+        finally:
+            await self.collect_after_teardown(child, peer, attempt, outcome)
+            await self.finish_watcher(watcher, outcome)
+        if child is None and outcome['cleanup'] == 'no-session-created':
+            outcome['detail']['session_residuals']['state'] = 'no-runtime-start'
+
+    async def finish_evidence(self, child, peer, store, attempt, outcome):
+        try:
+            if child is not None:
+                self.checkpoint_owned(peer, store, attempt, outcome)
+            await self.unsubscribe(peer, store, attempt, outcome)
+        except (Exception, asyncio.CancelledError) as exc:
+            outcome['detail']['finalization_evidence_failure'] = type(exc).__name__
+            outcome['cleanup'] = 'owned-teardown-needs-reconciliation'
+
+    async def collect_after_teardown(self, child, peer, attempt, outcome):
+        try:
+            await self.teardown(child, peer, outcome)
+        except (Exception, asyncio.CancelledError) as exc:
+            outcome['detail']['teardown_failure'] = type(exc).__name__
+            outcome['cleanup'] = 'owned-teardown-needs-reconciliation'
+        if child is not None and outcome['exit'] is None:
+            await self.retry_collection(child, outcome)
+        if child is not None and outcome['exit'] is not None:
+            self.pending_collections.pop(attempt, None)
+            self.owned_collections.pop(attempt, None)
+        if child is not None and outcome['exit'] is None:
+            self.pending_collections[attempt] = (child, outcome)
+            outcome['detail']['collection_debt'] = 'exact-handle-retained-in-AppServer.pending_collections; collect_pending required'
+            outcome['error'] = outcome['error'] or 'original collection unavailable; capable owner retained'
+
+    async def retry_collection(self, child, outcome):
+        try:
+            outcome['exit'] = await end_owned(child, self.config['deadlines']['shutdown'])
+        except (Exception, asyncio.CancelledError) as exc:
+            outcome['detail']['collection_failure'] = type(exc).__name__
+        outcome['detail']['teardown'] = ('actual-owned-process-exit-collected'
+            if outcome['exit'] is not None else 'unconfirmed')
+
+    async def collect_pending(self):
+        for attempt, (child, outcome) in list(self.pending_collections.items()):
+            await self.retry_collection(child, outcome)
+            if outcome['exit'] is not None:
+                self.pending_collections.pop(attempt)
+                self.owned_collections.pop(attempt, None)
+        if self.pending_collections:
+            raise Refusal('prior original collection debt retains exact handles; new launches refused')
+
+    @staticmethod
+    async def finish_watcher(watcher, outcome):
+        if watcher is None:
+            return
+        watcher.cancel()
+        try:
+            await watcher
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            outcome['detail']['storage_watcher_failure'] = type(exc).__name__
 
     async def command(self, profile, storage_flags=(), cwd=None):
         if self.fixture_command:
@@ -681,10 +749,12 @@ class AppServer:
         return result
 
     async def unsubscribe(self, peer, store, attempt, outcome):
-        session = store.attempt(attempt)["session"]
-        if not peer or not session:
+        if peer is None:
             return
         try:
+            session = store.attempt(attempt)["session"]
+            if not session:
+                return
             result = await peer.rpc("thread/unsubscribe", {"threadId": session})
             if result.get("status") not in {"unsubscribed", "notLoaded", "notSubscribed"}:
                 raise Refusal("unsubscribe receipt not recognized")

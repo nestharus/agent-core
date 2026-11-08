@@ -292,7 +292,7 @@ CREATE TABLE threads(thread_id INTEGER,opener TEXT);
         with patch.object(self.s,'one',side_effect=no_projection),self.assertRaises(Refusal):h.project(self.s,self.boards,key)
         self.s.db.execute('UPDATE events SET hold=NULL WHERE id=?',(self.source['id'],))
         with patch.object(resource_scopes,'overlaps',side_effect=AssertionError('excluded metadata')):
-            with self.assertRaises(Refusal):h.compare(self.s,self.boards,key,dict(reads=[],writes=['/fixtures/.codex4/private']))
+            with self.assertRaises(Refusal):h.compare(self.s,self.boards,key,dict(reads=[],writes=[str(Path.home()/'.codex4'/'fictional-private')]))
         request=self.selection(); request['fields'].append('native-handle')
         self.principal.actor=self.owner
         with self.assertRaises(Refusal):h.authorize(self.s,self.boards,request)

@@ -11,7 +11,7 @@ An authorized preparer calls `procedure.prepare(spec)`. `spec` has exactly:
 positive `files` (relative names to bytes/SHA256), owned `area`, fresh `instance`
 and `output`, pinned Python3.12/bwrap/git `tools`, positive finite `limits`
 (seconds/capture_bytes/bytes/entries), `authority_basis`, `history_disposition`
-and an independent `coverage_rationale` for all six keys in `PROTECTIONS`.
+and an independent `coverage_rationale` for all named keys in `PROTECTIONS`.
 The complete runtime, test, fixture, template and positive dependency closure
 belongs in `files`; supplying that list is a trusted preparer obligation, not a
 cryptographic proof of completeness or origin. No Git is queried by the
@@ -21,7 +21,7 @@ Runtime/test imports use `/src`, a read-only alias of that exact export, so
 supported fixture release paths and current source origins agree. Both actual
 candidate and alias imports must match the same complete pinned file map.
 
-The fixed current floor selects complete test modules for six continuing
+The fixed current floor selects complete test modules for the continuing
 protection dimensions, before outcomes exist. Source acquisition/configuration
 and source-selection tests distinguish complete measured growth from the narrow
 same-config guard. A new current growth test adds a truthful fictional module,
@@ -133,3 +133,32 @@ whole finite stable backlog through available returning workers, verifies every
 original numeric END, conserved held alerts and CLI wiring. No sustained-arrival
 or permanently busy progress guarantee is inferred. All selection and source
 relationships remain bound into each actual procedure and separate readback.
+
+
+## Decision1114 collection and protection correction
+
+AppServer retains the exact child before fallible begin/journal/protocol work.
+Finalization is joined through caller cancellation; checkpoint or unsubscribe
+failure cannot bypass teardown. Actual numeric wait precedes evidence handling.
+If both teardown and bounded retry fail, the adapter retains exact handles and
+outcomes in pending_collections, exposes collection_debt, and collect_pending
+must reconcile them before another launch. This is capable accountable debt,
+not numeric END, durable journal success, descendant closure or kernel guarantee.
+Shared-account residuals, capture, capsule, acceptance and processing holds remain.
+
+Collection1114 uses real owned synthetic subprocesses, the production unsubscribe
+and SQLite read faults, begin/checkpoint failures, cancellation and postwait
+capture failures. Each numeric original is observed before test cleanup. Model
+session, authority and storage settings are fictional; no provider is invoked.
+Qualification negatives first validate a positive baseline, mutate one premise,
+and require the intended refusal. Derived acceptance fixtures update their
+already-declared origin; all later member/neighbor/dependency/recipient assertions
+remain. Default private exclusions follow the isolated HOME. Isolation uses an
+owned synthetic sibling body created by the preparer at
+area/unselected-private1114/body and withheld from every worker bind. It checks
+absent body, denied unselected writes, noGit, source read-only and positive owned
+writes. Existing bind ancestors are not private-body or containment evidence.
+
+The current worker root is remounted read-only after bind construction; the
+explicit effects bind remains writable. This realizes the existing denied
+unselected-write control, which a writable synthetic root did not enforce.

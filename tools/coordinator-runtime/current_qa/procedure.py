@@ -27,7 +27,7 @@ PROTECTIONS = {
                                        'test_retained329', 'test_windows76'],
     'collection-and-currentness': ['test_post_await_admission743', 'test_ordinary_boundaries749', 'test_current_collection1093', 'test_current_relationships1098'],
     'independent-same-package-receivers': ['test_qa_branch672'],
-    'whole-owned-lifecycle': ['test_oneoff1077.Recovery', 'test_correction1092'],
+    'whole-owned-lifecycle': ['test_oneoff1077.Recovery', 'test_correction1092', 'test_collection1114'],
     'ordinary-journal-failure-and-finite-progress': ['test_final_composition1107'],
 }
 SELECTORS = sorted({s for group in PROTECTIONS.values() for s in group})
@@ -223,7 +223,9 @@ def sandbox(m):
                PYTHONPATH='/procedure:/sdk:/src/tools/coordinator-runtime:/src/tools/coordinator-runtime/tests')
     for key, value in env.items():
         argv += ['--setenv', key, value]
-    return argv+['--chdir', c, '/usr/bin/python3.12', '-B', '/procedure/worker.py']
+    # Only the explicitly bound effects mount is writable; synthetic root
+    # ancestors are structure, not an additional write grant.
+    return argv+['--remount-ro', '/', '--chdir', c, '/usr/bin/python3.12', '-B', '/procedure/worker.py']
 
 
 def terminate_owned(proc):

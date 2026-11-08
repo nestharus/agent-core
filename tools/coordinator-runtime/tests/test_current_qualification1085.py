@@ -10,7 +10,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'current_qa'))
-from procedure import (SELECTORS, PROTECTIONS, VERSION, validate_outcomes, sandbox,
+from procedure import (SELECTORS, PROTECTIONS, HISTORICAL_UNSELECTED, VERSION, validate_outcomes, sandbox,
                        entry_text, command_bindings, verify_commands, sha, collect)
 from coordinator_runtime import configuration, processing
 from coordinator_runtime.contracts import Backpressure, Refusal, digest, encode
@@ -88,7 +88,8 @@ class CollectionContract1085(unittest.TestCase):
                       output='/fictional-effects', runtime_modules=['fixture.py'])
         self.r = dict(run_id='fictional-new-run', manifest='fictional-manifest', argv=sandbox(self.m),
                       exit=0, complete=True, reason=None)
-        self.events = [dict(kind='scope', ids=['independent_fixture.Control.test_behavior'], selectors=SELECTORS),
+        self.events = [dict(kind='scope', ids=['independent_fixture.Control.test_behavior'], selectors=SELECTORS,
+                                 historical_unselected=copy.deepcopy(HISTORICAL_UNSELECTED)),
                        dict(kind='start', id='independent_fixture.Control.test_behavior'),
                        dict(kind='success', id='independent_fixture.Control.test_behavior'),
                        dict(kind='finish', tests=1, runtime_modules=['fixture.py'])]
@@ -104,37 +105,74 @@ class CollectionContract1085(unittest.TestCase):
         for changes in (dict(exit=1), dict(exit=None), dict(complete=False), dict(reason='overflow'),
                         dict(run_id='old-run'), dict(manifest='old-manifest'), dict(argv=['wrong-tool'])):
             with self.subTest(changes=changes):
-                self.r.update(changes)
-                with self.assertRaises(ValueError):
-                    self.check()
                 self.setUp()
+                self.check()  # Each negative starts from a valid positive.
+                self.r.update(changes)
+                guard = 'stale execution binding' if set(changes) & {'run_id', 'manifest', 'argv'} else 'failed/incomplete actual execution'
+                with self.assertRaisesRegex(ValueError, guard):
+                    self.check()
 
     def test_skip_error_failure_missing_and_duplicate_outcomes_refuse(self):
-        for kind in ('skip', 'error', 'failure', 'unexpectedSuccess', 'expectedFailure'):
+        for kind in ('skip', 'error', 'failure', 'unexpected-success', 'expected-failure'):
             with self.subTest(kind=kind):
+                self.setUp()
+                self.check()
                 self.events[2]['kind'] = kind
-                with self.assertRaises(ValueError):
+                with self.assertRaisesRegex(ValueError, 'failures/errors/skips/unexecuted controls'):
                     self.check()
         self.setUp()
+        self.check()
         self.events.pop(2)
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, 'failures/errors/skips/unexecuted controls'):
             self.check()
         self.setUp()
+        self.check()
         self.events.insert(2, copy.deepcopy(self.events[1]))
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, 'missing/duplicate actual starts'):
+            self.check()
+        self.setUp()
+        self.check()
+        self.events.insert(3, copy.deepcopy(self.events[2]))
+        with self.assertRaisesRegex(ValueError, 'failures/errors/skips/unexecuted controls'):
             self.check()
 
     def test_omitted_current_module_and_reduced_protection_selection_refuse(self):
+        self.check()
         self.events[-1]['runtime_modules'] = []
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, 'incomplete current runtime import closure'):
             self.check()
         self.setUp()
+        self.check()
         self.events[0]['selectors'] = SELECTORS[:-1]
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, 'incomplete current protection selection'):
             self.check()
 
+    def test_scope_start_outcome_shape_and_history_guards_discriminate(self):
+        mutations = [
+            (lambda e: e.pop(), 'incomplete events'),
+            (lambda e: e[0].update(ids=[]), 'missing/duplicate selected IDs'),
+            (lambda e: e[0].update(historical_unselected={}), 'unbound historical applicability disposition'),
+            (lambda e: e.pop(1), 'missing/duplicate actual starts'),
+            (lambda e: e[-1].update(tests=2), 'incomplete or extra outcomes'),
+            (lambda e: e.insert(3, dict(kind='unselected-extra')), 'incomplete or extra outcomes')]
+        for mutate, guard in mutations:
+            with self.subTest(guard=guard):
+                self.setUp()
+                self.check()
+                mutate(self.events)
+                with self.assertRaisesRegex(ValueError, guard):
+                    self.check()
+
     def test_all_decision_dimensions_have_fixed_current_selection(self):
-        self.assertEqual(len(PROTECTIONS), 6)
+        # Independently named obligations1093/1107/1114, never observed length.
+        self.assertEqual(set(PROTECTIONS), {
+            'source-package-tools', 'genuine-history-and-lineage', 'independent-current-authority',
+            'retained-resources-and-capacity', 'collection-and-currentness',
+            'independent-same-package-receivers', 'whole-owned-lifecycle',
+            'ordinary-journal-failure-and-finite-progress'})
+        self.assertIn('test_collection1114', PROTECTIONS['whole-owned-lifecycle'])
+        self.assertIn('test_correction1092', PROTECTIONS['whole-owned-lifecycle'])
+        self.assertIn('test_final_composition1107', PROTECTIONS['ordinary-journal-failure-and-finite-progress'])
         self.assertEqual(VERSION, 'current-contract1085-v1')
         self.assertEqual(set(SELECTORS), {s for group in PROTECTIONS.values() for s in group})
 

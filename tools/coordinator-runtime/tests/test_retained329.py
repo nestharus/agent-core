@@ -7,6 +7,7 @@ import base64
 import copy
 import hashlib
 import os
+import json
 from pathlib import Path
 import sqlite3
 import unittest
@@ -212,7 +213,13 @@ class Isolation(unittest.TestCase):
         self.assertEqual(str(Path.home()), '/fixtures/home')
         self.assertEqual(os.environ['XDG_CONFIG_HOME'], '/fixtures/config')
         self.assertEqual(os.environ['TMPDIR'], '/fixtures/tmp')
-        self.assertFalse(Path('/home/nes').exists())
+        # Positive absolute binds require ancestors; they expose no sibling body.
+        manifest = json.loads(Path('/procedure/manifest.json').read_text())
+        canary = Path(manifest['area'])/'unselected-private1114'/'body'
+        self.assertFalse(canary.exists())
+        with self.assertRaises(OSError):
+            os.open(canary, os.O_CREAT | os.O_WRONLY, 0o600)
+        self.assertFalse((Path(manifest['candidate'])/'.git').exists())
         self.assertFalse(Path('/src/.git').exists())
         with self.assertRaises(OSError):
             with open('/src/tools/coordinator-runtime/coordinator_runtime/custody.py', 'ab'):
