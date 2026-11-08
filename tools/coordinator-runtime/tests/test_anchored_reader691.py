@@ -144,7 +144,7 @@ class AnchoredReader691(unittest.TestCase):
         for table in before:
             if table != 'integration_management_operations': self.assertEqual(before[table],after[table],table)
         self.assertTrue(self.available())
-        self.assertFalse(self.store.execution_complete(self.store.job(self.job)))
+        self.assertTrue(self.store.execution_complete(self.store.job(self.job)))
         self.assertEqual(self.store.job(self.job)['effects'],'none')
         self.assertEqual(self.store.rows('SELECT job FROM integration_retirements'),[])
         self.assertEqual(len(self.store.rows('SELECT job FROM work_read_fences')),1)
@@ -319,7 +319,7 @@ class AnchoredReader691(unittest.TestCase):
         self.call('fence-work-proposer',receipt=self.receipt(basis))
         self.assertTrue(self.available())
         self.assertTrue(self.coexists())
-        self.assertFalse(self.store.execution_complete(self.store.job(self.job)))
+        self.assertTrue(self.store.execution_complete(self.store.job(self.job)))
 
 
 if __name__ == '__main__': unittest.main(verbosity=2)

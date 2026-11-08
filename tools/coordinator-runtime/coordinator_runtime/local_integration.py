@@ -621,7 +621,9 @@ def available(store, row, members, *, observe=None, conflict_observe=None):
     # Execution-only closure does not settle native point/material/resource debt.
     # These originals stop consuming residency but still participate in conflicts.
     conserved = [j for j in store.rows("SELECT * FROM jobs WHERE state!='closed'")
-                 if store.role_execution_fenced(j['id']) and j['id'] not in {a['id'] for a in active}]
+                 if (store.role_execution_fenced(j['id'])
+                     or store.one('SELECT job FROM work_read_fences WHERE job=?', (j['id'],)))
+                 and j['id'] not in {a['id'] for a in active}]
     for job in active + conserved:
         at('local-unknown-material')
         prior = scope_for(store, job)
@@ -678,7 +680,9 @@ def record_job(store, job):
         return
     scope = combine([packet(store, {'task': job['task'], 'event': m['event']}) for m in json.loads(job['members'])])
     fences = [prior['id'] for prior in store.rows("SELECT * FROM jobs WHERE role=? AND state!='closed'", (job['role'],))
-              if prior['id'] != job['id'] and not store.execution_complete(prior)
+              if prior['id'] != job['id']
+              and (not store.execution_complete(prior)
+                   or store.one('SELECT job FROM work_read_fences WHERE job=?', (prior['id'],)))
               and store.work_read_coexists(job, scope, prior)]
     if fences:
         scope['read_fences'] = fences

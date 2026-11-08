@@ -82,7 +82,7 @@ class WorkReads554(unittest.TestCase):
         self.fence(self.old[1])
         self.assertEqual(self.originals(), before)
         for old in self.old:
-            self.assertFalse(self.store.execution_complete(self.store.job(old['id'])))
+            self.assertTrue(self.store.execution_complete(self.store.job(old['id'])))
             self.assertIsNone(local.scope_for(self.store, old))
         fresh = self.store.reserve()
         self.assertIsNotNone(fresh)
@@ -167,7 +167,14 @@ class WorkReads554(unittest.TestCase):
 
     def test_capacity_and_resource_limits_still_apply(self):
         for old in self.old:self.fence(old)
-        self.fresh()
+        source = self.fresh()
+        self.assertIsNotNone(self.store.reserve())
+        for name in ('second-active554', 'third-pending554'):
+            next_source = event(self.config, name, task='work-proposer')
+            next_source['integration'] = copy.deepcopy(source['integration'])
+            queued(self.store, next_source)
+            if name == 'second-active554':
+                self.assertIsNotNone(self.store.reserve())
         self.config['local_integration']['max_inflight'] = 2
         self.assertIsNone(self.store.reserve())
         self.config['local_integration']['max_inflight'] = 8
@@ -261,7 +268,7 @@ class WorkReadManagement554(unittest.TestCase):
         before = self.store.job('synthetic-held')
         self.managed('fence-work-proposer', receipt=receipt)
         self.assertEqual(self.store.job('synthetic-held'), before)
-        self.assertFalse(self.store.execution_complete(before))
+        self.assertTrue(self.store.execution_complete(before))
         self.assertEqual(len(self.store.rows('SELECT * FROM integration_management_operations')), 1)
         self.assertEqual(self.store.rows('SELECT * FROM processing_capabilities'), [])
         self.assertEqual(self.store.one("SELECT intake FROM enrollments WHERE role='Work'")['intake'], 0)

@@ -322,6 +322,10 @@ a collected, begun/ended exit0, complete-capture DONE attempt with known effects
 and no scoped job hold can release its execution slot while its job remains
 `awaiting-delivery`. Status exposes `execution_slot_held`. Its queue, source,
 outboxes, processing timestamp and actual recipient settlement remain unchanged.
+A permanent owner-issued Work proposer read fence also releases execution
+capacity, including across prospective configuration changes. Its original held
+job and adverse result remain owned; callback, recovery and replay stay fenced.
+Scoped coexistence still requires its separate current qualification.
 Uncertain process/effects, active work, legacy holds and an unresolved same admitted
 scope still exclude overlapping execution. Independent next batches progress.
 Actual legacy holds can name affected phases only; intake

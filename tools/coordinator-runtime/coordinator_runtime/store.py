@@ -979,6 +979,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             return True  # Explicit owner-supported inactive inquiry, never processing/END.
         if self.integration_retired(job['id']):
             return True
+        if self.one('SELECT job FROM work_read_fences WHERE job=?', (job['id'],)):
+            return True  # Permanent owner-issued execution fence; retained duties stay owned.
         if job["state"] != "awaiting-delivery" or job["effects"] not in {"none", "reconciled"} or job["hold_reason"]:
             return False
         attempt = self.attempt(job["active_attempt"]) if job["active_attempt"] else None

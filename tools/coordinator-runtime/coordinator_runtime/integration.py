@@ -143,9 +143,9 @@ class IntegrationJournal:
     def fence_work_proposer(self, job, token, actor, receipt):
         """Prevent old execution; permit guarded scoped file coexistence.
 
-        Unlike integration retirement, this does not release capacity or assert
-        execution_complete. PARTIAL, capture defects, source and delivery duties
-        remain exactly where they were. Evidence is attributed, not a census.
+        This permanent fence releases execution capacity only. PARTIAL, capture
+        defects, source and delivery duties remain exactly where they were.
+        Evidence is attributed, not a census.
         """
         with self._integration_transaction():
             self._integration_owner(actor)
