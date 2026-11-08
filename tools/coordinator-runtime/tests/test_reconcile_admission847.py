@@ -59,9 +59,9 @@ class Reconcile847(Reacquisition836):
     def assert_ticks_held(self, job):
         before = self.store.one('SELECT result,detail,collected FROM attempts WHERE id=?', (job['active_attempt'],))
         with self.later_traps():
-            for callback in (service.Dispatcher.reconcile_completed, processing.ProcessingDispatcher.reconcile_completed):
-                callback(self.dispatch)
-                self.assertIn('physical admission', self.dispatch.runtime_errors[job['id']])
+            for dispatcher in (self.dispatch, processing.ProcessingDispatcher(self.store, self.models, self.boards)):
+                dispatcher.reconcile_completed()
+                self.assertIn('physical admission', dispatcher.runtime_errors[job['id']])
             self.assertIsNone(self.store.job(job['id'])['response'])
         self.assertEqual(before, self.store.one('SELECT result,detail,collected FROM attempts WHERE id=?', (job['active_attempt'],)))
 
