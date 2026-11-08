@@ -8,6 +8,9 @@ import math
 from contextlib import contextmanager, nullcontext
 from .contracts import Refusal, digest, encode, required_text
 
+PARTIAL_REPORT = 'native-collected-partial-report-v1'
+SOURCE_REPORT_HOLD = 'original Source incomplete; whole return conserved through sole report integration'
+
 
 def validate(runtime, role, record, selection=None):
     p = record['native_review_return']
@@ -16,7 +19,7 @@ def validate(runtime, role, record, selection=None):
               'review_policy_sha256', 'grant', 'resource_evidence', 'relevant_roots'}
     if (role != 'Reviews' or record['unbounded'] is not True or 'reviews_report' in record
             or not isinstance(p, dict) or set(p) != fields
-            or p['version'] != 'native-collected-review-v1'
+            or p['version'] not in ('native-collected-review-v1', PARTIAL_REPORT)
             or type(p['expires']) not in (int, float) or not math.isfinite(p['expires'])
             or p['expires'] <= runtime.clock()):
         raise Refusal('finite native consolidation must preserve unbounded original hold')
@@ -55,6 +58,28 @@ def validate(runtime, role, record, selection=None):
                 or p['component'] not in policy['components']
                 or not {p['task'], p['source_task']} <= set(selection['tasks'])):
             raise Refusal('exact current selected native method/component required')
+        if p['version'] == PARTIAL_REPORT and selection['service'].get('report_tasks') != [p['task']]:
+            raise Refusal('partial report requires explicitly selected sole report integrator')
+
+
+def _partial_source(runtime, source, job, policy):
+    """Scalar receipt/collection admission; no native answer or outcome acquisition."""
+    if policy['version'] != PARTIAL_REPORT:
+        return False
+    if job['state'] != 'held' or job['hold_reason'] != SOURCE_REPORT_HOLD:
+        raise Refusal('partial report must retain its original incomplete Source duty')
+    receipt = runtime.one('SELECT r.attempt,r.payload_hash,a.job,a.controller,a.kind,a.state,'
+        'a.begin,a.ended,a.collected,a.exit,a.capture,a.error '
+        'FROM review_report_returns r JOIN attempts a ON a.id=r.attempt WHERE r.event=?', (source['id'],))
+    link = runtime.one("SELECT json_extract(payload,'$.source_attempt') AS attempt FROM events WHERE id=?", (source['id'],))
+    if (not receipt or receipt['attempt'] != job['active_attempt'] or receipt['job'] != job['id']
+            or receipt['payload_hash'] != source['hash'] or link['attempt'] != receipt['attempt']
+            or receipt['controller'] != runtime.controller or receipt['kind'] != 'task'
+            or receipt['state'] != 'collected' or receipt['begin'] is None
+            or receipt['ended'] is None or receipt['collected'] is None
+            or receipt['exit'] != 0 or receipt['capture'] != 'complete' or receipt['error']):
+        raise Refusal('actual original fully collected partial report receipt required')
+    return True
 
 
 def _metadata(runtime, row, record):
@@ -93,10 +118,13 @@ def _metadata(runtime, row, record):
     link = runtime.one("SELECT json_extract(payload,'$.source_job') AS job FROM events WHERE id=?", (source['id'],))
     if not link or not link['job']:
         raise Refusal('external or orphan report is not a native Source return')
-    job = runtime.one('SELECT id,role,phase,task,package,hold_reason,effects,active_attempt FROM jobs WHERE id=?', (link['job'],))
+    job = runtime.one('SELECT id,role,phase,task,package,state,hold_reason,effects,active_attempt FROM jobs WHERE id=?', (link['job'],))
     if (not job or job['role'] != 'Reviews' or job['phase'] != 'proposer' or job['task'] != p['source_task']
-            or job['package'] != p['package'] or job['hold_reason']
+            or job['package'] != p['package']
             or job['effects'] not in ('none', 'reconciled') or not job['active_attempt']):
+        raise Refusal('current unheld genuine native source job required')
+    partial = _partial_source(runtime, source, job, p)
+    if job['hold_reason'] and not partial:
         raise Refusal('current unheld genuine native source job required')
     job = runtime.job(job['id'])
     originals = source_metadata(runtime, job)
@@ -114,7 +142,8 @@ def _metadata(runtime, row, record):
         preparing = (authority and current_job['id'] == row.get('id')
                      and authority['controller'] == runtime.controller and authority['kind'] == 'task'
                      and authority['software'] is None and current_job['state'] == 'running')
-        if (current_job['hold_reason'] or not authority or (not authority['epoch'] and not preparing) or authority['job'] != current_job['id']
+        if ((current_job['hold_reason'] and not (partial and current_job['id'] == job['id']))
+                or not authority or (not authority['epoch'] and not preparing) or authority['job'] != current_job['id']
                 or authority['capability'] != cap['id']):
             raise Refusal('original current unheld native job authority required before bodies')
         rights = prospective.current(runtime, current_job['task'], authority['epoch'])
@@ -170,6 +199,15 @@ def _authenticate(runtime, row, record):
     packet = acquired['packet']
     if packet['component'] != p['component'] or digest(packet) != p['packet_sha256']:
         raise Refusal('exact current component/source pins required')
+    if p['version'] == PARTIAL_REPORT:
+        from .review_returns import proof as report_proof
+        event = source_events(runtime, row)[0]
+        binding = report_proof(runtime, event, row['task'])
+        if (not binding or binding['job'] != job['id'] or binding['attempt'] != attempt['id']
+                or binding['review_policy'] != p['review_policy_sha256']):
+            raise Refusal('whole authentic current partial Source report required')
+        local_integration.input_authority(runtime, event, row['task'], row['package'])
+        return p['relevant_roots']
     turns = proof['calls']
     if len(turns) < 2:
         raise Refusal('whole architecture and complete method stages required')

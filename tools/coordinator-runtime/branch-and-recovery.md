@@ -78,10 +78,40 @@ An honest startup `PARTIAL` remains incomplete. Source currently returns it
 informatively instead of automatically continuing acquisition; it keeps the
 Source job held and its context in custody. The existing collector-authenticated
 informative report route can convey it under its actual selected authority.
-The separate `native_review_return` resource exception requires completed
-architecture and remaining stages with `DONE`; a startup `PARTIAL` cannot borrow
-that qualification. Transport acceptance supplies neither a completed review nor
-authority to widen the receiving route or acquire additional history.
+The original `native_review_return.version: native-collected-review-v1` exception
+requires completed architecture and remaining stages with `DONE`; a startup
+`PARTIAL` cannot borrow that qualification. Transport acceptance supplies neither
+a completed review nor authority to widen the receiving route or acquire
+additional history.
+
+For future authentic collected PARTIAL reports, genuine Work may explicitly
+select `native_review_return.version: native-collected-partial-report-v1` in
+`service.legacy_resources.Reviews`, with `service.report_tasks` exactly
+`["reviews-integrator"]`. The operand set is unchanged: `version, authority,
+expires, package, component, packet_sha256, source_task, source_task_sha256, task,
+task_sha256, review_policy_sha256, grant, resource_evidence, relevant_roots`.
+`package` must be explicit (including `null` for an unpackaged Source); `task` is
+the selected sole integrator. Work's actual processing capability, finite expiry,
+exact task/method/packet pins, current original grants and prospective epochs
+still govern. Authority prose and the PARTIAL label alone grant no access.
+
+This variant admits only the automatic current Source receipt already recorded
+by its original collector in `review_report_returns`. It retains `unbounded:
+true`, the exact `original_hold`, all actual resource/opaque-lease checks, and
+the Source job's incomplete-report hold. Scalar envelope/member/receipt admission
+and physical conflict checks precede native answer/outcome authentication. That
+authentication reuses the complete original informative-report proof: numeric
+caller END, complete capture, correlated native calls, whole outcome/result,
+applied history, live original context, frozen members and current source/receiver
+rights must all agree. It never imports an external report or repairs an old
+incomplete capture. It does not require or manufacture completed review stages.
+
+The output-only integrator conserves the entire original envelope, unread
+coverage, history and dissent through existing report transport. Its own DONE
+means consolidation only; Work still adjudicates meaning. Source continuation,
+context mutation, QA, ref changes, acceptance, closure and historical hold
+clearance receive no authority from this variant. Actual source selection,
+deployment and any later genuine encounter remain the owning Work's operations.
 
 `branch-begin CAP BRANCH --receipt FILE` reserves an actually linked context turn.
 Receipt: `id, kind, component, address, profile, material, writer`. Kind is builder
