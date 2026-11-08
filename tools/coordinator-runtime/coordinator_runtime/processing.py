@@ -583,6 +583,18 @@ class Access:
 
 
 class ProcessingBoard(RetainedBoard):
+    def metadata_authority(self, runtime):
+        """Original Work journal binding, without borrowing processing rights.
+
+        Callers must independently authenticate the current Work session and
+        select the exact metadata-only purpose/scope. This supplies no native
+        principal, processing capability, input permission or owner disposition.
+        """
+        if self.role != 'Work':
+            raise Refusal('only genuine Work can select its journal metadata access')
+        with self.opened(settlement=True) as conn:
+            return self._original(conn, runtime)
+
     def _selected_usage(self, conn, grant):
         # Public aggregate row residency only, never historical payload LENGTH.
         shared = conn.execute('SELECT COUNT(*) FROM coordinator_deliveries_v1').fetchone()[0]

@@ -163,6 +163,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA + INPUT_SCHEMA + INTEGRATION_SCHEMA + prospective.SCHEMA + ordinary.SCHEMA + capacity.SCHEMA + admitted.SCHEMA + windows.SCHEMA + custodian_service.SCHEMA)
         self.db.execute("PRAGMA user_version=1")
         self.db.executescript(configuration.SCHEMA + ref_scope.SCHEMA + local_integration.SCHEMA)
+        from .retained_comparison import SCHEMA as COMPARISON_SCHEMA
+        self.db.executescript(COMPARISON_SCHEMA)
         from .metadata_lookup import SCHEMA as LOOKUP_SCHEMA
         self.db.executescript(LOOKUP_SCHEMA)
         self._bind_config()
