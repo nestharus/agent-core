@@ -464,7 +464,12 @@ class Dispatcher:
                 self.runtime_errors.pop(job_id, None)
                 self.store.clear_operational_error(job_id)
         except BlockingIOError as exc:
-            row=self.store.attempt(job['active_attempt']);detail=json.loads(row['detail'])
+            try:
+                with native_review_scope.acquisition(self.store, self.store.job(job_id)):
+                    row=self.store.attempt(job['active_attempt']);detail=json.loads(row['detail'])
+            except Refusal as admission:
+                self.runtime_errors[job_id] = str(admission)
+                return
             start=detail.get('canonical_lock_wait_since',self.store.clock())
             if self.store.clock()-start>=self.config['deadlines']['task']:
                 self.store.hold_job(job_id,'canonical publication lock unavailable within task budget')
@@ -475,7 +480,12 @@ class Dispatcher:
             self.runtime_errors[job_id] = str(exc)
             self.store.hold_job(job_id, exc)
             self.store.record_operational_error(job_id, {"error": str(exc), "job": job_id}, job["role"], "task-disposition-error")
-            attempt = self.store.attempt(job["active_attempt"])
+            try:
+                with native_review_scope.acquisition(self.store, self.store.job(job_id)):
+                    attempt = self.store.attempt(job["active_attempt"])
+            except Refusal as admission:
+                self.runtime_errors[job_id] = str(admission)
+                return
             if attempt["collected"]:
                 try:
                     with self.store.tx():

@@ -58,11 +58,19 @@ class Reconcile847(Reacquisition836):
 
     def assert_ticks_held(self, job):
         before = self.store.one('SELECT result,detail,collected FROM attempts WHERE id=?', (job['active_attempt'],))
-        with self.later_traps():
-            for dispatcher in (self.dispatch, processing.ProcessingDispatcher(self.store, self.models, self.boards)):
+        for dispatcher in (self.dispatch, processing.ProcessingDispatcher(self.store, self.models, self.boards)):
+            original = dispatcher.reconcile_collected
+            def reconcile(current):
+                # Other jobs keep their independent ordinary reconciliation.
+                # Trap every protected read during this native consumer group.
+                if current['id'] == job['id']:
+                    with self.later_traps():
+                        return original(current)
+                return original(current)
+            with patch.object(dispatcher, 'reconcile_collected', side_effect=reconcile):
                 dispatcher.reconcile_completed()
-                self.assertIn('physical admission', dispatcher.runtime_errors[job['id']])
-            self.assertIsNone(self.store.job(job['id'])['response'])
+            self.assertIn('physical admission', dispatcher.runtime_errors[job['id']])
+        self.assertIsNone(self.store.job(job['id'])['response'])
         self.assertEqual(before, self.store.one('SELECT result,detail,collected FROM attempts WHERE id=?', (job['active_attempt'],)))
 
     def test_periodic_orphan_after_original_collection(self):
@@ -75,8 +83,7 @@ class Reconcile847(Reacquisition836):
         self.assert_ticks_held(job)
         # A recorded job hold independently prevents later acquisition.
         self.store.db.execute('DELETE FROM ordinary_resources')
-        with self.later_traps():
-            self.dispatch.reconcile_completed()
+        self.assert_ticks_held(job)
         self.assertIsNone(self.store.job(job['id'])['response'])
 
     def test_direct_finish_and_awaiting_acceptance(self):
