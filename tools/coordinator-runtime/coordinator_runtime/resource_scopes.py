@@ -11,20 +11,28 @@ from pathlib import Path
 from .contracts import OPERATIONS, PROFILES, Refusal, canonical_uuid, digest, encode, required_text, scoped_task, qa_branch_sequence
 
 
+def _lexical_root(value):
+    path = Path(required_text(str(value), 'resource root', 4000))
+    if not path.is_absolute() or '..' in path.parts or path.anchor == '//':
+        raise Refusal('absolute canonical single-root resource operand required')
+    return path
+
+
 def root(value, exclusions=(), *, metadata=True):
-    path = Path(required_text(value, 'resource root', 4000))
-    if not path.is_absolute() or '..' in path.parts:
-        raise Refusal('absolute resource root required')
-    if any(path == Path(p) or path.is_relative_to(Path(p)) or Path(p).is_relative_to(path)
-           for p in [*exclusions, *[Path.home()/p for p in PROFILES]]):
+    # Validate BOTH operands before any symlink/stat operation. In particular,
+    # Linux's equivalent // spelling must never bypass a lexical exclusion.
+    path = _lexical_root(value)
+    excluded = [_lexical_root(p) for p in
+                [*exclusions, *[Path.home()/p for p in PROFILES]]]
+    if any(path == p or path.is_relative_to(p) or p.is_relative_to(path) for p in excluded):
         raise Refusal('resource overlaps an excluded store before metadata')
     if metadata and any(p.is_symlink() for p in (path, *path.parents)):
         raise Refusal('resource aliases need their actual custodian; no symlink inference')
-    # Existing ancestry is compared by identity too (including bind aliases).
     return path
 
 
 def overlaps(left, right):
+    left, right = _lexical_root(left), _lexical_root(right)
     if left == right or left.is_relative_to(right) or right.is_relative_to(left):
         return True
     def ancestors(path):
@@ -34,13 +42,14 @@ def overlaps(left, right):
     return identity(left) in ancestors(right) or identity(right) in ancestors(left)
 
 
-def access_modes(task, exclusions):
+def access_modes(task, exclusions, *, metadata=True):
     """Configured access, including staged publication rights, not effect success.
 
     execution_spec relocates owned/staged writes to an attempt directory. Its
     configured cwd is therefore only a read dependency. A direct workspace-write
     task can write its cwd; canonical write roots survive staging and fencing.
     """
+    exclusions = [*exclusions, *task.get('scope_exclusions', [])]
     authority = task['effect_authority']
     reads, writes = authority['read_roots'], authority['write_roots']
     operations = authority['operations']
@@ -76,7 +85,8 @@ def access_modes(task, exclusions):
     # Check the whole map lexically before touching any of its metadata.
     for value in reads + writes:
         root(value, exclusions, metadata=False)
-    return ([root(p, exclusions) for p in reads], [root(p, exclusions) for p in writes])
+    return ([root(p, exclusions, metadata=metadata) for p in reads],
+            [root(p, exclusions, metadata=metadata) for p in writes])
 
 
 # Exact inspected public caller output contract; no producer-label exemption.
@@ -84,6 +94,10 @@ RESOURCE_CALLER_SHA256 = '7d8be231fbdee40761128b07b969244b7c799220190858cfc57b0c
 
 
 def original_resources(runtime, identity, task):
+    return _native_resources(runtime, identity, task)[:2]
+
+
+def _native_resources(runtime, identity, task):
     """Project an original standalone software Source, without reading its return.
 
     This is authority comparison, not collection or native sandbox certification.
@@ -235,7 +249,7 @@ def original_resources(runtime, identity, task):
     if (not call or not context or not bound or call['component'] != context['component']
             or call['collector'] != attempt['controller'] or context['collector'] != attempt['controller']
             or context['capability'] != cap['id'] or context['profile'] != attempt['profile']
-            or context['route'] != policy['routes'].get(attempt['profile']) or context['state'] not in {'opening','live','interrupted'}
+            or context['route'] != policy['routes'].get(attempt['profile']) or context['state'] not in {'opening','live','interrupted','closed'}
             or any(bound[k] != context[k] for k in ('component','capability','collector','profile','route','handle','created'))
             or bound['head'] != packet['previous']
             or acquired != dict(selected_task=job['task'], packet=packet, repository=selected['repository'],
@@ -243,7 +257,7 @@ def original_resources(runtime, identity, task):
                 history=selected['history'], read_authority=selected['authority'],
                 relationship_paths=selected.get('relationship_paths', []),history_sha256=bound['history_hash'])):
         raise Refusal('original Source material/context/collector differs')
-    if job['hold_reason'] is not None and context['state'] != 'interrupted':
+    if job['hold_reason'] is not None and context['state'] not in {'interrupted','closed'}:
         raise Refusal('original incomplete-return hold lacks its interrupted context')
     sources = runtime.rows("SELECT s.key,json_extract(s.value,'$.git_blob') AS blob,"
         "json_extract(s.value,'$.sha256') AS sha256,json_extract(s.value,'$.bytes') AS bytes "
@@ -268,11 +282,112 @@ def original_resources(runtime, identity, task):
     reads = [*task['effect_authority']['read_roots'], task['cwd'], selected['repository'],
              policy['caller'], str(Path(__file__).with_name('review_reader.py')),
              *policy['method_files'], *selected.get('prior_histories', {}), selected['history']]
-    writes = [str(handle), selected['history'], str(facade),
-              *[str(facade.with_suffix(s)) for s in ('.pending','.cursor','.item')]]
-    # Every pending/applied append remains charged; no entry body or settlement.
-    writes += [r['path'] for r in runtime.rows('SELECT h.path FROM review_history_commits h JOIN attempts a ON a.id=h.attempt WHERE a.job=?', (job['id'],))]
-    return reads, writes
+    lifetime = _native_lifetime(runtime, job, packet, context)
+    histories = runtime.rows('SELECT h.path,h.state,h.after_hash,h.head FROM review_history_commits h '
+        'JOIN attempts a ON a.id=h.attempt WHERE a.job=?', (job['id'],))
+    # Applied alone is no blanket release: bind the exact original owned path,
+    # head and append hash to the authenticated returned context. Unknown tails
+    # remain writes, even after actual physical close.
+    pending = [h['path'] for h in histories if not (
+        lifetime in {'answered', 'closed'} and h['state'] == 'applied'
+        and h['path'] == selected['history'] and h['head'] == packet['head']
+        and h['after_hash'] == lifetime_context_hash(runtime, context['component']))]
+    if lifetime == 'closed':
+        return [], pending, True
+    writes = [str(handle), str(facade),
+              *[str(facade.with_suffix(s)) for s in ('.pending','.cursor','.item')], *pending]
+    # An answered call has finished its executor append. The continuing native
+    # reader may still own async work: answered is NOT whole-root settlement.
+    if lifetime != 'answered':
+        writes.append(selected['history'])
+    return reads, writes, False
+
+
+def lifetime_context_hash(runtime, component):
+    return runtime.one('SELECT history_hash FROM review_contexts WHERE component=?', (component,))['history_hash']
+
+
+def _native_lifetime(runtime, job, packet, context):
+    """Original protocol evidence, never state/effects/age as a release rule.
+
+    Project only fixed control fields. No full answer, handle body, receipt
+    body, material body or caller output is acquired by this comparison.
+    A tagged answer ends the executor turn, not native asynchronous custody.
+    """
+    from .reviews import answered, closed
+    current = runtime.one('SELECT run,head,history_hash,closed_at FROM review_contexts WHERE component=?',
+                          (context['component'],))
+    original = runtime.one("SELECT json_extract(context,'$.run') AS run FROM review_call_contexts WHERE attempt=?", (job['active_attempt'],))
+    attempts = runtime.rows("SELECT id,state,ended,collected FROM attempts WHERE job=? AND kind='task'", (job['id'],))
+    status = runtime.one('SELECT state,begin,ended,collected,exit,capture,error,session FROM attempts WHERE id=?',
+                         (job['active_attempt'],))
+    if (not current or not current['run'] or not original or original['run'] != current['run']
+            or not attempts or not status
+            or any(a['state'] != 'collected' or a['ended'] is None or a['collected'] is None for a in attempts)):
+        if context['state'] == 'closed':
+            raise Refusal('closed label without original executor collection remains held')
+        return 'active'
+    # Fixed projections reproduce the existing public predicates, including
+    # exact types, absence/false distinctions and whole close accounting.
+    turn_fields = ('class','run','consumer_errors','turn.input','turn.admitted','turn.answer_present',
+        'turn.linked_messages','turn.ack.message_id','turn.turn_end.event','turn.turn_end.input',
+        'turn.turn_end.stop_reason','turn.turn_end.child','turn.root_ended','turn.refused','turn.rejected',
+        'turn.ref','transport.errors','transport.attached.frontdoor','transport.attached.run',
+        'transport.attached.backlog_dropped_total','transport.attached.interrupted_records_total',
+        'collection.errors','collection.stdout_eof','collection.stderr_eof','collection.exit')
+    close_fields = ('class','run','physical_close','root','consumer_errors','account_errors',
+        'collection.eof','collection.errors','front_door_terminal.run','front_door_terminal.entry_status',
+        'front_door_terminal.exit','front_door_terminal.collection_errors','front_door_terminal.killed',
+        'front_door_terminal.retire.ok','front_door_terminal.retire.stop',
+        'front_door_terminal.live.backlog_dropped_total','owner_terminal.status','async.errors',
+        'async.unsettled','async.undelivered')
+    fields = tuple(dict.fromkeys(turn_fields + close_fields))
+    paths = ['$.receipt.' + k for k in fields]
+    query = ("SELECT json_type(t.value) AS kind,json_type(t.value,'$.close_intent') AS intent,"
+        "json_type(t.value,'$.actual_END') AS code_type,json_type(t.value,'$.close_actual_END') AS close_type,"
+        "json_type(t.value,'$.receipt.turn.turn_end.child') AS child_type,"
+        "json_extract(t.value,'$.actual_END') AS code,json_extract(t.value,'$.close_actual_END') AS close_code,"
+        "json_type(t.value,'$.full_answer')='text' AND json_valid(json_extract(t.value,'$.full_answer')) AS answer,"
+        'json_extract(t.value,' + ','.join('?' for _ in paths) + ') AS control '
+        'FROM review_calls c,json_each(c.receipt) t WHERE c.attempt=? ORDER BY CAST(t.key AS INTEGER)')
+    turns = runtime.rows(query, (*paths, job['active_attempt']))
+    receipts = []
+    for turn in turns:
+        if turn['kind'] != 'object' or not turn['control']:
+            raise Refusal('opaque original control evidence remains held')
+        receipt = {}
+        for path, value in zip(fields, json.loads(turn['control'])):
+            target = receipt
+            keys = path.split('.')
+            for key in keys[:-1]:
+                target = target.setdefault(key, {})
+            # Preserve missing optional child as absent, as answered requires.
+            if value is not None:
+                target[keys[-1]] = value
+        if turn['child_type'] is not None:
+            receipt.setdefault('turn', {}).setdefault('turn_end', {})['child'] = None
+        receipts.append((turn, receipt))
+    if context['state'] == 'closed':
+        if (current['closed_at'] is None or len(receipts) < 2
+                or receipts[-2][0]['intent'] != 'text' or receipts[-1][0]['close_type'] != 'integer'
+                or not closed(receipts[-1][0]['close_code'], receipts[-1][1], current['run'])):
+            raise Refusal('closed label lacks authenticated original physical close/whole accounting')
+        return 'closed'
+    if (context['state'] != 'live' or status['state'] != 'collected' or status['begin'] is None
+            or status['exit'] != 0 or status['capture'] != 'complete' or status['error']
+            or status['session'] != current['run'] or current['head'] != packet['head']
+            or not receipts or any(t['code_type'] != 'integer' or t['intent'] or t['close_type'] is not None
+                or not answered(t['code'], r, 'present' if t['answer'] else None, current['run'],
+                                opening=r.get('turn', {}).get('input') == 0) for t,r in receipts)):
+        return 'active'
+    call = runtime.one('SELECT state FROM review_calls WHERE attempt=?', (job['active_attempt'],))
+    history = runtime.one('SELECT path,state,after_hash,head FROM review_history_commits WHERE attempt=?',
+                          (job['active_attempt'],))
+    if (not call or call['state'] != 'collected' or not history or history['state'] != 'applied'
+            or history['head'] != packet['head'] or history['after_hash'] != current['history_hash']):
+        return 'active'
+    return 'answered'
+
 
 
 
@@ -323,20 +438,22 @@ def _original_modes(runtime, job):
         if frozen['ordinary'] == 'object':
             scope['ordinary_effects'] = {'kind': values[-1]}
         admission = {'receipt': json.dumps({'task_scopes': {job['task']: scope}})}
-        if scope_excluded(runtime, job['task'], admission):
+        if scope_excluded(runtime, job['task'], admission, task=task):
             raise Refusal('original admitted scope excluded before metadata')
         for value in scope.get('read_roots', []) + scope.get('write_roots', []) + [scope.get('cwd')]:
             root(value, runtime.config.get('artifact_exclusions', []), metadata=False)
+    if scope_excluded(runtime, job['task'], admission, task=task):
+        raise Refusal('original configured scope excluded before metadata')
     task = scoped_task(job['task'], task, admission)
     native = task.get('execution') == 'owner'
     if native:
-        reads, writes = original_resources(runtime, job, task)
+        reads, writes, native_closed = _native_resources(runtime, job, task)
     else:
-        reads, writes = access_modes(task, runtime.config.get('artifact_exclusions', []))
+        reads, writes = access_modes(task, runtime.config.get('artifact_exclusions', []), metadata=False)
     # The runtime creates fresh per-attempt writable staging; these original
     # directories stay charged without acquiring their names, contents or sizes.
     staging = []
-    if native or task['effects'] != 'none':
+    if (native and not native_closed) or (not native and task['effects'] != 'none'):
         for attempt in runtime.rows("SELECT id FROM attempts WHERE job=? AND kind='task'", (job['id'],)):
             canonical_uuid(attempt['id'])
             staging.append(root(str(runtime.home/'artifacts'/attempt['id']), runtime.config.get('artifact_exclusions', []), metadata=False))
@@ -371,6 +488,8 @@ def validate(runtime, policy, selection=None):
         if not record['unbounded'] and not record['roots']:
             raise Refusal('unknown legacy scope cannot be declared independent')
         for value in record['roots']:
+            root(value, runtime.config.get('artifact_exclusions', []), metadata=False)
+        for value in record['roots']:
             root(value, runtime.config.get('artifact_exclusions', []))
         accounts = qa_accounts(record)
         if accounts:
@@ -397,11 +516,33 @@ def validate(runtime, policy, selection=None):
 
 
 
-def scope_excluded(runtime, name, admission):
+def scope_excluded(runtime, name, admission, *, task=None):
+    task = runtime.config['tasks'][name] if task is None else task
     scope = json.loads(admission['receipt']).get('task_scopes', {}).get(name, {}) if admission else {}
-    values = scope.get('read_roots', []) + scope.get('write_roots', []) + [scope.get('cwd', '')]
-    return any(Path(value) == Path(p) or Path(value).is_relative_to(Path(p)) or Path(p).is_relative_to(Path(value))
-               for value in values for p in runtime.config.get('artifact_exclusions', []))
+    exclusions = [*runtime.config.get('artifact_exclusions', []), *task.get('scope_exclusions', [])]
+    # Ceilings/topology are lexical operands too, before scoped_task can follow
+    # ancestry, associated Git topology or any admitted operand's symlinks.
+    for value in [*exclusions, *task.get('scope_roots', []),
+                  *(p[k] for p in task.get('linked_repositories', []) for k in ('repository','common_git'))]:
+        _lexical_root(value)
+    authority = task.get('effect_authority', {})
+    configured = [*authority.get('read_roots', []), *authority.get('write_roots', []), task['cwd']]
+    for value in configured:
+        _lexical_root(value)
+    # A ceiling may contain excluded descendants while the actual admitted
+    # scope is disjoint. Validate its spelling, then compare the effective
+    # requested operands; do not turn a ceiling into an actual broad read.
+    if task.get('require_package_scope') and scope:
+        values = scope.get('read_roots', []) + scope.get('write_roots', [])
+        values += [scope[k] for k in ('cwd', 'procedure') if k in scope]
+    else:
+        values = configured
+    try:
+        for value in values:
+            root(value, exclusions, metadata=False)
+    except Refusal:
+        return True
+    return False
 
 
 def qa_accounts(record):
@@ -657,6 +798,8 @@ def _blocked(runtime, row, task=None):
     if task.get('require_package_scope'):
         if not admission:
             return True
+        if scope_excluded(runtime, row['task'], admission, task=task):
+            return True
         task = scoped_task(row['task'], task, admission)
     elif not task.get('effect_authority'):
         return True  # No actual configured resource boundary to compare.
@@ -664,7 +807,11 @@ def _blocked(runtime, row, task=None):
         return True  # Path separation alone cannot prove external/shared-ref independence.
     exclusions = runtime.config.get('artifact_exclusions', [])
     try:
-        reads, writes = access_modes(task, exclusions)
+        reads, writes = access_modes(task, exclusions, metadata=False)
+        for value in [*reads, *writes, *record['roots'], *operation_held, str(runtime.home/'artifacts')]:
+            root(str(value), exclusions, metadata=False)
+        reads, writes = ([root(str(p), exclusions) for p in reads],
+                         [root(str(p), exclusions) for p in writes])
         future_staging = None
         if task['sandbox'] == 'workspace-write' and task['effects'] != 'none':
             directory = root(str(runtime.home/'artifacts'), exclusions)
@@ -687,25 +834,6 @@ def _blocked(runtime, row, task=None):
                 held_writes.extend(w)
                 original_staging.extend(staging)
 
-        # These scalar identities select immutable maps, never old return,
-        # capture, error, receipt or full job/task bodies. UNKNOWN is unchanged.
-        for job in runtime.rows("SELECT id,task FROM jobs WHERE effects NOT IN ('none','reconciled')"):
-            if row.get('id') != job['id']:
-                retain(job)
-        # A returned/interrupted Source still owns its original call/context,
-        # reader, history and output resources even if the executor's effect
-        # column is none/reconciled. No report or terminal state releases them.
-        for job in runtime.rows('SELECT j.id,j.task FROM jobs j WHERE EXISTS ('
-                'SELECT 1 FROM attempts a JOIN review_calls c ON c.attempt=a.id WHERE a.job=j.id)'):
-            if row.get('id') != job['id']:
-                retain(job)
-        # Effect reconciliation alone cannot clear an interrupted or incomplete
-        # publication. These scalar state predicates acquire no receipt bodies.
-        for job in runtime.rows('SELECT j.id,j.task FROM jobs j WHERE '
-                "EXISTS (SELECT 1 FROM attempts a JOIN routine_runs r ON r.attempt=a.id WHERE a.job=j.id AND r.state IS NOT 'reconciled') OR "
-                "EXISTS (SELECT 1 FROM attempts a JOIN file_publications p ON p.attempt=a.id WHERE a.job=j.id AND (p.state IS NOT 'published' OR p.error IS NOT NULL))"):
-            if row.get('id') != job['id']:
-                retain(job)
         # An orphan/opaque lease is globally unknown, even on a report route.
         for lease in runtime.rows('SELECT resource,attempt FROM ordinary_resources'):
             job = runtime.one('SELECT j.id,j.task FROM ordinary_runs r JOIN jobs j ON j.id=r.job WHERE r.attempt=?', (lease['attempt'],))
@@ -721,6 +849,30 @@ def _blocked(runtime, row, task=None):
             if not original or not original['matches']:
                 return True
             retain(job)
+        if any(overlaps(a, b) for a in reads + writes for b in held_writes):
+            return True
+        # These scalar identities select immutable maps, never old return,
+        # capture, error, receipt or full job/task bodies. UNKNOWN is unchanged.
+        for job in runtime.rows("SELECT id,task FROM jobs WHERE effects NOT IN ('none','reconciled')"):
+            if row.get('id') != job['id']:
+                retain(job)
+        # A returned/interrupted Source still owns its original call/context,
+        # reader, history and output resources even if the executor's effect
+        # column is none/reconciled. A preparation may fail before its call row:
+        # an original owner attempt without an authentic map remains unknown.
+        for job in runtime.rows('SELECT j.id,j.task FROM jobs j WHERE EXISTS ('
+                'SELECT 1 FROM attempts a JOIN review_calls c ON c.attempt=a.id WHERE a.job=j.id) OR '
+                'EXISTS (SELECT 1 FROM job_resource_policies f JOIN attempts a ON a.job=f.job '
+                "WHERE f.job=j.id AND a.kind='task' AND json_extract(f.task,'$.execution')='owner')"):
+            if row.get('id') != job['id']:
+                retain(job)
+        # Effect reconciliation alone cannot clear an interrupted or incomplete
+        # publication. These scalar state predicates acquire no receipt bodies.
+        for job in runtime.rows('SELECT j.id,j.task FROM jobs j WHERE '
+                "EXISTS (SELECT 1 FROM attempts a JOIN routine_runs r ON r.attempt=a.id WHERE a.job=j.id AND r.state IS NOT 'reconciled') OR "
+                "EXISTS (SELECT 1 FROM attempts a JOIN file_publications p ON p.attempt=a.id WHERE a.job=j.id AND (p.state IS NOT 'published' OR p.error IS NOT NULL))"):
+            if row.get('id') != job['id']:
+                retain(job)
         if future_staging:
             # A fresh attempt has a new PRIMARY KEY UUID and mkdir(exist_ok=False).
             # Its direct child cannot be an original attempt's directory. Broad
