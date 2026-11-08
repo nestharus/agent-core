@@ -70,6 +70,21 @@ class Completion821(Terminal817):
         self.assertFalse(json.loads(disposition['request'])['authority']['native_owner_receipt'])
         self.assertEqual(self.store.rows('SELECT * FROM processing_control_returns'),[])
 
+    def test_scalar_marker_evidence_refused_despite_valid_outer_evidence(self):
+        scope=dict(scope='no-new-owned-work-or-effects',accounting=[],
+            evidence='Whole source interpreted; no new owned work or effects')
+        source,attempt,_=self.original(plain_scope=scope)
+        original=self.store.attempt(attempt)
+        receipt=json.loads(json.loads(original['result'])['decision_json'])
+        self.assertIsInstance(receipt['evidence'],list)
+        with self.assertRaisesRegex(Refusal,'whole-source Work interpretation evidence required'):
+            processing.apply_control(self.store,source['id'],attempt)
+        self.assertEqual(original,self.store.attempt(attempt))
+        self.assertIsNone(self.store.input_resolution(source['id']))
+        self.assertIsNone(self.store.one('SELECT processed_at FROM events WHERE id=?',(source['id'],))['processed_at'])
+        self.assertEqual(self.store.rows('SELECT * FROM plain_control_dispositions'),[])
+        self.assertEqual(self.store.rows('SELECT * FROM processing_control_returns'),[])
+
     def test_pending_descendant_reserved_and_effect_consumers_refuse_before_source(self):
         for case in ('child','reserved','effect','forged'):
             source,attempt,request,returned=self.returned();child=returned['response']
