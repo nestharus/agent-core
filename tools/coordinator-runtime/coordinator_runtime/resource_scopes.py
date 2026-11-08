@@ -391,8 +391,11 @@ def _native_lifetime(runtime, job, packet, context):
 
 
 
-def original_modes(runtime, job):
+def original_modes(runtime, job, *, historical=None):
     with (nullcontext() if runtime.db.in_transaction else runtime.tx()):
+        if historical is not None:
+            from .historical_admission import original_modes as historical_modes
+            return historical_modes(runtime, runtime.processing.boards, historical, job)
         return _original_modes(runtime, job)
 
 
@@ -479,12 +482,13 @@ def _original_modes(runtime, job):
 def validate(runtime, policy, selection=None):
     for role, record in policy.items():
         if (role not in runtime.config['roles'] or not isinstance(record, dict)
-                or set(record) - {'qa_operation', 'qa_operations', 'reviews_report', 'native_review_return'} != {'original_hold', 'roots', 'unbounded', 'evidence'}
+                or set(record) - {'qa_operation', 'qa_operations', 'reviews_report', 'native_review_return', 'historical_sources', 'comparison_mode'} != {'original_hold', 'roots', 'unbounded', 'evidence'}
                 or type(record['unbounded']) is not bool or not isinstance(record['roots'], list)):
             raise Refusal('legacy resource account needs exact hold, roots, unbounded and evidence')
         if runtime.one('SELECT legacy_hold FROM enrollments WHERE role=?', (role,))['legacy_hold'] != record['original_hold']:
             raise Refusal('resource account does not describe the actual retained hold')
         required_text(record['evidence'], 'supported original resource scope, not a renamed package')
+        validate_historical_sources(runtime, record)
         if not record['unbounded'] and not record['roots']:
             raise Refusal('unknown legacy scope cannot be declared independent')
         for value in record['roots']:
@@ -513,6 +517,24 @@ def validate(runtime, policy, selection=None):
         if 'reviews_report' in record:
             from .report_scope import validate as validate_report
             validate_report(runtime, role, record, selection)
+
+
+def validate_historical_sources(runtime, record):
+    from .historical_admission import DOMAINS, MODE
+    sources = record.get('historical_sources')
+    if sources is None:
+        if 'comparison_mode' in record:
+            raise Refusal('comparison mode requires exact historical dependencies')
+        return
+    if (not isinstance(sources, dict) or not sources or len(sources) > runtime.config['limits']['max_jobs']
+            or record.get('comparison_mode') != MODE):
+        raise Refusal('explicit conditional cooperative mode and finite original dependencies required')
+    for job, keys in sources.items():
+        canonical_uuid(job)
+        if not isinstance(keys, dict) or set(keys) != set(DOMAINS):
+            raise Refusal('both respective current historical field delegations required')
+        for key in keys.values():
+            canonical_uuid(key)
 
 
 
@@ -828,7 +850,10 @@ def _blocked(runtime, row, task=None):
 
         def retain(job):
             if job['id'] not in mapped:
-                mapped[job['id']] = original_modes(runtime, job)
+                selected = record.get('historical_sources', {}).get(job['id'])
+                if selected is not None and record.get('comparison_mode') != 'cooperative-authorized-ceilings':
+                    raise Refusal('historical admission requires explicit conditional cooperative mode')
+                mapped[job['id']] = original_modes(runtime, job, historical=selected)
                 r, w, staging = mapped[job['id']]
                 held_reads.extend(r)
                 held_writes.extend(w)
