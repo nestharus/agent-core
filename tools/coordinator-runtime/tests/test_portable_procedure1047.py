@@ -218,6 +218,16 @@ class Procedure1047(unittest.TestCase):
                 db.execute("INSERT INTO events VALUES('Work','processed','pending',123)")
         self.readonly_readback(change, 'wrong retained journal effect')
 
+    def test_uncheckpointed_journal_refuses(self):
+        def change(d, m):
+            (d/'oracle/state').mkdir(parents=True)
+            (d/'oracle/original.txt').write_text('retained original; second input refused\n')
+            with sqlite3.connect(d/'oracle/state/runtime.sqlite3') as db:
+                db.execute('CREATE TABLE events(role,state,ack,processed_at)')
+                db.execute("INSERT INTO events VALUES('Work','received','pending',NULL)")
+            (d/'oracle/state/runtime.sqlite3-wal').write_bytes(b'uncheckpointed-fictional-effect')
+        self.readonly_readback(change, 'uncheckpointed retained journal effect')
+
     def test_existing_output_refuses_replay(self):
         commands = prepare(self.spec)
         Path(self.spec['output']).mkdir()

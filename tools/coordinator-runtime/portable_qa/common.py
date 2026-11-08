@@ -57,6 +57,7 @@ def file_pin(path):
 
 
 def verify_pin(path, pin):
+    require(plain(path).stat().st_size == pin['bytes'], 'source/input/tool/script identity mismatch: '+str(path))
     require(file_pin(path) == pin, 'source/input/tool/script identity mismatch: '+str(path))
 
 
@@ -85,6 +86,7 @@ def commands_for(m, manifest_hash):
 
 def load_instance(directory, expected):
     d = plain(directory)
+    require(plain(d/'manifest.json').stat().st_size <= 4*1024*1024, 'procedure manifest exceeds frozen-file ceiling')
     body = plain(d/'manifest.json').read_bytes()
     require(sha(body) == expected, 'procedure instance changed')
     m = json.loads(body)
@@ -118,6 +120,7 @@ def output_root(m):
     out = plain(m['output'])
     require(out.stat().st_uid == os.getuid() and out.stat().st_mode & 0o077 == 0,
             'private owned output required')
+    require(plain(out/'OWNER.json').stat().st_size <= 4096, 'oversized output ownership record')
     require(json.loads(plain(out/'OWNER.json').read_text()) ==
             {'instance': m['instance'], 'run_id': m['run_id']}, 'wrong output ownership')
     return out

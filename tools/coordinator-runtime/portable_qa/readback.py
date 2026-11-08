@@ -11,10 +11,37 @@ from common import (file_pin, load_instance, output_root, plain, relative, requi
 from execution import sandbox
 
 
+def resource_scope(out, limits):
+    count = total = 0
+    pending = [out]
+    while pending:
+        directory = pending.pop()
+        for p in directory.iterdir():
+            s = p.lstat()
+            require(s.st_uid == os.getuid(), 'foreign output ownership')
+            require(stat.S_ISREG(s.st_mode) or stat.S_ISDIR(s.st_mode) or stat.S_ISLNK(s.st_mode),
+                    'unsupported retained output type')
+            # Fictional refusal tests retain symlinks. Never follow targets.
+            if stat.S_ISDIR(s.st_mode):
+                pending.append(p)
+            count += 1
+            total += s.st_size
+            require(count <= limits['effect_files'] and total <= limits['effect_bytes'],
+                    'owned retained output exceeds declared resource scope')
+
+
+def closed_database(path):
+    for suffix in ('-wal', '-journal'):
+        sidecar = Path(str(path)+suffix)
+        if os.path.lexists(sidecar):
+            require(plain(sidecar).stat().st_size == 0, 'uncheckpointed retained journal effect')
+
+
 def main(directory, expected):
     m = load_instance(directory, expected)
     verify_inputs(m)
     out = output_root(m)
+    resource_scope(out, m['limits'])
     r = json.loads(plain(out/'execution.json').read_text())
     body = plain(out/'transcript.txt').read_bytes()
     require(r['manifest_sha256'] == expected and r['run_id'] == m['run_id'] and r['argv'] == sandbox(m),
@@ -47,27 +74,13 @@ def main(directory, expected):
     for effect in m['effects']:
         path = plain(out/relative(effect['path']))
         require(path.is_relative_to(out), 'effect outside output ownership')
+        require(stat.S_ISREG(path.stat().st_mode) and path.stat().st_nlink == 1,
+                'retained effect must be an ordinary singly owned file')
         if effect['kind'] == 'file':
             require(path.read_bytes() == effect['utf8'].encode(), 'wrong retained file effect')
         else:
+            closed_database(path)
             with sqlite3.connect(path.as_uri()+'?mode=ro&immutable=1', uri=True) as db:
                 db.execute('PRAGMA query_only=ON')
                 require([list(row) for row in db.execute(effect['query'])] == effect['rows'], 'wrong retained journal effect')
-    count = total = 0
-    pending = [out]
-    while pending:
-        directory = pending.pop()
-        for p in directory.iterdir():
-            s = p.lstat()
-            require(s.st_uid == os.getuid(), 'foreign output ownership')
-            require(stat.S_ISREG(s.st_mode) or stat.S_ISDIR(s.st_mode) or stat.S_ISLNK(s.st_mode),
-                    'unsupported retained output type')
-            # Existing refusal tests retain fictional symlinks. Never follow
-            # them or acquire their target metadata/body, including accounting.
-            if stat.S_ISDIR(s.st_mode):
-                pending.append(p)
-            count += 1
-            total += s.st_size
-            require(count <= m['limits']['effect_files'] and total <= m['limits']['effect_bytes'],
-                    'owned retained output exceeds declared resource scope')
     print('portable QA1047: declared tests and retained effects verified')
