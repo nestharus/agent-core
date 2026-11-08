@@ -13,8 +13,11 @@ import time
 repo = Path(__file__).resolve().parents[3]
 base = repo / '.qualification862-readonly'
 base.mkdir(mode=0o700, exist_ok=False)
+prior_current_charge = int(os.environ.get('CONTROL_SCOPE862_PRIOR_CURRENT_BYTES','0'))
+if prior_current_charge < 0:
+    raise SystemExit('invalid explicit current-invocation artifact charge')
 def usage():
-    return sum(p.stat().st_size for p in base.rglob('*') if p.is_file())
+    return prior_current_charge + sum(p.stat().st_size for p in base.rglob('*') if p.is_file())
 if usage() >= 128*1024**2:
     raise SystemExit('stop-new128MiB')
 root = base / 'candidate'
@@ -79,6 +82,7 @@ groups = {
   'test_periodic_orphan_after_original_collection',
   'test_admitted_later_reads_join_transaction']]}
 (root/'fixture-plan.json').write_text(json.dumps(dict(groups=groups, source=source,
+  prior_current_invocation_charge=prior_current_charge,
   purpose='Fresh synthetic current-control qualification only',
   limits=dict(child_seconds=180,capture_bytes=4*1024**2,stop_new=128*1024**2,hard=192*1024**2),
   cleanup='retain all fixtures, failures and collection records for genuine Work; no cleanup authorized'),indent=2))
