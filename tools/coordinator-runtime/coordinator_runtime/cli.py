@@ -41,6 +41,12 @@ def historical_actor(config, command):
     return actual_actor(config['roles'][role]['owner'])
 
 
+def historical_resource_actor(config, args):
+    from .historical_admission import DOMAINS
+    role = DOMAINS[args.domain] if args.command != 'historical-resource-project' else 'Work'
+    return actual_actor(config['roles'][role]['owner'])
+
+
 def qualify_schema(codex, output):
     directory = private_directory(output)
     if list(directory.iterdir()):
@@ -73,6 +79,14 @@ def parser():
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("init")
     sub.add_parser("status")
+    for name in ('historical-resource-authorize', 'historical-resource-project', 'historical-resource-revoke'):
+        resource = sub.add_parser(name, help='Current respective field custodians; conditional cooperative ceilings only')
+        if name != 'historical-resource-project':
+            resource.add_argument('--domain', choices=('work-journal', 'reviews-source'), required=True)
+        if name == 'historical-resource-revoke':
+            resource.add_argument('metadata_access')
+        else:
+            resource.add_argument('--selection', required=True)
     for name in ('historical-metadata-authorize','historical-metadata-project',
                  'historical-metadata-compare','historical-metadata-revoke'):
         historical = sub.add_parser(name, help='Explicit current metadata scope; no old execution/closure/effect rights')
@@ -426,6 +440,15 @@ async def serve(store):
 
 
 def operate(args, store):
+    if args.command.startswith('historical-resource-'):
+        from . import historical_admission, processing
+        historical_resource_actor(store.config, args)
+        boards = {r: processing.ProcessingBoard(store.config,r) for r in ('Work','Reviews')}
+        if args.command == 'historical-resource-authorize':
+            return historical_admission.authorize(store, boards, args.domain, read_record(args.selection))
+        if args.command == 'historical-resource-revoke':
+            return historical_admission.revoke(store, boards, args.domain, args.metadata_access)
+        return historical_admission.project(store, boards, read_record(args.selection))
     if args.command.startswith('historical-metadata-'):
         from . import historical_verification as historical, processing
         historical_actor(store.config,args.command)
@@ -940,6 +963,8 @@ def main_owned(args):
             print_json(value)
             return 0
         with observations.span('store-open'):
+            if args.command.startswith('historical-resource-'):
+                historical_resource_actor(config,args)
             if args.command.startswith('historical-metadata-'):
                 historical_actor(config,args.command)
             store = Store(config, read_only=args.command == 'processing-service-control'

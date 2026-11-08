@@ -5,6 +5,7 @@ Real Store intake/reservation, immutable policy/birth and software launch bindin
 are exercised. Native call/context rows are explicitly transport fiction.
 """
 import copy
+import hashlib
 from contextlib import contextmanager
 import json
 from pathlib import Path
@@ -41,9 +42,16 @@ class Historical1041(unittest.TestCase):
         self.config['software_delegation']=dict(grantor=self.config['roles']['Work']['owner'],authority='original Work software grant')
         self.repo=self.area/'public-source'; self.repo.mkdir()
         self.other=self.area/'public-independent'; self.other.mkdir()
+        (self.repo/'method.md').write_text('Fictional public native reader method; no provider invocation.\n')
+        caller=self.repo/'fake-native-provider.py'
+        caller.write_text('"""Offline provider fixture identity; never invoked as a native provider."""\n')
         task=self.config['tasks']['reviews-proposer']
         task.update(execution='owner',network=False,cwd=str(self.repo),binding=reviews.BINDING)
         task['effect_authority']['read_roots']=[str(self.repo)]
+        self.config['tasks']['work-integrator']['cwd']=str(self.other)
+        self.config['tasks']['work-integrator']['effect_authority']['read_roots']=[str(self.other)]
+        self.config['tasks']['work-integrator'].update(sandbox='workspace-write',effects='owned-artifacts')
+        self.config['tasks']['work-integrator']['effect_authority']['operations'].append('write-owned-artifacts')
         if self.transitioned:Path(self.config['operator_config']).write_text(encode(self.config))
         self.now=100.
         self.s=enrolled(self.config,clock=lambda:self.now)
@@ -70,7 +78,7 @@ CREATE TABLE threads(thread_id INTEGER,opener TEXT);
         original=processing.implementation()
         self.current_implementation=original
         selection=dict(tasks=['reviews-proposer'],future_intake=True,retained_events=[],recover_controls={},
-            service={'max_inflight':100,'reviews':{'reviews-proposer':{}}},
+            service={'max_inflight':100,'reviews':{'reviews-proposer':dict(caller=str(caller),caller_sha256=hashlib.sha256(caller.read_bytes()).hexdigest())}},
             expires=200,max_starts=100,max_runtime_rows=10000,max_shared_rows=10000,max_shared_payload_bytes=1000000,
             basis=dict(configuration=digest(self.config),implementation=original,event_boundary=0,
                 roles={r:dict(future_after=0,original=dict(binding=dict(id=self.grants[r],issued_by=self.work),events=[]))
@@ -106,7 +114,10 @@ CREATE TABLE threads(thread_id INTEGER,opener TEXT);
             history_hash='f'*64,created=100,closed_at=None)
         self.s.db.execute('INSERT INTO review_contexts VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',tuple(context.values()))
         self.s.db.execute('INSERT INTO review_calls VALUES(?,?,?,?,?,NULL,NULL)',
-            (self.attempt,self.component,self.s.controller,encode(dict(selected_task='reviews-proposer',source={},correction_diff='FORBIDDEN-BODY')),'prepared'))
+            (self.attempt,self.component,self.s.controller,encode(dict(selected_task='reviews-proposer',source={},
+                repository=str(self.repo),method_files=[str(self.repo/'method.md')],prior_histories={},
+                history=str(self.s.home/'review-history'/'fictional.json'),
+                correction_diff='FORBIDDEN-BODY')),'prepared'))
         self.s.db.execute('INSERT INTO review_call_contexts VALUES(?,?)',(self.attempt,encode(context)))
         self.identity=dict(job=self.job,attempt=self.attempt,event=source['id'],source_hash=digest(source),
             task='reviews-proposer',capability=self.cap,epoch=self.epoch,component=self.component,collector=self.s.controller,post=1)
