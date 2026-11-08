@@ -59,7 +59,7 @@ class Future1008(Continuity):
         policy=dict(version='reviews-report-v1',authority='Original fictional framework report right',expires=at('10:44:25'),
             task='reviews-integrator',task_sha256=digest(self.config['tasks']['reviews-integrator']),
             reports=[dict(reference=self.report['reference'],sha256=digest(self.report)),
-                dict(reference='fictional-overlimit-report',sha256=digest({**self.report,'reference':'fictional-overlimit-report'}))])
+                dict(reference='another-future-report',sha256=digest({**self.report,'reference':'another-future-report'}))])
         original=processing.select
         def select(runtime,boards,selection):
             selection['software_admission']=dict(authority='Original fictional QA admission',max_packages=2,
