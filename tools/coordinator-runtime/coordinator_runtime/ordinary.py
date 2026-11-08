@@ -363,7 +363,7 @@ async def perform(store, board, job):
     if (attempt['controller'] != store.controller or attempt['exit'] != 0 or attempt['capture'] != 'complete'
             or attempt['begin'] is None or attempt['ended'] is None or attempt['collected'] is None
             or attempt['error'] or answer['semantic'] != 'DONE' or answer['unknowns'] or answer['failures']
-            or not tools.get('complete') or tools.get('nonzero_completions')
+            or not tools.get('complete') or tools.get('nonzero_completions') or tools.get('unknown_types')
             or any(item.get('status') == 'failed' for item in tools.get('items', []))):
         raise Refusal('original fully collected worker and known preparation required')
     from .resource_scopes import blocked

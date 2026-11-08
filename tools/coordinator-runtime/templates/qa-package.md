@@ -29,6 +29,19 @@ and current source, grant, resource and original-report guards pass. This return
 does not itself qualify the whole package. Both ordinary adapters belong to the
 same unchanged admission and package; execute QA once.
 
+When the runtime selects `ORDINARY PREPARATION ONLY`, the model's execution-phase
+task is read-only preparation. The owning service performs the admitted adapter
+after original collection. In a new preparation report, reserve `unknowns` for
+unresolved facts needed to complete that preparation. Preserve future service
+preflight/export/runner/readback, later independent acceptance/Branch/cleanup and
+unrelated historical obligations in `findings` as
+`{kind:"ordinary-pending-stage",stage:"<owning stage>",evidence:{ref:"...",text:"..."}}`,
+including actual owner/custody and full uncertainty. This reporting distinction
+grants no authority, clears no hold and does not establish those outcomes. If the
+current admission requires an unresolved fact for preparation itself, it remains
+in `unknowns` and preparation is incomplete. Never rewrite or recategorize an
+existing original return; the collector retains it and its original unknowns.
+
 In that selected sequence, final cleanup follows the actual Branch CAS/readback
 and separate independent acceptance. It waits for ALL admitted ordinary results,
 including QA and Branch, and conserves the entire Branch return containing the
