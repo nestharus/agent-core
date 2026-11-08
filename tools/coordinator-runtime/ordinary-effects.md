@@ -251,3 +251,48 @@ resources, source authority and a substantive nonempty readback expectation.
 Public tool identity grants none of those rights. Unpinned external scripts and
 out-of-scope discovery roots refuse before launch. Script bodies keep their
 existing 4MiB evidence-file bound; larger installed interpreters do not raise it.
+
+
+### Case-Root disposition of software read-only preparation
+
+`software-preparation-recovery-basis CAPABILITY JOB --token TOKEN --attempt ATTEMPT`
+returns an exact bounded evidence record only for a current software-admitted
+QA preparation with its accepted branch Root equal to the genuine Work issuer.
+It uses the current processing boards, original software grant/prospective job
+birth, immutable applied admission, frozen task/resource policy and selected
+operation-relative QA account. It checks the actual original complete END0 and
+collector, kernel readOnly/networkAccess:false, positively observed ephemeral
+owner exit, every known successful command tool, no other task/unknown original,
+no ordinary/routine/publication intent, outgoing work/result or branch turn,
+and current source/ref/tree, leases and overlap guards. A report's assertion or
+one missing intent row cannot establish this disposition.
+
+The genuine Work issuer can submit
+`request-software-preparation-recovery CAPABILITY JOB --token TOKEN --attempt ATTEMPT --receipt FILE`.
+FILE has the existing `mode:"remaining-work"`, nonempty `reason`, bounded
+`evidence` list and `remaining` target/WHY, plus
+`software_preparation:{basis:EXACT_RETURNED_OBJECT,fact:"captured-read-only-preparation-no-ordinary-effect"}`.
+This is an explicit NEW preparation encounter. The full original report and
+all its unknowns remain immutable. The transaction records only this captured
+preparation's bounded effect disposition and queues the existing recovery
+request; a refusal rolls back both. It does not launch a model or ordinary tool.
+
+The existing actual collector consumes the request, runs the existing bounded
+diagnosis and handoff, and launches the separately collected remaining attempt.
+Its full prior context/result, original session and native_resume:false remain
+in the handoff. The existing 909 preparation contract governs the new answer.
+Actual adapter execution/readback and independent semantic acceptance remain
+separate. The legacy hold is bypassed only for this exact revalidated factual
+disposition when the existing resource checker already permits the operation.
+The native owner's recovery and reconcile-effects APIs retain their checks.
+
+**Transition limit:** this route deliberately refuses a revoked original
+capability/epoch, expired original resource lease, changed frozen admission or
+task, mismatched current grant/source, foreign/unaccounted writer or unknown
+effect. A new processing service and retained source selection do not by
+themselves reauthorize a frozen older job. In particular, the historic 79f1/fdaf
+case's revoked 11b3/cae4 cannot use this API as an activation route. No supported
+same-job cross-capability/effect-epoch transition is added here; that is explicit
+remaining work for the authority owner, with original births/counters/expiry
+and admission conserved. This capability does not establish current-case
+operability after those revocations or authorize any invocation of old rights.
