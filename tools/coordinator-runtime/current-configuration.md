@@ -363,7 +363,13 @@ The compatible shape deliberately requires additional pins beyond authority
 strings: exact regular tracked files at one immutable commit in a standalone
 repository, and/or explicitly supplied safe report/procedure files. For reports
 alone use `source:null`, `components:{}`, `repository_reads:[]`. Roots equal these
-files exactly (maximum 64, 1 MiB each, 4 MiB total per task); directories, Git
+files exactly (at most the current configuration's `limits.max_files`, 1 MiB
+each, 4 MiB total per task). A simultaneous prospective capacity choice cannot
+raise this representation bound. This is a permission-list bound, not a file
+reservation or a change to charged residency budgets. Retain historical source
+selections in the immutable configuration history and their exact old file
+permissions separately from the one newly selected current-purpose source
+object; the old commit is not proof for the new source. Directories, Git
 metadata, startup AGENTS/WORK_LOG, profile/excluded/ancestor and symlink paths
 are refused before working-file body acquisition. Immutable tracked blobs are
 checked first; this does not read through a working-file alias. A linked worktree currently requires

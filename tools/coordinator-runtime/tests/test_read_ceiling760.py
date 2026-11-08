@@ -181,3 +181,73 @@ class ReadCeiling(unittest.TestCase):
         self.report.write_text('safe supplied procedure\n')
         self.f.conn.execute("UPDATE coordinator_grants_v1 SET owner='foreign' WHERE role='Branch'")
         with self.assertRaises(Refusal): configuration.basis(self.s,self.f.boards,value,['bp'])
+
+    def current_module_entry(self, module_root=Path('/src/tools/coordinator-runtime/coordinator_runtime')):
+        # The entire current production module set, not 65 dummy list entries.
+        modules = sorted(module_root.glob('*.py'))
+        self.assertEqual(len(modules), 65)
+        files = {}
+        for module in modules:
+            relative = 'runtime/' + module.name
+            target = self.repo/relative
+            target.parent.mkdir(exist_ok=True)
+            target.write_bytes(module.read_bytes())
+            files[relative] = self.sha(target)
+        self.git('add', 'runtime')
+        self.git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                 '-c', 'commit.gpgsign=false', 'commit', '-qm', 'whole current production modules')
+        entry = copy.deepcopy(self.entry)
+        entry['configuration'] = digest(self.s.config)
+        entry['source'] = {'repository':str(self.repo), 'commit':self.git('rev-parse','HEAD').strip(),
+                           'files':files}
+        entry['components'] = {'runtime':list(files)}
+        # Preserve the old physical permission and historical safe procedure.
+        old = str(self.repo/'component.py')
+        entry['safe_files'][old] = self.sha(Path(old))
+        entry['read_roots'] = [*(str(self.repo/p) for p in files), *entry['safe_files']]
+        return entry
+
+    def test_whole_current_modules_and_historical_permissions_through_basis_apply(self):
+        historical = self.draft()
+        basis = configuration.basis(self.s, self.f.boards, historical, ['bp'])
+        configuration.apply(self.s, self.f.boards, historical,
+                            {'basis':basis, 'authority':'fictional historical selection'})
+        self.s.config = historical
+        for board in self.f.boards.values():
+            board.config = historical; board.selected = historical['roles'][board.role]
+        history = self.s.rows('SELECT * FROM configuration_transitions')
+        grants = [tuple(r) for r in self.f.conn.execute('SELECT * FROM coordinator_grants_v1')]
+        entry = self.current_module_entry()
+        value = self.draft(entry)
+        task = value['tasks']['bp']
+        self.assertTrue(set(historical['tasks']['bp']['effect_authority']['read_roots'])
+                        <= set(task['effect_authority']['read_roots']))
+        self.assertTrue(set(entry['read_roots']) <= set(task['scope_roots']))
+        self.assertEqual(value['limits'], historical['limits'])
+        basis = configuration.basis(self.s, self.f.boards, value, ['bp'])
+        configuration.apply(self.s, self.f.boards, value,
+                            {'basis':basis, 'authority':'fictional whole current source selection'})
+        self.assertEqual(self.s.rows('SELECT * FROM configuration_transitions WHERE position=1'), history)
+        self.assertEqual(grants, [tuple(r) for r in self.f.conn.execute('SELECT * FROM coordinator_grants_v1')])
+        selected = json.loads(configuration.latest(self.s)['configuration'])
+        self.assertEqual(selected['prospective_scope_selection']['read_ceiling_extensions']['bp'], entry)
+        self.assertEqual(historical['prospective_scope_selection']['read_ceiling_extensions']['bp']['source']['commit'],
+                         self.head)
+
+    def test_whole_extent_above_current_budget_refuses_even_with_capacity_option(self):
+        entry = self.current_module_entry()
+        self.s.config['limits']['max_files'] = len(entry['read_roots']) - 1
+        entry['configuration'] = digest(self.s.config)
+        with self.assertRaisesRegex(Refusal, 'bounded exact material lists'):
+            self.draft(entry, capacity={'authority':'fictional prospective capacity choice',
+                'evidence':'cannot enlarge the current read representation',
+                'limits':{'max_files':len(entry['read_roots'])}})
+
+    def test_material_byte_bounds_and_malformed_lists_still_refuse(self):
+        for bad in [None, {}, 'files', [], [str(self.report),str(self.report)], [1]]:
+            with self.subTest(roots=bad), self.assertRaises(Refusal):
+                self.draft({**self.entry, 'read_roots':bad})
+        self.report.write_bytes(b'x' * (1048576 + 1))
+        entry = copy.deepcopy(self.entry)
+        entry['safe_files'][str(self.report)] = self.sha(self.report)
+        with self.assertRaisesRegex(Refusal, 'bounded acquisition'): self.draft(entry)

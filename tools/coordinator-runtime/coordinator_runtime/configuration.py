@@ -311,6 +311,10 @@ def read_ceiling_extensions(runtime, original, value, entries):
         raise Refusal('read ceiling extension requires the current enrolled runtime')
     assert_current(runtime)
     exclusions = value.get('artifact_exclusions', [])
+    # Representation uses the already selected finite file budget, never a
+    # capacity increase requested alongside this draft. Byte acquisition keeps
+    # its independent, stricter per-file and aggregate bounds below.
+    max_files = original['limits']['max_files']
     def path(text, *, metadata=False):
         p = root(text, exclusions, metadata=False)
         if (str(p) != text or p.anchor == '//' or
@@ -338,7 +342,7 @@ def read_ceiling_extensions(runtime, original, value, entries):
         required_text(entry['authority'], 'attributed Work read ceiling choice', 4000)
         required_text(entry['source_authority'], 'attributed concrete source-owner binding', 4000)
         roots, safe_files, source = entry['read_roots'], entry['safe_files'], entry['source']
-        if (not isinstance(roots, list) or not 1 <= len(roots) <= 64
+        if (not isinstance(roots, list) or not 1 <= len(roots) <= max_files
                 or not all(isinstance(p, str) for p in roots) or len(set(roots)) != len(roots)
                 or not isinstance(safe_files, dict) or not isinstance(entry['components'], dict)
                 or not isinstance(entry['repository_reads'], list)):
@@ -379,7 +383,7 @@ def read_ceiling_extensions(runtime, original, value, entries):
                 files[absolute] = pin
         elif entry['components'] or entry['repository_reads']:
             raise Refusal('repository identities/components need exact immutable source material')
-        if set(roots) != set(files) or len(files) > 64:
+        if set(roots) != set(files) or len(files) > max_files:
             raise Refusal('read roots must equal the exact pinned material files')
         for p in roots:
             path(p)
