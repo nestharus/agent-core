@@ -485,7 +485,9 @@ class Dispatcher:
             if self.store.clock()-start>=self.config['deadlines']['task']:
                 self.store.hold_job(job_id,'canonical publication lock unavailable within task budget')
             else:
-                with self.store.tx():self.store.db.execute('UPDATE attempts SET detail=? WHERE id=?',(encode({**detail,'canonical_lock_wait_since':start}),row['id']))
+                with self.store.tx():
+                    from .oneoff import advance
+                    advance(self.store, row['id'], {'detail': encode({**detail,'canonical_lock_wait_since':start})}, 'publication lock wait')
             self.store.record_operational_error(job_id,{'error':'canonical snapshot lock busy; original collected worker retained'},job['role'],'canonical-lock-wait')
         except (Refusal,OSError) as exc:
             self.runtime_errors[job_id] = str(exc)
@@ -701,7 +703,8 @@ class Dispatcher:
                 attempt = self.store.attempt(current['active_attempt'])
                 detail = json.loads(attempt['detail'])
                 detail.pop('ordinary_awaiting_acceptance', None)
-                self.store.db.execute('UPDATE attempts SET detail=? WHERE id=?', (encode(detail), attempt['id']))
+                from .oneoff import advance
+                advance(self.store, attempt['id'], {'detail': encode(detail)}, 'ordinary acceptance resumed')
             self.try_finish(current['id'])
         except local_integration.SourceAdmissionRefusal as exc:
             # Retain the durable awaiting marker even when it is a dependency
@@ -813,8 +816,10 @@ class Dispatcher:
     async def run_model(self, attempt, prompt, spec, schema):
         try:
             self.store.authorize_launch(attempt)
+            from .oneoff import prepare
+            prepare(self.store, attempt, prompt, spec, schema)
         except Exception as exc:
-            return {"exit": None, "result": None, "error": "launch authority refused: "+str(exc)[:500],
+            return {"exit": None, "result": None, "error": "launch/recovery preparation refused: "+str(exc)[:500],
                     "capture": "not-started", "cleanup": "no-session-created",
                     "detail": {"known_not_started": True, "resume_disposition": "unavailable-before-owned-start"}}
         return await self.models.run(self.store, attempt, prompt, spec, schema)

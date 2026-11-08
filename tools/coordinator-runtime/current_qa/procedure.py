@@ -27,8 +27,16 @@ PROTECTIONS = {
                                        'test_retained329', 'test_windows76'],
     'collection-and-currentness': ['test_post_await_admission743', 'test_ordinary_boundaries749', 'test_current_collection1093', 'test_current_relationships1098'],
     'independent-same-package-receivers': ['test_qa_branch672'],
+    'whole-owned-lifecycle': ['test_oneoff1077.Recovery', 'test_correction1092'],
+    'ordinary-journal-failure-and-finite-progress': ['test_final_composition1107'],
 }
 SELECTORS = sorted({s for group in PROTECTIONS.values() for s in group})
+HISTORICAL_UNSELECTED = {
+    'test_windows76.Controls.test_recurring_worker_fair_held_prefix_and_cli_wiring':
+        '1093/1107 finite eligible progress contract has no two-visit stride; original failed0/16 unchanged; '
+        'test_final_composition1107.FiniteFairness1107.test_full_finite_backlog_original_END_conservation_and_CLI '
+        'covers complete finite membership, original numeric END, held state, conserved rows and CLI wiring',
+}
 SEAMS = ['fictional principals, Board membership, clocks and native/model/collector receipts',
          'NULL-native configuration/schema and pool allocation in existing test fixtures',
          'owned release copies measured by production release(); semantic approval is fictional',
@@ -154,7 +162,7 @@ def prepare(spec):
     require(modules and 'tools/coordinator-runtime/coordinator_runtime/historical_admission.py' in modules,
             'complete growing runtime required')
     for name in SELECTORS:
-        require('tools/coordinator-runtime/tests/'+name+'.py' in spec['files'], 'missing protection input: '+name)
+        require('tools/coordinator-runtime/tests/'+name.split('.')[0]+'.py' in spec['files'], 'missing protection input: '+name)
     require(set(spec['limits']) == {'seconds', 'capture_bytes', 'bytes', 'entries'}, 'exact finite admission required')
     require(all(type(n) is int and n > 0 for n in spec['limits'].values()), 'positive finite limits required')
     resources(spec)
@@ -208,10 +216,10 @@ def sandbox(m):
     argv += ['--proc', '/proc', '--dev', '/dev', '--ro-bind', c, c, '--ro-bind', c, '/src',
              '--ro-bind', c, '/actualsrc', '--ro-bind', d, d, '--ro-bind', d, '/procedure', '--ro-bind', d+'/sdk', '/sdk',
              '--bind', m['output'], '/fixtures', '--dir', '/tmp', '--dir', '/home', '--clearenv']
-    env = dict(PATH='/usr/bin:/bin', HOME='/fixtures', TMPDIR='/fixtures/tmp', PYTHONDONTWRITEBYTECODE='1',
+    env = dict(PATH='/usr/bin:/bin', HOME='/fixtures/home', XDG_CONFIG_HOME='/fixtures/config', TMPDIR='/fixtures/tmp', PYTHONDONTWRITEBYTECODE='1',
                QA629_FIXTURES='/fixtures/cases', RFQ673_FIXTURES='/fixtures/releases',
                CAPACITY48_FIXTURES='/fixtures/capacity48',
-               COORDINATOR_ORDINARY_FIXTURES='/fixtures/ordinary-effects33', COORDINATOR_TEST_BOARD_LIBRARY='/sdk',
+               COORDINATOR_ORDINARY_FIXTURES='/fixtures/ordinary-effects33', COORDINATOR_TEST_BOARD_LIBRARY='/src/tools/message-board',
                PYTHONPATH='/procedure:/sdk:/src/tools/coordinator-runtime:/src/tools/coordinator-runtime/tests')
     for key, value in env.items():
         argv += ['--setenv', key, value]
@@ -352,7 +360,7 @@ def execute(directory, expected):
     out = Path(m['output'])
     out.mkdir(mode=0o700)
     write(out/'OWNER.json', dict(run_id=m['run_id'], manifest=expected))
-    for name in ('tmp', 'cases', 'releases'):
+    for name in ('tmp', 'home', 'config', 'cases', 'releases'):
         (out/name).mkdir()
     record = collect(sandbox(m), out, m['limits']['seconds'], m['limits']['capture_bytes'])
     record.update(run_id=m['run_id'], manifest=expected)
@@ -370,6 +378,7 @@ def validate_outcomes(m, r, events, expected):
     ids = events[0]['ids']
     require(ids and len(ids) == len(set(ids)), 'missing/duplicate selected IDs')
     require(events[0]['selectors'] == SELECTORS, 'incomplete current protection selection')
+    require(events[0].get('historical_unselected') == HISTORICAL_UNSELECTED, 'unbound historical applicability disposition')
     require([e['id'] for e in events if e['kind'] == 'start'] == ids, 'missing/duplicate actual starts')
     require([e['id'] for e in events if e['kind'] == 'success'] == ids, 'failures/errors/skips/unexecuted controls')
     require(len(events) == 2+2*len(ids) and events[-1]['tests'] == len(ids), 'incomplete or extra outcomes')

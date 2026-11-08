@@ -200,12 +200,13 @@ async def tool(store, attempt, label, argv, cwd, p, *, output_file=None, maximum
     if argv[0] == p['git']:
         env = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
         env.update(GIT_CONFIG_GLOBAL='/dev/null', GIT_CONFIG_NOSYSTEM='1', GIT_TERMINAL_PROMPT='0')
+    record = {'label': label, 'argv': argv, 'cwd': cwd, 'pid': None, 'collector': store.controller,
+              'started': store.clock(), 'exit': None, 'complete': False}
     process = await asyncio.create_subprocess_exec(*argv, cwd=cwd, env=env, stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-    record = {'label': label, 'argv': argv, 'cwd': cwd, 'pid': process.pid, 'collector': store.controller,
-              'started': store.clock(), 'exit': None, 'complete': False}
-    append_tool(store, attempt, record)
     try:
+        record['pid'] = process.pid
+        append_tool(store, attempt, record)
         bound = p['max_output'] if maximum is None else maximum
         stdout, stderr = await asyncio.wait_for(capture_process(process, bound), p['timeout'])
         record.update(ended=store.clock(), exit=process.returncode)
@@ -230,12 +231,23 @@ async def tool(store, attempt, label, argv, cwd, p, *, output_file=None, maximum
         record.update(exit=code, complete=False, capture_error=type(exc).__name__ + ': ' + str(exc))
         if code is not None:
             record['ended'] = store.clock()
-        append_tool(store, attempt, record)
+        journal_collection_failure(store, attempt, record)
         if isinstance(exc, asyncio.CancelledError):
+            exc.collection_record = record
             raise
-        raise Refusal('ordinary tool/capture interrupted; original intent/resources retained, no automatic retry') from exc
+        failure = Refusal('ordinary tool/capture interrupted; original intent/resources retained, no automatic retry; '
+                          'original END='+str(record['exit'])+'; journal='+record.get('journal_error', 'recorded'))
+        failure.collection_record = record
+        raise failure from exc
     append_tool(store, attempt, record)
     return record
+
+
+def journal_collection_failure(store, attempt, record):
+    try:
+        append_tool(store, attempt, record)
+    except Exception as exc:
+        record['journal_error'] = type(exc).__name__+': '+str(exc)
 
 
 async def stop_and_wait(process):
@@ -699,7 +711,8 @@ def wait_for_acceptance(store, job):
     with store.tx():
         detail = json.loads(attempt['detail'])
         detail['ordinary_awaiting_acceptance'] = True
-        store.db.execute('UPDATE attempts SET detail=? WHERE id=?', (encode(detail), attempt['id']))
+        from .oneoff import advance
+        advance(store, attempt['id'], {'detail': encode(detail)}, 'ordinary acceptance/qualification')
 
 
 def awaiting_acceptance(store, job):
@@ -714,7 +727,8 @@ async def qualification(store, job):
         attempt = store.attempt(job['active_attempt'])
         detail = json.loads(attempt['detail'])
         detail.pop('ordinary_qualification', None)
-        store.db.execute('UPDATE attempts SET detail=? WHERE id=?', (encode(detail), attempt['id']))
+        from .oneoff import advance
+        advance(store, attempt['id'], {'detail': encode(detail)}, 'ordinary acceptance/qualification')
     rows = accepted_runs(store, job['package'])
     if not rows:
         raise Refusal('actual independent acceptance missing for one or more admitted ordinary task outcomes')
@@ -744,7 +758,8 @@ async def qualification(store, job):
         attempt = store.attempt(job['active_attempt'])
         detail = json.loads(attempt['detail'])
         detail['ordinary_qualification'] = {'acceptances': digest([r['acceptance'] for r in rows]), 'checked': store.clock()}
-        store.db.execute('UPDATE attempts SET detail=? WHERE id=?', (encode(detail), attempt['id']))
+        from .oneoff import advance
+        advance(store, attempt['id'], {'detail': encode(detail)}, 'ordinary acceptance/qualification')
 
 
 def qualification_current(store, job):

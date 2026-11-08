@@ -50,6 +50,9 @@ class Runtime:
     def rows(self, sql, args=()):
         return [dict(r) for r in self.db.execute(sql, args)]
 
+    def event(self, identity):
+        return json.loads(self.one('SELECT payload FROM events WHERE id=?', (identity,))['payload'])
+
     def outbox(self, name='fictional-control', kind='alert'):
         self.db.execute('INSERT INTO outboxes VALUES(?,?,?,?,?,?,?,?,?,?)',
                         (name, 'Work', 'fictional-producer', 'Work', kind, 'settled', encode({'reason': name}), 'fictional-input', None, 'pending'))

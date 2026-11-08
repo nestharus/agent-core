@@ -50,7 +50,7 @@ class ProtocolTests(unittest.TestCase):
     def test_null_package_qa_is_offered_control_routes_not_execution(self):
         source = self.event('fictional-qa-control', 'QA', 'qe', queued=False)
         prompt = classifier_prompt(source, self.runtime.config)
-        choices = json.loads(prompt.split('ALLOWED_TASKS=', 1)[1].split('\nEVENT=', 1)[0])
+        choices = json.loads(prompt.split('ALLOWED_TASKS=', 1)[1].splitlines()[0])
         self.assertEqual(set(choices), {'@control', '@unresolved'})
         for route in choices:
             answer = {'event_id': source['id'], 'task': route, 'package': None, 'reason': 'fictional meaningful control'}

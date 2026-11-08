@@ -48,7 +48,8 @@ class Base(unittest.TestCase):
     def setUp(self):
         self.area = Path(tempfile.mkdtemp(dir='/fixtures'))
         self.config = engine_config(self.area)
-        self.config.update(canonical_publication={'method':'retention-same-inode-v1','library':'/src/tools/coordinator-runtime/tests/fixture_snapshot'},
+        from support import fixture_publication
+        self.config.update(canonical_publication=fixture_publication(),
                            board_library='/src/tools/message-board', recheck_seconds=.01)
         # Keep reservation headroom for an interrupted publication and its held
         # result. Without an explicit artifact ceiling the reserve defaults to
@@ -74,7 +75,8 @@ class Base(unittest.TestCase):
                           'retained_events':[], 'recover_controls':{}, 'future_intake':True,
                           'tasks':list(self.config['tasks']), 'service':{'reviews':{},'legacy_resources':{},'max_inflight':5}}
         self.store.db.execute('INSERT INTO processing_capabilities VALUES(?,?,?,1000,NULL,0)', ('fictional-current-capability', encode(self.selection), 'fictional-Work'))
-        self.store.processing = processing.Access(self.store, 'fictional-current-capability')
+        self.store.processing = processing.Access(self.store, 'fictional-current-capability',
+                                                   {r: Board(self.store, r) for r in self.config['roles']})
         self.board = Board(self.store)
 
     def configure(self):
@@ -118,7 +120,9 @@ class Catalog(Base):
         self.peers = [self.area/('inventory-'+str(i)) for i in range(6)]
         for i,p in enumerate(self.peers):p.write_text('peer '+str(i)+'\n')
         self.task = self.config['tasks']['wi']
-        self.task.update(effects='owner-reconcile',routine_completion={'kind':bounded_log.KIND,
+        self.task.update(effects='owner-reconcile',
+            templates=['/not-mounted/AGENTS.md','/not-mounted/WORK_LOG.md'],
+            routine_completion={'kind':bounded_log.KIND,
             'targets':[*(str(p) for p in self.peers), str(self.log)],
             'bounded_log':{'target':str(self.log),'max_lines':12,'max_bytes':8192,'max_entry_bytes':16384}})
         self.task['effect_authority']['write_roots'] = self.task['routine_completion']['targets']

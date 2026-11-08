@@ -55,7 +55,7 @@ class CorrectionTests(unittest.TestCase):
           CREATE TABLE coordinator_grants_v1(id,board_id,role,owner,actor,runtime,runtime_dev,runtime_ino,issued_by,authority,revoked);
           CREATE TABLE coordinator_software_grants_v1(grant_id,configuration);
           CREATE TABLE coordinator_software_deliveries_v1(delivery PRIMARY KEY,source_grant,receiver_grant,event,payload);
-          CREATE TABLE coordinator_deliveries_v1(id PRIMARY KEY,grant_id,actor,producer,recipient,payload,notice,post,transport_started);
+          CREATE TABLE coordinator_deliveries_v1(id PRIMARY KEY,grant_id,actor,producer,recipient,payload,notice,post,transport_started,kind);
           CREATE TABLE notification_outbox(notification_id PRIMARY KEY,route,delivery_state);
           CREATE TABLE posts(seq PRIMARY KEY);
         ''')
@@ -130,9 +130,9 @@ class CorrectionTests(unittest.TestCase):
         self.runtime.db.execute("INSERT INTO outboxes(id,role,producer,recipient,kind,required,payload,event,job,state,created) VALUES(?,?,?,?,?,?,?,?,?,'pending',1000)",
                                 ('fictional-delivery', 'Work', 'fictional-producer', 'Branch', 'work', 'settled', payload, 'fictional-work', job['id']))
         outbox = self.runtime.one("SELECT * FROM outboxes WHERE id='fictional-delivery'")
-        conn.execute('INSERT INTO coordinator_deliveries_v1 VALUES(?,?,?,?,?,?,?,?,0)',
+        conn.execute('INSERT INTO coordinator_deliveries_v1 VALUES(?,?,?,?,?,?,?,?,0,?)',
                      (outbox['id'], 'fictional-grant-Work', self.runtime.config['actor'], outbox['producer'],
-                      'fictional-logical-Branch', payload, 1, 12))
+                      'fictional-logical-Branch', payload, 1, 12, outbox['kind']))
         conn.execute("INSERT INTO notification_outbox VALUES(1,'managed','managed_pending')")
         # Positive source processing is deliberately substituted; no fabricated
         # native worker/session or assertion of substantive model processing.
@@ -185,7 +185,7 @@ class CorrectionTests(unittest.TestCase):
         self.events.append(original)
         conn.execute('DELETE FROM coordinator_software_deliveries_v1')
         self.runtime.db.execute("UPDATE outboxes SET kind='result',payload=? WHERE id=?", (encode(original), outbox['id']))
-        conn.execute('UPDATE coordinator_deliveries_v1 SET payload=? WHERE id=?', (encode(original), outbox['id']))
+        conn.execute("UPDATE coordinator_deliveries_v1 SET payload=?,kind='result' WHERE id=?", (encode(original), outbox['id']))
         self.bind(boards)
         selected = self.runtime.one('SELECT * FROM outboxes WHERE id=?', (outbox['id'],))
         with patch.object(boards['Work'], '_software_job_grant', return_value=boards['Work']._grant(conn, self.runtime)), \

@@ -124,7 +124,8 @@ def reconcile(store, board, job):
     local=readiness.assess(store,attempt)
     with store.tx():
         detail={**json.loads(attempt['detail']),'local_readiness':local}
-        store.db.execute('UPDATE attempts SET detail=? WHERE id=?',(encode(detail),attempt['id']))
+        from .oneoff import advance
+        advance(store, attempt['id'], {'detail': encode(detail)}, 'routine local readiness')
     if bounded_log.selected(task) and not tools['items']:
         return False  # A real bounded entry is a duty, never an invented no-op.
     if not tools['items']:

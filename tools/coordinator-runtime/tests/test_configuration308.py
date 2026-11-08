@@ -256,7 +256,10 @@ class CurrentConfiguration(unittest.TestCase):
     def test_selectors_scopes_and_unknown_effect_policy(self):
         self.assertEqual(self.value['operator_cli'], '/src/tools/coordinator-runtime/coordinator')
         self.assertEqual(self.value['board_library'], '/src/tools/message-board')
-        self.assertEqual(self.value['canonical_publication'], self.original['canonical_publication'])
+        old = self.original['canonical_publication']
+        expected_pins = {name: __import__('hashlib').sha256((Path(old['library'])/name).read_bytes()).hexdigest()
+                         for name in ('queue_transport.py','active_listener.py','catalog.py','board_store.py','retention.py')}
+        self.assertEqual(self.value['canonical_publication'], {**old, 'source_pins': expected_pins})
         self.assertEqual(self.value['control_receive']['instructions'], '/src/tools/coordinator-runtime/templates/coordinator-receive.md')
         task = self.value['tasks']['bi']
         scope = {'cwd': '/src', 'read_roots': ['/src/tools/coordinator-runtime'], 'write_roots': [],

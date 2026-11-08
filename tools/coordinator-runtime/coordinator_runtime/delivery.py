@@ -93,6 +93,19 @@ class DeliveryJournal:
         for index, handoff in enumerate(handoffs):
             self._task_handoff(job, attempt, task, result, handoff, index)
 
+    def _record_failure_normalization(self, attempt, original, view):
+        if view == original:
+            return attempt
+        detail = {**json.loads(attempt['detail']), 'contract_normalization': {
+            'field': 'category', 'original': original['category'], 'projection': view['category'],
+            'basis': 'blocked is an explicit non-DONE blocker alias; original result retained'}}
+        if encode(detail) == attempt['detail']:
+            return attempt
+        from .oneoff import advance
+        advance(self, attempt['id'], {'detail': encode(detail)},
+                'failure-delivery-contract-normalization')
+        return self.attempt(attempt['id'])
+
     @_execution_delivery
     def failure_delivery(self, job, attempt, task, reason):
         """Informative custody can progress while execution/capture/effects stay held."""
@@ -101,12 +114,7 @@ class DeliveryJournal:
         try:
             from .contracts import task_result
             view=task_result(original)
-            if view!=original:
-                detail={**json.loads(attempt['detail']),'contract_normalization':{
-                    'field':'category','original':original['category'],'projection':view['category'],
-                    'basis':'blocked is an explicit non-DONE blocker alias; original result retained'}}
-                self.db.execute('UPDATE attempts SET detail=? WHERE id=?',(encode(detail),attempt['id']))
-                attempt={**attempt,'detail':encode(detail)}
+            attempt = self._record_failure_normalization(attempt, original, view)
         except Refusal as exc:
             errors.append(str(exc));view={'invalid_result':original}
         informative={'disposition':'incomplete; execution/effects/source remain held',

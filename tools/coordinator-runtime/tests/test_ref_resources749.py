@@ -11,7 +11,7 @@ from test_ordinary_effects import OrdinaryEffects
 class RefResources(OrdinaryEffects):
     async def asyncSetUp(self):
         await super().asyncSetUp()
-        self.git('remote', 'add', 'origin', 'https://example.invalid/owned-composition749')
+        self.git('remote', 'set-url', 'origin', 'https://example.invalid/owned-composition749')
 
     def keys(self, source='refs/heads/source', destination='refs/heads/destination'):
         device, inode = branches.repository_identity(str(self.repo))

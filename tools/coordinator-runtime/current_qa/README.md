@@ -106,3 +106,30 @@ exact export, with external deadlines covering load, execution and collection.
 Keep every attempted outcome and capture. Passing focused controls, byte binding,
 imports and this map alone do not establish adequate current protection,
 independent acceptance, ordinary activation or completion of the wider rollout.
+
+Decision1107 composition retains the current source corrections and the released
+one-off lifecycle input in one candidate. Whole lifecycle qualification includes
+the exact admitted eleven correction1092 controls (committed without changing
+their bodies) and the existing twenty-six Recovery controls. PublicInterfaces
+retains its separate earlier scope; this offline procedure does not run its
+installed CLI help/schema checks.
+
+Ordinary post-spawn initial journal failures are protected by the original
+collector. Budget, SQLite insertion, and transaction-failure controls observe
+the same original's numeric END before test cleanup, retain intent/resource
+holds and reject semantic acceptance. A still-unavailable journal is explicit
+exception-carried collection debt, not a fabricated durable record.
+
+Fixture maintenance follows the independent current contracts: exact five-file
+retention closure, current service-role mapping, original payload accessor,
+delivery kind correlation, separately labelled prompt fields, declared Git
+origin, due-time alert cadence, and owned HOME/config namespaces. The release
+hashing oracle remains its independently enumerated full path/byte set on every
+call; no fixed historical file count is replaced with observed output.
+
+The unchanged historical two-visit stride assertion is explicitly unselected
+with its original failed result retained. Its current counterpart traverses the
+whole finite stable backlog through available returning workers, verifies every
+original numeric END, conserved held alerts and CLI wiring. No sustained-arrival
+or permanently busy progress guarantee is inferred. All selection and source
+relationships remain bound into each actual procedure and separate readback.

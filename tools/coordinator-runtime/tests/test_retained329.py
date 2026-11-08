@@ -65,8 +65,14 @@ class Retained(unittest.TestCase):
         self.no_body(lambda:custody.frozen_body(self.s, self.f.sha, path=self.f.path))
         witness = {'path':self.f.path, 'sha256':self.f.sha, 'custody':'artifact_blobs'}
         self.no_body(lambda:custody.materialize(self.s, [{'artifact_witnesses':[witness]}], 'fiction-input'))
-        (self.s.home/'artifacts'/'fiction-publication').mkdir(parents=True)
-        self.no_body(lambda:publication.prepare(self.s, 'fiction-publication',
+        # Construct a current owned job/attempt through the fixture's real
+        # reservation path before testing publication's body-access boundary.
+        from coordinator_runtime.contracts import digest
+        self.f.selection['basis']['configuration'] = digest(self.s.config)
+        self.s.db.execute('UPDATE processing_capabilities SET selection=? WHERE id=?',
+                          (encode(self.f.selection), 'fictional-current-capability'))
+        _, attempt = self.f.job('Work', 'wi')
+        self.no_body(lambda:publication.prepare(self.s, attempt,
                      {self.f.path:{'exists':True, 'sha256':self.f.sha}}))
         self.assertFalse((self.s.home/'artifacts'/'fiction-input').exists())
         # The older snapshot representation must carry the same stage target.

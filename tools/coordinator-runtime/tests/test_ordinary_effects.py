@@ -36,6 +36,7 @@ class OrdinaryEffects(unittest.IsolatedAsyncioTestCase):
         self.repo = self.area / 'repo'
         self.repo.mkdir()
         self.git('init', '--initial-branch=source')
+        self.git('remote', 'add', 'origin', 'https://fixture.invalid/owned-source')
         (self.repo / 'source.txt').write_text('first\n')
         self.git('add', 'source.txt')
         self.git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-m', 'owned first')
@@ -288,7 +289,11 @@ class OrdinaryEffects(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(self.store.reserve())
         self.now += 1000
         first = self.store.emit_alerts()
+        originals = self.store.rows('SELECT * FROM alerts ORDER BY id')
+        self.assertEqual(self.store.emit_alerts(), [])
+        self.now += self.config['deadlines']['alert_interval']
         second = self.store.emit_alerts()
+        self.assertTrue(all(row in self.store.rows('SELECT * FROM alerts ORDER BY id') for row in originals))
         self.assertTrue(first)
         self.assertTrue(second)
         self.assertTrue({a['id'] for a in first}.isdisjoint({a['id'] for a in second}))

@@ -9,7 +9,7 @@ import sys
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
-from procedure import require, sha, SELECTORS
+from procedure import require, sha, SELECTORS, HISTORICAL_UNSELECTED
 
 
 def emit(stream, kind, **values):
@@ -113,14 +113,15 @@ def main():
 
 
 def run(m):
+    os.environ['ONEOFF1077_FIXTURES'] = '/fixtures/cases'
     initialize_windows()
     suite = unittest.defaultTestLoader.loadTestsFromNames(SELECTORS)
     require(not unittest.defaultTestLoader.errors, 'selected current tests failed to load')
-    tests = {test.id(): test for test in flatten(suite)}
+    tests = {test.id(): test for test in flatten(suite) if test.id() not in HISTORICAL_UNSELECTED}
     for rel in m['runtime_modules']:
         importlib.import_module('coordinator_runtime.'+Path(rel).stem)
     events = Path('/fixtures/events.jsonl').open('x')
-    emit(events, 'scope', ids=sorted(tests), selectors=SELECTORS, seams=m['seams'])
+    emit(events, 'scope', ids=sorted(tests), selectors=SELECTORS, seams=m['seams'], historical_unselected=HISTORICAL_UNSELECTED)
     result = unittest.TextTestRunner(verbosity=2, resultclass=partial(Result, events=events)).run(
         unittest.TestSuite(tests[k] for k in sorted(tests)))
     loaded = origins(m)

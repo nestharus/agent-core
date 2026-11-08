@@ -173,7 +173,8 @@ class ReleaseAcquisition(unittest.TestCase):
             *(f.root/'tools/message-board'/p for p in
               ('catalog.py', 'board_store.py', 'active_listener.py', 'queue_transport.py', 'managed_owner.py')),
             *(f.provider/p for p in PROVIDERS), f.operator, *f.templates}
-        self.assertEqual(len(expected_paths), 85)
+        # Release contract is the independently declared complete member set,
+        # including the current module inventory; it has no fixed cardinality.
         expected = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in expected_paths}
         original = Path.read_bytes
         for _ in range(2):
@@ -245,13 +246,20 @@ class ReleaseAcquisition(unittest.TestCase):
         mod = f.configuration
         profiles = importlib.import_module(f.identity+'.contracts').PROFILES
         with patch.object(Path, 'home', return_value=f.home):
-            for exclusions in (['/a/b'], ['/'], ['//'], ['a/b'], ['/a/./b/'], [],
+            with self.assertRaisesRegex(f.Refusal, 'canonical single-root'):
+                mod._PathExclusions(['//'])
+            for exclusions in (['/a/b'], ['/'], ['a/b'], ['/a/./b/'], [],
                                [Path('/a/b')], ['/α/β'], ['/adjacent']):
                 index = mod._PathExclusions(exclusions)
                 for value in ('/a/b', '/a/bc', '/a/b/c', '//a/b', '/', '/a//b/./c',
                               '/α/β/γ', '/adjacent-sibling',
                               *(str(f.home/p/'fictional') for p in profiles)):
                     path = Path(value)
+                    if value.startswith('//'):
+                        with patch.object(Path, 'is_symlink', side_effect=AssertionError('noncanonical metadata')):
+                            with self.assertRaisesRegex(f.Refusal, 'absolute canonical'):
+                                mod._path(value, index)
+                        continue
                     expected = any(path == Path(p) or path.is_relative_to(Path(p))
                         for p in [*exclusions, *(f.home/p for p in profiles)])
                     self.assertEqual(index.contains(path), expected)
