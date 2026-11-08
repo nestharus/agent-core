@@ -1689,7 +1689,7 @@ def software_input(runtime, event, *, owed_control=False):
 
 
 def software_budget(runtime, kind, incoming):
-    """All existing source writers converge here, inside their own transaction.
+    """All allocations authenticate inside the source or short budget transaction.
 
     Refusal rolls back the proposed birth, not a separately collected original.
     No tail reservation or credit is invented. Missing real headroom keeps the
@@ -1697,8 +1697,7 @@ def software_budget(runtime, kind, incoming):
     """
     request = software_record(runtime,runtime.processing.key) if runtime.processing else None
     if not request:
-        if (kind in {'events','attempts','jobs','outboxes','decisions'}
-                and runtime.one("SELECT name FROM sqlite_master WHERE name='future_software_plans_v1'")
+        if (runtime.one("SELECT name FROM sqlite_master WHERE name='future_software_plans_v1'")
                 and runtime.one('SELECT capability FROM future_software_plans_v1 LIMIT 1')):
             raise Refusal('explicit original future software capability required for allocation; original debt retained')
         return None

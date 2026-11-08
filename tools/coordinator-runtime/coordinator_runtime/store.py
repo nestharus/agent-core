@@ -262,6 +262,12 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         return counts
 
     def budget(self, kind, incoming=0, *, event=None, job=None):
+        # File-copy/staging callers have no enclosing journal write. Authenticate
+        # and commit only their budget/activation here; the later filesystem
+        # effect retains its existing custody and is not journal-atomic.
+        if kind is None and not event and not job and not self.db.in_transaction:
+            with self.tx():
+                return self.budget(kind, incoming)
         from .report_repair import software_budget
         activation = software_budget(self, kind, incoming)
         if activation:
@@ -273,13 +279,15 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         usage, limits = self.usage(), self.config["limits"]
         if usage["bytes"] + incoming + capacity.PRESSURE_RESERVE >= limits["max_bytes"]:
             raise Backpressure("cumulative journal/artifact bytes held; conserve before admitting more")
+        # Publish activation custody before window accounting can recurse into
+        # budget(None). Both writes roll back with the original allocation.
+        if activation:
+            self.db.execute('INSERT INTO future_software_activations_v1 VALUES(?,?,?,?,?)', activation)
         if self.config.get('window_service') and kind in windows.KINDS:
             windows.charge(self, kind)
         elif kind is not None and usage[kind] >= limits.get(f"max_{kind}", limits["max_events"]):
             raise Backpressure(f"cumulative {kind} bound reached; held work is retained")
         admitted.check(self, usage, kind)
-        if activation:
-            self.db.execute('INSERT INTO future_software_activations_v1 VALUES(?,?,?,?,?)', activation)
 
     def enroll(self, role, grant):
         selected = self.config["roles"][role]
