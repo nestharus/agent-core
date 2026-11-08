@@ -917,7 +917,7 @@ def lease_selection(runtime, key, selection):
     """An effective view; immutable original selection and hashes never change."""
     request = lease_record(runtime, key)
     if not request:
-        return selection
+        return software_selection(runtime, key, selection)
     if (not lease_identity(runtime, key, selection, request)
             or runtime.one('SELECT capability FROM owner_lease_stops WHERE capability=?', (key,))):
         raise Refusal('owner lease revoked or original journal/configuration/epoch/selection changed')
@@ -952,7 +952,7 @@ def lease_selection(runtime, key, selection):
 def lease_deadline(runtime):
     if not runtime.processing:
         return None
-    request = lease_record(runtime, runtime.processing.key)
+    request = lease_record(runtime, runtime.processing.key) or software_record(runtime, runtime.processing.key)
     if not request:
         return None
     _, selection = runtime.processing.current()
@@ -1043,6 +1043,8 @@ def apply_lease(runtime, boards, actor, request):
 
 def lease_receipt(runtime,key):
     request = lease_record(runtime,key)
+    if not request:
+        raise Refusal('original typed owner lease absent')
     return {'schema':LEASE_VERSION,'capability':key,'plan':request['plan'],
             'amendment_hash':digest(request),'original_controller':request['basis']['controller'],
             'activations':runtime.rows('SELECT * FROM owner_lease_activations WHERE capability=? ORDER BY ordinal',(key,)),
@@ -1496,3 +1498,242 @@ def amendment_receipt(request):
         'previous':selected['previous'],'current':selected['current'],'modules':selected['modules'],
         'manifest':selected['manifest'],'review_hash':request['review_hash'],
         'original_history_rewritten':False,'native_rights_renewed':False,'acceptance':None}
+
+
+# Future software authority is independent of consuming historical report/control
+# operations. It composes with an ALREADY selected source-v1 receipt; it is never
+# returned by lease_record or used as an amendment/producer/control proof.
+SOFTWARE_VERSION = 'source-v1-future-software-v1'
+SCHEMA += """
+CREATE TABLE IF NOT EXISTS future_software_plans_v1(
+ capability TEXT PRIMARY KEY,request TEXT NOT NULL,issuer TEXT NOT NULL,created REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS future_software_activations_v1(
+ capability TEXT NOT NULL,ordinal INTEGER NOT NULL,controller TEXT NOT NULL,
+ activated REAL NOT NULL,until REAL NOT NULL,PRIMARY KEY(capability,ordinal));
+CREATE TABLE IF NOT EXISTS future_software_stops_v1(
+ capability TEXT PRIMARY KEY,issuer TEXT NOT NULL,reason TEXT NOT NULL,created REAL NOT NULL);
+"""
+for _table in ('future_software_plans_v1', 'future_software_activations_v1', 'future_software_stops_v1'):
+    for _op in ('UPDATE', 'DELETE'):
+        SCHEMA += (f'CREATE TRIGGER IF NOT EXISTS {_table}_no_{_op.lower()} BEFORE {_op} ON {_table} '
+                   "BEGIN SELECT RAISE(ABORT,'immutable future software authority'); END;\n")
+
+
+def software_record(runtime, key):
+    if not runtime.one("SELECT name FROM sqlite_master WHERE name='future_software_plans_v1'"):
+        return None
+    row = runtime.one('SELECT request FROM future_software_plans_v1 WHERE capability=?', (key,))
+    return json.loads(row['request']) if row else None
+
+
+def software_identity(runtime, key, selection, request):
+    cap = runtime.one('SELECT * FROM processing_capabilities WHERE id=?', (key,))
+    source = source_record(runtime, key)
+    selected = request['basis']
+    identity = runtime.path.stat()
+    enrollments = {r['role']:r for r in runtime.rows('SELECT role,owner,profile,grant_id,cutover,intake FROM enrollments')}
+    return bool(cap and source and request['schema'] == SOFTWARE_VERSION
+        and selected['schema'] == SOFTWARE_VERSION
+        and source_identity(runtime, cap, selection, source)
+        and selected['capability'] == key and selected['source_hash'] == digest(source)
+        and selected['configuration'] == digest(runtime.config)
+        and selected['selection_hash'] == digest(selection)
+        and selected['journal'] == {'path':str(runtime.path),'dev':identity.st_dev,'ino':identity.st_ino}
+        and selected['plan_hash'] == digest(request['plan'])
+        and enrollments == {r:g['enrollment'] for r,g in selected['grants'].items()}
+        and runtime.one('SELECT * FROM prospective_authorities WHERE id=?',
+                        (selected['prospective']['id'],)) == selected['prospective'])
+
+
+def software_counters(runtime, key, selection):
+    from . import windows
+    return {'starts':runtime.one('SELECT starts FROM processing_capabilities WHERE id=?', (key,))['starts'],
+            'new_inputs':runtime.one('SELECT COUNT(*) n FROM processing_source_positions WHERE position>?',
+                                   (selection['basis']['event_boundary'],))['n'],
+            'windows':runtime.one('SELECT COUNT(*) n FROM service_window_allocations WHERE capability=?', (key,))['n'],
+            'window':windows.current(runtime)}
+
+
+def software_basis(runtime, boards, key, controller, actor, purpose, plan):
+    """Stopped metadata basis. Caller holds stop lock and write transaction.
+
+    No source body, report/control anchor or recovered admission is acquired.
+    All cooperative writes invalidate the pending selection, including opaque
+    duties, source births, original counters and pending holder metadata.
+    """
+    from . import processing, windows
+    from .integration_management import _metadata_original
+    owner(runtime, boards, actor)
+    required_text(purpose, 'actual Work finite future software purpose', 4000)
+    configuration.assert_current(runtime)
+    configuration.assert_release(runtime)
+    cap = runtime.one('SELECT * FROM processing_capabilities WHERE id=?', (key,))
+    source = source_record(runtime, key)
+    if (not cap or not source or cap['issuer'] != actor or cap['revoked'] is not None
+            or actor != runtime.config['software_delegation']['grantor']
+            or set(boards) != {'Work','Reviews','QA','Branch'} or set(boards) != set(runtime.config['roles'])
+            or software_record(runtime,key) or lease_record(runtime,key) or pair_record(runtime,key) or record(runtime,key)):
+        raise Refusal('same genuine Work, four original roles and selected source-v1 only; no plan stacking/conversion')
+    raw = json.loads(cap['selection'])
+    if not source_pins(runtime,key,raw,processing.implementation(),source):
+        raise Refusal('actually selected current reviewed public source-v1 pins required')
+    processing.Access(runtime,key,boards).current()
+    validate_lease_plan(runtime,plan,raw)
+    allocation = raw['service'].get('allocations')
+    if (not allocation or not runtime.config.get('window_service')
+            or plan['max_windows'] > allocation['max_windows']):
+        raise Refusal('future software conserves original cumulative window ceiling; no policy cap increase')
+    stopped_original(runtime,key,controller)
+    if configuration.owned_service_conflict(runtime) or runtime.one(
+            "SELECT controller FROM service_runs WHERE capability=? AND (state!='returned-awaiting-parent-END' OR returned IS NULL)", (key,)):
+        raise Refusal('all original software collectors must stop, return, reach real END and release')
+    for run in runtime.rows('SELECT controller FROM processing_runs WHERE capability=?', (key,)):
+        stopped_original(runtime,key,run['controller'])
+    grants = {}
+    for role, board in boards.items():
+        with board.opened(settlement=True) as conn:
+            grant,enrollment = _metadata_original(board,conn,runtime)
+            binding = board._binding(grant)
+            if (binding != raw['basis']['roles'][role]['original']['binding']
+                    or binding != source['basis']['grants'][role]['binding']
+                    or enrollment != source['basis']['grants'][role]['enrollment'] or grant['issued_by'] != actor
+                    or enrollment['owner'] != board.selected['owner'] or enrollment['profile'] != board.selected['profile']):
+                raise Refusal('future software requires all exact original grant/enrollment bindings')
+            grants[role] = {'binding':binding,'enrollment':enrollment}
+    epoch = runtime.one('SELECT * FROM prospective_authorities WHERE revoked IS NULL')
+    if not epoch or epoch != source['basis']['prospective']:
+        raise Refusal('same unrevoked original prospective epoch required')
+    ordinary = json.loads(epoch['selection'])
+    if (ordinary['expires'] <= runtime.clock() or plan['until'] > ordinary['expires']
+            or ordinary.get('processing_capability') != key or ordinary['configuration'] != digest(runtime.config)
+            or ordinary['grantor'] != actor
+            or ordinary['grants'] != {r:g['binding']['id'] for r,g in grants.items()}):
+        raise Refusal('future software cannot renew native/effect/original epoch authority')
+    counters = software_counters(runtime,key,raw)
+    if (counters['starts'] >= plan['max_starts'] or counters['new_inputs'] >= plan['max_new_inputs']
+            or counters['windows'] >= plan['max_windows'] or runtime.usage()['bytes'] >= plan['pause_bytes']):
+        raise Refusal('remaining original cumulative start/input/window/byte headroom required; no resets')
+    identity = runtime.path.stat()
+    return {'schema':SOFTWARE_VERSION,'capability':key,'controller':controller,'purpose':purpose,
+            'configuration':digest(runtime.config),'selection_hash':digest(raw),
+            'source_hash':digest(source),'release':source['basis']['release'],
+            'implementation':source['basis']['implementation'],'grants':grants,'prospective':epoch,
+            'plan_hash':digest(plan),'counters':counters,'revision':windows.revision(runtime),
+            'journal':{'path':str(runtime.path),'dev':identity.st_dev,'ino':identity.st_ino}}
+
+
+def software_selection(runtime, key, selection):
+    """Effective software timing only; original policies and window links persist."""
+    import copy
+    from . import windows
+    request = software_record(runtime,key)
+    if not request:
+        return selection
+    if (not software_identity(runtime,key,selection,request)
+            or runtime.one('SELECT capability FROM future_software_stops_v1 WHERE capability=?',(key,))):
+        raise Refusal('future software stopped or original source/config/grants/epoch/journal changed')
+    plan = request['plan']; now = runtime.clock()
+    if not plan['from'] <= now < plan['until']:
+        raise Refusal('finite future software window inactive/exhausted; original duties retained')
+    counters = software_counters(runtime,key,selection)
+    if counters['starts'] > plan['max_starts'] or runtime.usage()['bytes'] >= plan['pause_bytes']:
+        raise Refusal('future software cumulative allocation/byte pressure; no refund')
+    row = counters['window']; used = json.loads(row['used'])
+    # A lower explicit ceiling may pause conservatively when ANY original axis
+    # is full. Never change the immutable original allocation authority hash.
+    due = (row['new_inputs'] >= runtime.config['window_service']['max_new_inputs']
+           or any(used[k] >= (runtime.config['window_service']['max_decisions'] if k == 'decisions' else
+                             runtime.config['limits'].get('max_'+k,runtime.config['limits']['max_events'])) for k in windows.KINDS))
+    if counters['windows'] > plan['max_windows'] or counters['windows'] >= plan['max_windows'] and due:
+        raise Refusal('future software cumulative window ceiling; old charged windows retained')
+    ordinal = int((now-plan['from']) // plan['lease_seconds'])+1
+    until = min(plan['until'],plan['from']+ordinal*plan['lease_seconds'])
+    from contextlib import nullcontext
+    if not runtime.one('SELECT ordinal FROM future_software_activations_v1 WHERE capability=? AND ordinal=?',(key,ordinal)):
+        with (nullcontext() if runtime.db.in_transaction else runtime.tx()):
+            runtime.budget(None,1024)
+            runtime.db.execute('INSERT OR IGNORE INTO future_software_activations_v1 VALUES(?,?,?,?,?)',
+                               (key,ordinal,runtime.controller,now,until))
+    effective = copy.deepcopy(selection)
+    effective['service']['admission'].update(until=until,max_new_inputs=plan['max_new_inputs'],pause_bytes=plan['pause_bytes'])
+    if effective['service'].get('wake'):
+        effective['service']['wake']['until'] = until
+    policy = effective['service'].get('legacy_resources',{}).get('Reviews',{}).get('reviews_report')
+    if policy:
+        policy['expires'] = until
+    return effective
+
+
+def software_input(runtime):
+    """All new source births share the opt-in cumulative input allocation.
+
+    Reobserving an existing source never charges another birth. This separate
+    guard also covers attributed reports and internal inputs, which historically
+    bypass the Board-only admission check; old protocols retain that behavior.
+    """
+    if runtime.processing and software_record(runtime,runtime.processing.key):
+        from .service import admit_input
+        admit_input(runtime)
+
+
+def software_start(runtime):
+    """Attempt allocation check, before pool choice, insertion or start debit."""
+    if not runtime.processing:
+        return
+    request = software_record(runtime,runtime.processing.key)
+    if request and runtime.one('SELECT starts FROM processing_capabilities WHERE id=?',
+                              (runtime.processing.key,))['starts'] >= request['plan']['max_starts']:
+        raise Refusal('future software cumulative start ceiling; no reset/refund')
+
+
+def apply_software(runtime, boards, actor, request):
+    from .selected_source import custody_budget
+    if (not isinstance(request,dict) or set(request) != {'schema','basis','plan','authority','evidence'}
+            or request['schema'] != SOFTWARE_VERSION or not isinstance(request['basis'],dict)
+            or request['basis'].get('schema') != SOFTWARE_VERSION):
+        raise Refusal('distinct source-v1 future software selection required; old typed receipts stay separate')
+    owner(runtime,boards,actor)
+    required_text(request['authority'],'actual Work finite future software decision',4000)
+    if not isinstance(request['evidence'],list) or not 1 <= len(request['evidence']) <= 32:
+        raise Refusal('actual reviewed source and future authority evidence required')
+    for item in request['evidence']:
+        required_text(item,'actual review/qualification evidence',4000)
+    if len(encode(request).encode()) > runtime.config['limits']['max_result_bytes']:
+        raise Refusal('future software selection exceeds original custody bound')
+    selected = request['basis']; key = selected['capability']
+    with configuration.stopped(runtime), runtime.tx():
+        previous = software_record(runtime,key)
+        if previous:
+            if previous != request or selected_release_for(runtime,key,boards) != selected['release']:
+                raise Refusal('future software already selected differently/changed/inactive')
+            return software_receipt(runtime,key)
+        current = software_basis(runtime,boards,key,selected['controller'],actor,selected['purpose'],request['plan'])
+        if current != selected:
+            raise Refusal('future software original basis changed; take fresh same-owner basis')
+        custody_budget(runtime,len(encode(request).encode())+8192)
+        runtime.db.execute('INSERT INTO future_software_plans_v1 VALUES(?,?,?,?)',
+                           (key,encode(request),actor,runtime.clock()))
+    return software_receipt(runtime,key)
+
+
+def software_receipt(runtime,key):
+    request = software_record(runtime,key)
+    if not request:
+        raise Refusal('explicit future software selection absent')
+    return {'schema':SOFTWARE_VERSION,'capability':key,'plan':request['plan'],'selection_hash':digest(request),
+            'source_receipt_hash':request['basis']['source_hash'],
+            'activations':runtime.rows('SELECT * FROM future_software_activations_v1 WHERE capability=? ORDER BY ordinal',(key,)),
+            'stop':runtime.one('SELECT * FROM future_software_stops_v1 WHERE capability=?',(key,)),
+            'acceptance':None,'original_history_rewritten':False,'native_rights_renewed':False,
+            'meaning':'explicit future software timing only; same source-v1, original admission, debts and cumulative counters'}
+
+
+def stop_software(runtime,boards,actor,key,reason):
+    owner(runtime,boards,actor)
+    required_text(reason,'actual Work immediate future software stop',4000)
+    if not software_record(runtime,key) or actor != runtime.config['software_delegation']['grantor']:
+        raise Refusal('same genuine Work future software plan required')
+    with runtime.tx():
+        runtime.budget(None,len(reason.encode())+1024)
+        runtime.db.execute('INSERT OR IGNORE INTO future_software_stops_v1 VALUES(?,?,?,?)',(key,actor,reason,runtime.clock()))
+    return software_receipt(runtime,key)
