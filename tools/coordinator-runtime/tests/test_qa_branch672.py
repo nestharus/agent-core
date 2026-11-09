@@ -175,6 +175,33 @@ class Sequence672(Fixture, unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.original_config['tasks']['qa-execution']['effect_authority']['operations']), 6)
         self.assertEqual({r['attempt'] for r in ordinary.accepted_runs(self.store, self.key)}, {qa, branch})
 
+    async def test_future_arena_QA_export_acceptance_Branch_and_retained_readback(self):
+        from pathlib import Path
+        journal = self.store.path
+        inode = journal.stat().st_ino
+        admitted = self.store.select_artifact_placement(self.issuer, dict(
+            root=str(self.area/'future-producer-artifacts'), authority='Fictional new exclusive producer arena',
+            expires=self.now+100, max_attempts=50, max_entries=4000, max_bytes=128*1024**2,
+            min_free_bytes=100*1024**3, min_free_inodes=1000000,
+            journal_min_free_bytes=1024**2, journal_min_free_inodes=1000))
+        await self.test_actual_same_package_qa_branch_final_cleanup_and_single_Work_route()
+        runs = self.store.rows("SELECT r.attempt,r.receipt FROM ordinary_runs r JOIN jobs j ON j.id=r.job WHERE j.task='qa-execution'")
+        self.assertEqual(len(runs), 1)
+        attempt = runs[0]['attempt']
+        association = json.loads(runs[0]['receipt'])['outcome']['source_execution']
+        root = self.store.artifact_root(attempt)
+        self.assertTrue(root.is_relative_to(Path(admitted['selection']['root'])))
+        self.assertEqual(association['root'], str(root/'qa-source'))
+        self.assertTrue((root/'qa-source').is_dir())
+        self.assertEqual(self.store.path, journal)
+        self.assertEqual(journal.stat().st_ino, inode)
+        self.assertFalse((self.store.home/'artifacts'/attempt).exists())
+        self.assertEqual(self.store.enrollment('Branch')['legacy_hold'], 'Branch old effects UNKNOWN')
+        (self.area/'future-placement1127.json').write_text(encode(dict(
+            journal=str(journal), journal_inode=inode, admission=admitted,
+            source_execution=association, accepted_runs=self.store.rows('SELECT r.attempt,j.task FROM ordinary_runs r JOIN jobs j ON j.id=r.job'),
+            physical_quota=False, processing_complete=False)))
+
     async def test_unaccepted_or_rejected_QA_cannot_reserve_Branch(self):
         self.admitted()
         _, attempt, response = await self.qa(None)

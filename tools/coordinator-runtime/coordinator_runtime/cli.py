@@ -79,6 +79,12 @@ def parser():
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("init")
     sub.add_parser("status")
+    placement = sub.add_parser('select-artifact-placement', help='Finite future-only storage; SAME journal and old paths')
+    placement.add_argument('--selection', required=True)
+    current = sub.add_parser('original-current-status', help='Selected current recovery observation; no disposition rights')
+    current.add_argument('attempt')
+    current.add_argument('--role', required=True)
+
     for name in ('historical-resource-authorize', 'historical-resource-project', 'historical-resource-revoke'):
         resource = sub.add_parser(name, help='Current respective field custodians; conditional cooperative ceilings only')
         if name != 'historical-resource-project':
@@ -747,6 +753,15 @@ def operate(args, store):
         return asyncio.run(ordinary.accept(store, actor, args.attempt, args.decision, read_record(args.receipt)))
     if args.command == 'execution-pool':
         return store.execution_pool.status()
+    if args.command == 'select-artifact-placement':
+        actor = actual_actor(store.enrollment('Work')['owner'])
+        Board(store.config, 'Work').verify_authority(store)
+        return store.select_artifact_placement(actor, read_record(args.selection))
+    if args.command == 'original-current-status':
+        from .oneoff import current_status
+        actor = actual_actor(store.enrollment(args.role)['owner'])
+        Board(store.config, args.role).verify_authority(store)
+        return current_status(store, args.attempt, args.role, actor)
     if args.command in {"init", "status"}:
         return store.status()
     if args.command=='delegate-control':

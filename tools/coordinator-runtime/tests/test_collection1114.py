@@ -567,3 +567,205 @@ class Collection1114(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(observations[-1]['evidence_complete'])
         self.assertEqual(owner.owned,{})
         self.evidence1118('metadata-evidence',observations=observations,same_original=True)
+
+
+    async def test_native_capture_timeout_then_later_END_is_responsive_and_partial(self):
+        from coordinator_runtime import reviews, oneoff
+        self.placement1127()
+        _,_,attempt=self.reservation();self.prepare(attempt)
+        self.config['deadlines']['shutdown']=.01
+        native=reviews.Native();create=asyncio.create_subprocess_exec;child=None;wait=None
+        profile=self.store.attempt(attempt)['profile']
+        policy={'caller':'fictional-caller','deadline':1,'routes':{profile:'fictional-route'}}
+        context={'route':'fictional-route','profile':profile,'handle':'fictional-root','created':self.now}
+        directory=self.store.artifact_root(attempt)/'review-call-0'
+        async def spawn(*argv,**kw):
+            nonlocal child,wait
+            child=await create('/usr/bin/python3.12','-B','-c',
+                               'import sys,time; print("retained prefix",flush=True); time.sleep(60)',**kw)
+            wait=child.wait
+            child.wait=AsyncMock(side_effect=OSError('fictional unavailable original wait'))
+            return child
+        try:
+            with patch('coordinator_runtime.reviews.caller_current'), \
+                 patch('coordinator_runtime.appserver.asyncio.create_subprocess_exec',side_effect=spawn):
+                with self.assertRaises(appserver.CollectionPending) as caught:
+                    await native.call(self.store,attempt,policy,context,directory,'fiction',[],opening=True)
+            key=caught.exception.original
+            first=(directory/'original.json').read_bytes()
+            self.assertIsNone(json.loads(first)['actual_END'])
+            self.assertTrue(json.loads(first)['capture_errors'])
+            self.assertIs(native.originals.owned[key]['child'],child)
+            child.wait=wait
+            await asyncio.wait_for(native.collect_pending(self.store),3)
+            self.assertEqual(native.original_status(),[])
+            self.assertEqual((directory/'original.json').read_bytes(),first)
+            later=json.loads((directory/'original-observations.jsonl').read_text().splitlines()[-1])
+            self.assertEqual(later['actual_END'],await wait())
+            self.assertEqual(later['original'],key)
+            self.assertTrue(later['capture_errors'])
+            self.assertFalse(later['capture_complete'])
+            observations=json.loads(self.store.attempt(attempt)['detail'])['original_end_observations']
+            self.assertFalse(observations[-1]['evidence']['capture_complete'])
+            self.assertFalse(observations[-1]['evidence']['processing_completion'])
+            self.assertIsNone(self.store.attempt(attempt)['exit'])
+            self.evidence1118('timeout-later-END1127',first=json.loads(first),later=later,observations=observations)
+        finally:
+            if child is not None:
+                child.wait=wait
+                await appserver.end_owned(child,.1)
+
+    async def stopped_owner1127(self,kind):
+        from coordinator_runtime import service,reviews
+        from support import result
+        _,job,attempt=self.reservation();self.prepare(attempt)
+        self.config['deadlines']['shutdown']=.01
+        adapter=appserver.AppServer(self.config,fixture_command=['fictional'])
+        native=reviews.Native();native.shutdown=.01
+        child=await asyncio.create_subprocess_exec('/usr/bin/python3.12','-B','-c','import time;time.sleep(60)',
+                                                  stdout=asyncio.subprocess.PIPE)
+        real_wait=child.wait;child.wait=AsyncMock(side_effect=OSError('fictional unavailable wait'))
+        outcome=dict(exit=None,capture='incomplete',cleanup='held',result=None,error='original wait unavailable',detail={})
+        if kind=='model':
+            self.store.begin(attempt,{'fictional':True})
+            adapter.owned_collections[attempt]=(child,outcome)
+            adapter.pending_collections[attempt]=(child,outcome)
+            adapter.collection_stores[attempt]=self.store
+        else:
+            # Collected model rows are NOT a proxy for the separate caller.
+            owner=adapter.metadata_originals if kind=='metadata' else native.originals
+            async def evidence(entry):
+                await asyncio.wait_for(child.stdout.read(),.01)
+            key=owner.own(child,'preflight-metadata' if kind=='metadata' else 'native-caller',evidence,
+                          lambda obs:self.store.record_original_end(attempt,obs))
+            owner.pending[key]=owner.owned[key]
+            outcome.update(exit=0,capture='not-started',cleanup='no-session-created',
+                           detail={'known_not_started':True})
+        self.store.collect(attempt,outcome)
+        dispatcher=service.Dispatcher(self.store,{},models=adapter,review_transport=native)
+        dispatcher.stopping.set();notices=[];seen=asyncio.Event()
+        def emit(value):
+            notices.append(value)
+            if value.get('state')=='draining-originals':seen.set()
+        running=asyncio.create_task(dispatcher.run(emit))
+        try:
+            await asyncio.wait_for(seen.wait(),3)
+            self.assertFalse(running.done())
+            self.assertIsNone(notices[-1]['process_END'])
+            self.assertTrue(notices[-1]['originals'])
+            if kind!='model':self.assertIsNotNone(self.store.attempt(attempt)['collected'])
+            child.wait=real_wait
+            await asyncio.wait_for(running,3)
+            actual=await real_wait()
+            self.assertIsInstance(actual,int)
+            self.assertEqual(adapter.original_status()+native.original_status(),[])
+            self.assertEqual(json.loads(self.store.attempt(attempt)['detail'])['original_end_observations'][-1]['exit'],actual)
+            self.evidence1118('stop-'+kind+'1127',notices=notices,actual_END=actual)
+        finally:
+            child.wait=real_wait
+            await appserver.end_owned(child,.1)
+            await asyncio.wait_for(running,3)
+
+    async def test_normal_stop_retains_model_original_until_later_actual_END(self):
+        await self.stopped_owner1127('model')
+
+    async def test_normal_stop_retains_metadata_original_after_model_row_collected(self):
+        await self.stopped_owner1127('metadata')
+
+    async def test_normal_stop_retains_native_original_after_model_row_collected(self):
+        await self.stopped_owner1127('native')
+
+    async def test_selected_current_recipients_observe_later_END_without_original_rewrite(self):
+        from coordinator_runtime import oneoff
+        _,job,attempt=self.reservation('Reviews');self.prepare(attempt)
+        self.store.begin(attempt,{'fictional':True})
+        outcome=dict(exit=None,capture='incomplete',cleanup='held',result=None,error='original wait unknown',detail={})
+        self.store.collect(attempt,outcome)
+        original=dict(self.store.one('SELECT * FROM results WHERE attempt=?',(attempt,)))
+        before=oneoff.snapshot(self.store,attempt)['original_collection']
+        self.store.record_original_end(attempt,dict(original=attempt,kind='appserver-model',exit=7,
+            evidence={'capture_complete':False,'provider_root':'unobserved','processing_completion':False}))
+        for role in ('Work','Reviews'):
+            status=oneoff.current_status(self.store,attempt,role,self.config['roles'][role]['owner'])
+            self.assertEqual(status['current_attempt_exit'],7)
+            self.assertEqual(status['original_end_observations'][-1]['collector'],self.store.controller)
+            self.assertEqual(status['capture'],'incomplete')
+            self.assertFalse(status['permission_to_resume']);self.assertFalse(status['permission_to_dispose'])
+            self.evidence1118('current-recipient-'+role+'1127',status=status)
+        with self.assertRaisesRegex(Refusal,'original role recovery custodian'):
+            oneoff.current_status(self.store,attempt,'QA',self.config['roles']['QA']['owner'])
+        self.assertEqual(self.store.one('SELECT * FROM results WHERE attempt=?',(attempt,)),original)
+        self.assertEqual(oneoff.snapshot(self.store,attempt)['original_collection'],before)
+        self.assertIsNone(self.store.one('SELECT processed_at FROM events WHERE id=?',(json.loads(job['members'])[0]['event'],))['processed_at'])
+
+    def placement1127(self,name='future-arena',**kw):
+        selection=dict(root=str(self.area/name),authority='fictional Work right to exclusively owned new output namespace',
+                       expires=self.now+100,max_attempts=4,max_entries=2000,max_bytes=128*1024**2,
+                       min_free_bytes=100*1024**3,min_free_inodes=1000000,
+                       journal_min_free_bytes=1024**2,journal_min_free_inodes=1000)
+        selection.update(kw)
+        return self.store.select_artifact_placement(self.config['roles']['Work']['owner'],selection)
+
+    async def test_future_placement_preserves_journal_old_paths_and_exact_custody_consumers(self):
+        from coordinator_runtime import custody,cleanup,oneoff
+        _,job,old=self.reservation();self.prepare(old)
+        legacy=self.store.home/'artifacts'/old;legacy.mkdir(parents=True)
+        oldfile=legacy/'old.txt';oldfile.write_text('existing original path')
+        oldinode=oldfile.stat().st_ino;journalinode=self.store.path.stat().st_ino
+        self.placement1127()
+        self.assertEqual(self.store.artifact_root(old),legacy)
+        # Reserve a new role so the old outstanding Work duty remains held.
+        _,newjob,new=self.reservation('Reviews');self.prepare(new)
+        root=self.store.artifact_root(new);root.mkdir()
+        self.assertFalse(root.is_relative_to(self.store.home))
+        report=root/'new.txt';report.write_bytes(b'new owned report')
+        task=self.config['tasks'][newjob['task']]
+        frozen=custody.capture(self.store,new,str(report),task)
+        self.assertEqual(frozen['kind'],'runtime-owned')
+        self.assertEqual(custody.frozen_body(self.store,frozen['sha256'],path=str(report))['body'],b'new owned report')
+        artifact=self.store.one('SELECT * FROM artifacts WHERE path=?',(str(report),))
+        self.assertFalse(cleanup.artifact_eligible(self.store,artifact))
+        with self.store.tx():
+            with self.assertRaises(Refusal):cleanup.unlink_exact(self.store,artifact)
+        self.assertTrue(report.exists())
+        self.assertEqual(self.store.path.stat().st_ino,journalinode)
+        self.assertEqual(oldfile.stat().st_ino,oldinode);self.assertEqual(oldfile.read_text(),'existing original path')
+        self.assertEqual(self.store.artifact_root(old),legacy)
+        usage=self.store.usage()['artifact_placements'];self.assertEqual(usage[0]['root'],str(root.parent))
+        self.assertGreaterEqual(usage[0]['bytes'],len(b'new owned report'))
+        self.assertIsNone(self.store.one('SELECT processed_at FROM events WHERE id=?',(json.loads(job['members'])[0]['event'],))['processed_at'])
+        self.evidence1118('placement1127',old_root=str(legacy),new_root=str(root),journal=str(self.store.path),
+                          custody=frozen,accounting=usage,retirement_refused=True)
+
+    async def test_future_placement_expiry_capacity_and_exclusions_refuse_without_fallback(self):
+        from coordinator_runtime.contracts import Backpressure
+        self.placement1127(max_attempts=2)
+        _,_,first=self.reservation();self.prepare(first)
+        expected=self.store.artifact_root(first)
+        with self.assertRaisesRegex(Backpressure,'attempt admission exhausted'):
+            self.reservation('Reviews')
+        self.assertEqual(self.store.artifact_root(first),expected)
+        self.now+=101
+        with self.assertRaisesRegex(Refusal,'expired/changed'):
+            self.reservation('Branch')
+        # Existing assignments retain their path after expiry.
+        self.assertEqual(self.store.artifact_root(first),expected)
+        existing=self.area/'existing';existing.mkdir()
+        with self.assertRaisesRegex(Refusal,'fresh root'):
+            self.placement1127('existing')
+        with self.assertRaisesRegex(Backpressure,'headroom lost'):
+            self.placement1127('cannot-fit',max_bytes=10**16)
+        self.assertFalse((self.area/'cannot-fit').exists())
+        with self.assertRaisesRegex(Backpressure,'headroom lost'):
+            self.placement1127('journal-cannot-fit',journal_min_free_bytes=10**16)
+        self.assertFalse((self.area/'journal-cannot-fit').exists())
+        self.config.setdefault('artifact_exclusions',[]).append(str(expected.parent/'opaque-child'))
+        original_iterdir=Path.iterdir
+        def no_opaque_enumeration(path):
+            if path==expected.parent:raise AssertionError('opaque descendant enumerated')
+            return original_iterdir(path)
+        with patch.object(Path,'iterdir',no_opaque_enumeration):
+            with self.assertRaisesRegex(Refusal,'opaque namespace'):self.store.placement_usage()
+        self.config['artifact_exclusions']=[str(expected.parent)]
+        with self.assertRaises(Refusal):self.store.placement_usage()
+        self.assertEqual(self.store.one('SELECT root FROM attempt_artifact_roots WHERE attempt=?',(first,))['root'],str(expected))

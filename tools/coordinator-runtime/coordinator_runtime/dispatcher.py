@@ -149,7 +149,7 @@ def job_prompt(store, job, task=None):
                "local_integration": local_integration.context(store, job),
                "conserved_integration_debt": store.integration_debt() if not local_integration.selected(store, job['task']) and job['role']=='Work' and job['phase']=='integrator' else [],
                "inherited_failure_sources": readiness.failure_sources(store,attempt['id']) if task.get('routine_completion') else [],
-               "output_directory": str(store.home / "artifacts" / attempt["id"]),
+               "output_directory": str(store.artifact_root(attempt["id"])),
                "admission": store.one("SELECT * FROM admissions WHERE package=?", (job["package"],))}
     if collected_reports is not None:
         context["collected_reports"] = collected_reports
@@ -385,7 +385,8 @@ class Dispatcher:
         if self.store.integration_retirement_recorded(job_id):return
         job = self.store.job(job_id)
         task = self.config["tasks"][job["task"]]
-        directory = self.store.home / "artifacts" / attempt
+        self.store.admit_artifact_write(attempt, 4096, 1)
+        directory = self.store.artifact_root(attempt)
         directory.mkdir(mode=0o700, parents=True, exist_ok=False)
         try:
             with native_review_scope.acquisition(self.store, job):
@@ -776,6 +777,34 @@ class Dispatcher:
             # Tasks own their processes and collect those exact exits. No detach or foreign wait.
             await asyncio.gather(*self.active, return_exceptions=True)
             await self.custodian_service.close()
+            draining = asyncio.create_task(self.drain_originals(emit))
+            await AppServer.join_finalization(draining, {'state': 'draining-originals'})
+
+    def original_owners(self):
+        return [self.models]
+
+    async def drain_originals(self, emit):
+        # Keep the capable owner through planned return. An unavailable exact
+        # wait/evidence/delivery has no manufactured finite terminal deadline.
+        owners = self.original_owners()
+        while True:
+            pending = []
+            for owner in owners:
+                if not hasattr(owner, 'original_status'):
+                    continue  # Test adapters without subprocess ownership.
+                try:
+                    await owner.collect_originals()
+                except Exception:
+                    pass  # Still owned; publish nonterminal custody below.
+                pending.extend(owner.original_status())
+            if not pending:
+                return
+            try:
+                emit({'controller': self.store.controller, 'state': 'draining-originals',
+                      'originals': pending, 'process_END': None, 'processing_complete': False})
+            except Exception:
+                pass  # Observer failure cannot release the actual capability.
+            await asyncio.sleep(.1)
 
     async def loop(self, emit):
         while not self.stopping.is_set():

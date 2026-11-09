@@ -104,9 +104,19 @@ def resources(m):
     scope = footprint(m['area'])
     require(scope['entries'] <= m['limits']['entries'] and scope['logical_bytes'] <= m['limits']['bytes'],
             'retained cumulative attempt exceeds admission')
-    v = os.statvfs(m['area'])
-    require(v.f_bavail*v.f_frsize >= 100*1024**3 and v.f_favail >= 1000000,
-            'OS capacity floor lost')
+    # Whole-visible UID/count/bytes remain mandatory. Physical headroom
+    # belongs to sites receiving allocation, including constructor preparation.
+    sites = []
+    for key in ('instance', 'output'):
+        path = Path(m[key])
+        require(not any(p.is_symlink() for p in (path, *path.parents)), 'linked allocation site')
+        site = path if path.exists() else path.parent
+        v = os.statvfs(site)
+        require(v.f_bavail*v.f_frsize >= 100*1024**3 and v.f_favail >= 1000000,
+                'OS capacity floor lost')
+        sites.append(dict(purpose=key, path=str(site), available_bytes=v.f_bavail*v.f_frsize,
+                          free_inodes=v.f_favail))
+    scope['allocation_sites'] = sites
     return scope
 
 

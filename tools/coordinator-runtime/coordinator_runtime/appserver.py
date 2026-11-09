@@ -626,6 +626,22 @@ class AppServer:
         self.pending_lock = asyncio.Lock()
         self.metadata_originals = Originals()
 
+    def original_status(self):
+        return ([dict(original=attempt, kind='appserver-model', exit=outcome['exit'],
+                      evidence=outcome['detail'], capability='exact child retained')
+                 for attempt, (child, outcome) in self.owned_collections.items()] +
+                [self.metadata_originals.observation(key) for key in self.metadata_originals.owned])
+
+    async def collect_originals(self):
+        failures = []
+        for collect in (self.collect_pending,
+                        lambda: self.metadata_originals.collect_pending(self.config['deadlines']['shutdown'])):
+            try:
+                await collect()
+            except Exception as exc:
+                failures.append(type(exc).__name__)
+        return failures
+
     async def run(self, store, attempt, prompt, spec, schema=None):
         row = store.attempt(attempt)
         binding, profile = json.loads(row["binding"]), row["profile"]
@@ -671,7 +687,7 @@ class AppServer:
             outcome['detail']['protocol_progress'] = peer.progress
             outcome['detail']['startup_stage'] = 'protocol'
             peer.owned_storage = owned_storage
-            if owned_storage:
+            if owned_storage or store.one('SELECT admission FROM attempt_artifact_roots WHERE attempt=?', (attempt,)):
                 watcher=asyncio.create_task(storage.guard(store,child,outcome))
             outcome["result"] = await self.session(peer, store, attempt, prompt, spec, binding, profile, schema, outcome)
             outcome['detail']['startup_stage'] = 'session-returned'

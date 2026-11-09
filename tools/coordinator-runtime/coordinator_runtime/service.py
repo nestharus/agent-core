@@ -5,6 +5,7 @@ client reconnects to that process; a dead process never becomes a fresh collecto
 by reusing its name. Actual uncollected children stay UNKNOWN after a crash.
 """
 import asyncio
+from .appserver import AppServer
 from . import observations
 import fcntl
 import json
@@ -144,6 +145,9 @@ class Dispatcher(ProcessingDispatcher):
         self.reviews = reviews.Executor(runtime, review_transport)
         self.wake = None
 
+    def original_owners(self):
+        return [*super().original_owners(), self.reviews.transport]
+
     def intake(self):
         if self.wake is not None:
             self.wake.check()
@@ -231,7 +235,7 @@ class Dispatcher(ProcessingDispatcher):
         # Exact owned producer files are inventoried, never a platform store.
         # Consumer conservation remains a separate real receipt before removal.
         from .cleanup import register_artifact
-        directory = self.store.home / 'artifacts' / attempt
+        directory = self.store.artifact_root(attempt)
         if directory.exists():
             try:
                 files = []
@@ -438,8 +442,6 @@ async def serve_owned(runtime, boards, key, emit, models=None, review_transport=
         finally:
             if dispatcher.wake is not None:
                 dispatcher.wake.close()
-            server.close()
-            await server.wait_closed()
             # Live contexts remain owned and explicitly reported if close fails.
             for context in runtime.rows("SELECT component FROM review_contexts WHERE collector=? AND state!='closed'", (runtime.controller,)):
                 try:
@@ -447,6 +449,10 @@ async def serve_owned(runtime, boards, key, emit, models=None, review_transport=
                     await dispatcher.reviews.close(context['component'], policy)
                 except Exception as exc:
                     runtime.record_operational_error(context['component'], {'error': str(exc)}, 'Reviews', 'original-context-close')
+            draining = asyncio.create_task(dispatcher.drain_originals(emit))
+            await AppServer.join_finalization(draining, {'state': 'draining-originals'})
+            server.close()
+            await server.wait_closed()
             receipt = dispatcher.recover_originals()
             with runtime.tx():
                 runtime.db.execute("UPDATE service_runs SET state='returned-awaiting-parent-END',returned=?,receipt=? WHERE controller=?",
@@ -530,6 +536,9 @@ def status(runtime, key, dispatcher):
     return {'capability': key, 'controller': runtime.controller, 'runs': [run],
             'contexts': contexts[:64], 'uncollected': attempts[:64],
             'contexts_more': len(contexts) > 64, 'uncollected_more': len(attempts) > 64,
+            'originals': [original for owner in dispatcher.original_owners()
+                          if hasattr(owner, 'original_status') for original in owner.original_status()],
+            'state': 'draining-originals' if dispatcher.stopping.is_set() else 'serving',
             'phase_errors': dict(dispatcher.phase_errors),
             'wake': dispatcher.wake.status() if dispatcher.wake is not None else {'state': 'disabled'},
             'phase_error_scope': 'current owning process; failures until that phase succeeds; no historical import',

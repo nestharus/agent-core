@@ -393,11 +393,20 @@ class Native:
     def __init__(self):
         self.originals = Originals()
 
+    def original_status(self):
+        return [self.originals.observation(key) for key in self.originals.owned]
+
+    async def collect_originals(self):
+        if self.originals.owned:
+            await self.originals.collect_pending(self.shutdown)
+
     async def collect_pending(self, runtime):
         await self.originals.collect_pending(runtime.config['deadlines']['shutdown'])
 
     async def call(self, runtime, attempt, policy, context, directory, text, commands, opening=False, close=False):
+        self.shutdown = runtime.config['deadlines']['shutdown']
         await self.collect_pending(runtime)
+        runtime.admit_artifact_write(attempt, 2*16777216+2*runtime.config['limits']['max_result_bytes']+65536, 16)
         directory.mkdir(mode=0o700, parents=True, exist_ok=False)
         prompt_path, allow_path = directory / 'input.txt', directory / 'allow.json'
         prompt_path.write_text(text)
@@ -421,6 +430,7 @@ class Native:
         child, key = None, None
         capture_errors, captures = [], []
         timed_out = False
+        capture_settled = False
         code = None
 
         async def capture(pipe, name):
@@ -445,16 +455,29 @@ class Native:
 
         async def finish_capture(entry):
             # Numeric wait and capture closure are independent observations.
-            try:
-                await asyncio.wait_for(asyncio.gather(*captures), runtime.config['deadlines']['shutdown'])
-            except asyncio.TimeoutError:
-                capture_errors.append('caller pipe EOF unobserved within original shutdown bound')
-            if len(captures) != 2:
+            nonlocal capture_settled
+            if not capture_settled:
+                try:
+                    await asyncio.wait_for(asyncio.gather(*captures), runtime.config['deadlines']['shutdown'])
+                except asyncio.TimeoutError:
+                    capture_errors.append('caller pipe EOF unobserved within original shutdown bound')
+                except asyncio.CancelledError:
+                    # A cancelled capture cannot be restarted over consumed pipes.
+                    # Preserve the gap, then allow numeric receipt delivery.
+                    if not any(task.cancelled() for task in captures):
+                        raise
+                    capture_errors.append('caller capture cancelled; bytes irrecoverably partial')
+                capture_settled = True
+            if len(captures) != 2 and 'caller capture setup incomplete' not in capture_errors:
                 capture_errors.append('caller capture setup incomplete')
-            entry['evidence'] = {'capture_errors': list(capture_errors)}
+            entry['evidence'] = {'capture_errors': list(capture_errors),
+                                 'capture_complete': len(captures) == 2 and not capture_errors,
+                                 'provider_root': 'unobserved', 'effects': 'unresolved',
+                                 'consumer_completion': False, 'processing_completion': False}
             record = encode({
                 'argv': argv, 'original': key, 'actual_END': entry['exit'],
                 'caller_bound_exceeded': timed_out, 'capture_errors': capture_errors,
+                'capture_complete': entry['evidence']['capture_complete'],
                 'collection_failures': list(entry['failures']),
                 'meaning': 'owned caller subprocess collection; not model answer or provider-root end'})
             # The first receipt, including UNKNOWN, is historical evidence.
@@ -628,7 +651,7 @@ class Executor:
             while True:
                 # Architecture return and remaining return are different calls,
                 # collected on this original executor, on the same actual root.
-                directory = runtime.home / 'artifacts' / attempt / ('review-call-' + str(len(turns)))
+                directory = runtime.artifact_root(attempt) / ('review-call-' + str(len(turns)))
                 call_policy={**policy,'components':{**policy['components'],component:policy['components'][packet['component']]}}
                 code, receipt, answer = await self.transport.call(runtime, attempt, call_policy, context, directory,
                                                                  text, [read_command], opening=opening and not turns)
@@ -724,7 +747,7 @@ class Executor:
             return {'component': component, 'already_closed': True}
         call = runtime.one('SELECT * FROM review_calls WHERE component=? ORDER BY rowid DESC LIMIT 1', (component,))
         saved_turns=json.loads(call['receipt'] or '[]')
-        directory = runtime.home / 'artifacts' / call['attempt'] / ('review-close-'+str(sum('close_intent' in t for t in saved_turns)))
+        directory = runtime.artifact_root(call['attempt']) / ('review-close-'+str(sum('close_intent' in t for t in saved_turns)))
         with runtime.tx():
             runtime.db.execute('UPDATE review_calls SET receipt=? WHERE attempt=?',
                                (encode(saved_turns+[{'close_intent':str(directory),'actual_END':None}]),call['attempt']))

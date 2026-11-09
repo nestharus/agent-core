@@ -377,3 +377,25 @@ def residual_handoff(store, attempt):
                         'all recovery/privacy/custody/consumer/effect holds and actual receipts'],
             'compatibility': 'pinned cleaner requires 0.166.0/exclusive maintenance; 0.167.0 schema alone is insufficient',
             'automatic_delete': False, 'physical_reclamation': 'unknown'}
+
+
+def current_status(store, attempt, role, actor):
+    """Current Work/original role custodian read; historical envelopes stay sealed."""
+    with (nullcontext() if store.db.in_transaction else store.tx()):
+        row = store.one('SELECT id,job,event,controller FROM attempts WHERE id=?', (attempt,))
+        if not row:
+            raise Refusal('exact original attempt required')
+        original_role = (store.job(row['job'])['role'] if row['job'] else
+                         store.one('SELECT role FROM events WHERE id=?', (row['event'],))['role'])
+        if role not in {'Work', original_role} or actor != store.enrollment(role)['owner']:
+            raise Refusal('current status belongs to Work or the original role recovery custodian')
+        authorize_recovery(store, attempt)  # Original source/privacy/selection rules, before body acquisition.
+        current = store.attempt(attempt)
+        detail = json.loads(current['detail'])
+        return dict(attempt=attempt, original_collector=current['controller'], recipient=actor, role=role,
+                    observed_at=store.clock(), original_end_observations=detail.get('original_end_observations', []),
+                    capture=current['capture'], error=current['error'], cleanup=current['cleanup'],
+                    provider_root='not established by caller END', effects='retain original effect holds',
+                    consumer='retain original consumer/outbox duties', processing_complete=False,
+                    current_attempt_exit=current['exit'], permission_to_resume=False,
+                    permission_to_dispose=False, historical_envelopes='unchanged')

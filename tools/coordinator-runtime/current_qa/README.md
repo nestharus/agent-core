@@ -184,3 +184,84 @@ root completion. Registries are in memory, not restart/kernel/descendant
 capabilities. Collection1114 includes real original controls for existing debt,
 late journal delivery, non-fixture preflight and the separate Reviews caller.
 No native provider or installed service is invoked by these synthetic controls.
+
+
+Decision1127: normal original lifetime and prospective output placement
+--------------------------------------------------------------------
+
+Native capture finalization remembers its settled state. A timeout/cancelled
+capture remains partial, with capture_errors and capture_complete=false. Later
+exact numeric wait can write a separate same-original observation without
+re-awaiting cancelled capture tasks. evidence_complete means the receipt was
+finalized; it never means missing bytes, provider root, effects, consumers or
+processing completed. The first receipt remains immutable.
+
+Dispatcher planned stop joins active tasks and then retains the actual model,
+metadata and native caller owners until exact wait/evidence/delivery debts are
+discharged. A draining-originals notice is nonterminal. Cancellation joins that
+drain. The continuing service keeps its endpoint available through this drain;
+status includes separate originals even when the uncollected model-row list is
+empty. An unavailable journal/evidence destination may keep normal stop pending
+indefinitely with a capable owner. There is no crash/restart/kernel/descendant
+promise, owner reconstruction, provider-root adoption or forced finite END.
+
+`original-current-status ATTEMPT --role ROLE` authenticates the current Work or
+actual original role recovery custodian through the normal Board authority
+check. It applies unchanged current recovery/source/privacy admission before
+returning attributed later original-END observations and separate capture,
+provider, effect, consumer and processing limits. Refused access remains with
+Work before any dependent resume/disposition. Historical results, native events,
+recovery seals, report-transfer equality guards and all holds remain unchanged.
+Reading this surface grants no resume, disposal or effect rights.
+
+`select-artifact-placement --selection FILE` is an explicit authenticated Work
+control, backed by `Store.select_artifact_placement(actor, selection)`. Its exact
+selection fields are root, authority, expires, max_attempts, max_entries,
+max_bytes, min_free_bytes, min_free_inodes, journal_min_free_bytes and
+journal_min_free_inodes. All bounds are positive finite integers, expiry is
+within 24 hours, and authority is actual storage-right evidence. The root must
+be an absolute, new, independent, unaliased namespace with an existing parent.
+It may not overlap the journal home or any prior admission. Root creation is
+exclusive; a later journal failure leaves that new root held, never disposable
+by inference. No operational root or right is selected by these offline tests.
+
+The SAME original journal stores immutable admissions and per-attempt mappings.
+Only attempts created after an admission receive its root/ATTEMPT directory.
+Earlier attempts always retain their legacy home/artifacts/ATTEMPT paths. Later
+admissions, expiration or source/configuration changes never retarget existing
+objects. Expired/exhausted/changed admissions refuse new attempts without a
+fallback. A new current configuration needs a new explicit new-root admission.
+No existing data is moved/copied, no journal/profile/account is redirected and
+no symlink/remount technique supplies placement.
+
+Artifact writers and consumers resolve the frozen attempt root: dispatcher and
+prompt, QA export AND verification/acceptance/Branch/qualification, native
+output directories and inventory, custody/materialization/oversize conservation,
+publication/staging/service postimages/backups, readiness, original resource maps,
+registration and exact retirement fences. The selected producer-owned native
+caller receives that explicit --out; its deeper provider/account allocations
+remain unqualified. Existing review component material/cache/handle/history
+locations remain at the original journal home and retain their old meaning.
+Journal-resident custody bodies, tool records and recovery facts still grow in
+the original SQLite journal. External placement does not solve their admission.
+
+Whole-visible external UID/count/bytes and lexical exclusions are checked before
+metadata; aliases/foreign entries refuse traversal. Immutable admissions retain
+all expired arenas in cumulative accounting. Existing journal budgets include
+external bytes; external ceilings and both journal/arena physical floors are
+checked before budgeted phases, with exact QA export entry/byte and initial
+attempt/native bounds. The model storage watcher samples producer-owned growth.
+These are cooperative sampled/preflight controls, not a physical quota,
+reservation or protection against arbitrary noncooperating/descendant writes.
+Unexpected growth/partial writes remain owned/held. Processing+24h AND every
+source/consumer/outbox/recovery/effect/privacy hold still governs retirement.
+
+Current QA continues to account the WHOLE visible area, including UID/count/bytes,
+and pins every source/tool/SDK/generated entry. Physical100GiB/1M floors apply
+to instance/output allocation sites (their existing parent before creation).
+An unwritten read-only synthetic ancestor is not a physical allocation grant.
+Constructor, real host entries, source overlays, CWD, runner and independent
+readback must agree jointly. No source, noGit, read-only, HOME, origin, current
+selection or retained witness safeguard is removed. Complete existing selectors
+remain fixed; new controls join their complete selected modules. Generic
+qualification is not actual service/provider admission or native acceptance.

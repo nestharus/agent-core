@@ -197,7 +197,7 @@ def _caller_ceiling(runtime, identity, reads):
 
 
 def _executor_ceiling(runtime, identity, writes):
-    mandatory = [str(runtime.home/'artifacts'/identity['attempt']), str(runtime.home/'review-inputs'/digest(identity['component'])),
+    mandatory = [str(runtime.artifact_root(identity['attempt'])), str(runtime.home/'review-inputs'/digest(identity['component'])),
                  str(runtime.home/'review-handles'), str(runtime.home/'review-history')]
     if any(not any(Path(p).is_relative_to(Path(w)) for w in writes) for p in mandatory):
         raise Refusal('declared software executor ceiling incomplete; original Work collector retains it')
@@ -252,7 +252,7 @@ def original_modes(runtime, boards, keys, job):
     writes = [resource_scopes.root(p, exclusions) for p in value['writes']]
     # Only this authenticated original attempt's unique staging child has the
     # existing fresh-child exemption. Broader declared writes still conflict.
-    staging = resource_scopes.root(str(runtime.home/'artifacts'/value['identity']['attempt']), exclusions)
+    staging = resource_scopes.root(str(runtime.artifact_root(value['identity']['attempt'])), exclusions)
     return reads, writes, [staging]
 
 

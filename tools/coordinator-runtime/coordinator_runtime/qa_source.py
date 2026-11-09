@@ -55,7 +55,9 @@ async def export(store, attempt, p, source):
             raise Refusal('candidate export exceeds admitted source budget')
     if not files:
         raise Refusal('candidate has no tracked executable source inputs')
-    root = store.home / 'artifacts' / attempt / 'qa-source'
+    parents = {str(parent) for item in files for parent in PurePosixPath(item['path']).parents}
+    store.admit_artifact_write(attempt, total+len(files)*1024, len(files)+len(parents)+1)
+    root = store.artifact_root(attempt) / 'qa-source'
     # Service-owned, retained, unique to this exact execution intent.
     root.mkdir(parents=True, mode=0o700, exist_ok=False)
     store.budget(None, total + len(files) * 1024)
@@ -114,7 +116,7 @@ def command(store, task, p, association, selected_command):
 def verify(store, attempt, p, receipt):
     from .ordinary import frozen_file
     association = receipt.get('outcome', {}).get('source_execution', {})
-    expected = store.home / 'artifacts' / attempt / 'qa-source'
+    expected = store.artifact_root(attempt) / 'qa-source'
     if (association.get('method') != 'git-blobs-readonly-namespace-v1'
             or association.get('head') != p['source_head'] or association.get('tree') != receipt.get('before', {}).get('tree')
             or association.get('head') != receipt.get('before', {}).get('head') or association.get('root') != str(expected)

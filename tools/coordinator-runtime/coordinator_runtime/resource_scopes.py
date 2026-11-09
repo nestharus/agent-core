@@ -459,7 +459,7 @@ def _original_modes(runtime, job):
     if (native and not native_closed) or (not native and task['effects'] != 'none'):
         for attempt in runtime.rows("SELECT id FROM attempts WHERE job=? AND kind='task'", (job['id'],)):
             canonical_uuid(attempt['id'])
-            staging.append(root(str(runtime.home/'artifacts'/attempt['id']), runtime.config.get('artifact_exclusions', []), metadata=False))
+            staging.append(root(str(runtime.artifact_root(attempt['id'])), runtime.config.get('artifact_exclusions', []), metadata=False))
             if native:
                 # Opening attempts own this possible handle too. It is never
                 # part of the unique artifacts-child staging exemption.
@@ -830,16 +830,16 @@ def _blocked(runtime, row, task=None):
     exclusions = runtime.config.get('artifact_exclusions', [])
     try:
         reads, writes = access_modes(task, exclusions, metadata=False)
-        for value in [*reads, *writes, *record['roots'], *operation_held, str(runtime.home/'artifacts')]:
+        for value in [*reads, *writes, *record['roots'], *operation_held, str(runtime.prospective_artifact_parent())]:
             root(str(value), exclusions, metadata=False)
         reads, writes = ([root(str(p), exclusions) for p in reads],
                          [root(str(p), exclusions) for p in writes])
         future_staging = None
         if task['sandbox'] == 'workspace-write' and task['effects'] != 'none':
-            directory = root(str(runtime.home/'artifacts'), exclusions)
+            directory = root(str(runtime.prospective_artifact_parent()), exclusions)
             if row.get('active_attempt'):
                 canonical_uuid(row['active_attempt'])
-                directory /= row['active_attempt']
+                directory = runtime.artifact_root(row['active_attempt'])
                 writes.append(root(str(directory), exclusions))
             else:
                 future_staging = directory

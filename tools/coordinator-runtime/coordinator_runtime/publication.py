@@ -86,7 +86,7 @@ def remainder_basis(store, job, old, choice, selection, board):
     held_stages = {}
     with snapshot_lock(store):
         for target, path in allocated.items():
-            body, observed = read_file(safe_path(path, [str(store.home/'artifacts'/old['id']/'staged')]), maximum)
+            body, observed = read_file(safe_path(path, [str(store.artifact_root(old['id'])/'staged')]), maximum)
             held = store.one('SELECT sha256 FROM artifact_custody WHERE attempt=? AND path=?', (old['id'], path))
             if not held or held['sha256'] != observed['sha256']:
                 raise Refusal('publication remainder lacks exact original durable staging custody')
@@ -111,7 +111,7 @@ def stages(store, attempt):
 def prepare(store, attempt, before, policy=None):
     store.require_attempt_execution_open(attempt)
     local_integration.current_sources(store, store.job(store.one('SELECT job FROM attempts WHERE id=?', (attempt,))['job']))
-    root=store.home/'artifacts'/attempt/'staged'
+    root=store.artifact_root(attempt)/'staged'
     root.mkdir(mode=0o700)
     for index,(target,witness) in enumerate(before.items()):
         bounded_entry = policy and policy['kind'] == bounded_log.KIND and target == policy['bounded_log']['target']
@@ -215,7 +215,7 @@ def locked_publish(store, board, job, attempt, run, task, service_stages=None):
     # Validate every preimage/proposal under the cooperative canonical lock.
     for target in order:
         path=allocated[target]
-        body,witness=read_file(safe_path(path,[str(store.home/'artifacts'/attempt['id']/('local-commit' if service_stages and target in service_stages else 'staged'))]),maximum)
+        body,witness=read_file(safe_path(path,[str(store.artifact_root(attempt['id'])/('local-commit' if service_stages and target in service_stages else 'staged'))]),maximum)
         held=store.one('SELECT sha256 FROM artifact_custody WHERE attempt=? AND path=?',(attempt['id'],path))
         if not held or held['sha256']!=witness['sha256']:raise Refusal('proposed file lacks exact durable custody')
         proposed[target]=(body,witness)
@@ -228,7 +228,7 @@ def locked_publish(store, board, job, attempt, run, task, service_stages=None):
                 raise Refusal('recorded publication changed; actual owner recovery required')
         elif not before[target]['exists'] or observed!=before[target]:
             raise Refusal('exact regular canonical byte/inode preimage changed or missing')
-    backups=store.home/'artifacts'/attempt['id']/'before'
+    backups=store.artifact_root(attempt['id'])/'before'
     backups.mkdir(mode=0o700,exist_ok=True)
     # Durable compressed BEFORE-only backups for the whole batch precede writes.
     for index,target in enumerate(order):

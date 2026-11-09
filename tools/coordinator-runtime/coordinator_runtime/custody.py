@@ -217,7 +217,7 @@ def frozen_body(store, sha256, task=None, path=None):
 
 def capture(store, attempt, path, task, role_owned=False):
     guard_path(store, path, task)
-    root = store.home/'artifacts'/attempt
+    root = store.artifact_root(attempt)
     authority = task['effect_authority']
     candidate = Path(path)
     if any(candidate==Path(p) or candidate.is_relative_to(Path(p)) for p in store.config.get('artifact_exclusions',[])):
@@ -295,7 +295,7 @@ def materialize(store, events, attempt, task=None):
             row = frozen_body(store, w['sha256'], task, w['path'])
             if not row or hashlib.sha256(row['body']).hexdigest() != w['sha256']:
                 raise Refusal('required frozen artifact custody is unavailable')
-            root = store.home/'artifacts'/attempt/'inputs'
+            root = store.artifact_root(attempt)/'inputs'
             root.mkdir(mode=0o700, exist_ok=True)
             path = root/w['sha256']
             if not path.exists():
@@ -320,8 +320,8 @@ def conserve_oversize_result(store, attempt, body):
     This does not bound the earlier encoding/acquisition memory cost.
     """
     store.budget(None, len(body)*2+4096)
-    root = store.home/'artifacts'/attempt
-    safe_path(str(root), [str(store.home/'artifacts')])
+    root = store.artifact_root(attempt)
+    safe_path(str(root), [str(root)])
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     path = root/'oversize-result.json'
     fd = os.open(path, os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW, 0o600)

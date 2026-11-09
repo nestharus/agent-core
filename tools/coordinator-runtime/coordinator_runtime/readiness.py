@@ -322,7 +322,7 @@ def live_issues(store,attempt,answer,items,task,prior_results=(),strict_correlat
         return task_result_issues(answer)
     from .custody import read_file,safe_path
     from .publication import stages
-    root=store.home/'artifacts'/attempt
+    root=store.artifact_root(attempt)
     try:declared=set(artifact_paths(answer.get('artifacts')))
     except Refusal:return task_result_issues(answer)
     declared.update(stages(store,attempt).values())
@@ -382,7 +382,7 @@ def assess(store,attempt):
     detail=json.loads(attempt['detail'])
     tools=detail.get('tool_completion',{})
     _require(tools.get('complete'),'unsettled tool metadata blocks local readiness')
-    root=store.home/'artifacts'/attempt['id']
+    root=store.artifact_root(attempt['id'])
     def reference(ref):
         path=Path(ref['path'])
         _require(path.is_relative_to(root) and '..' not in path.parts,'resolution evidence must belong to this producer attempt')

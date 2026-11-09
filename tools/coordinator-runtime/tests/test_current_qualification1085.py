@@ -223,3 +223,21 @@ class ActualCollection1085(unittest.TestCase):
         path.write_text(json.dumps(commands))
         with self.assertRaisesRegex(ValueError, 'derived command binding changed'):
             verify_commands(m, expected)
+
+
+class AllocationSites1127(unittest.TestCase):
+    def test_whole_visible_account_and_actual_allocation_floors_remain_joint(self):
+        from procedure import resources
+        area=Path('/fixtures/allocation-sites1127');area.mkdir()
+        (area/'owned.txt').write_text('visible retained input')
+        m=dict(area=str(area), instance=str(area/'instance'), output=str(area/'output'),
+               limits=dict(entries=100,bytes=1024**2))
+        positive=resources(m)
+        self.assertGreaterEqual(positive['entries'],2)
+        self.assertEqual({x['purpose'] for x in positive['allocation_sites']},{'instance','output'})
+        low={**m,'instance':'/tmp/nonexistent-instance1127'}
+        with self.assertRaisesRegex(ValueError,'OS capacity floor lost'):resources(low)
+        self.assertFalse(Path(low['instance']).exists())
+        small={**m,'limits':dict(entries=1,bytes=1024**2)}
+        with self.assertRaisesRegex(ValueError,'retained cumulative attempt exceeds admission'):resources(small)
+        self.assertEqual((area/'owned.txt').read_text(),'visible retained input')

@@ -1195,7 +1195,7 @@ def rebase(store, job, attempt, run, task):
     allocated = publication.stages(store, attempt['id'])
     staged = {}
     for target in order:
-        body, witness = read_file(safe_path(allocated[target], [str(store.home/'artifacts'/attempt['id']/'staged')]), maximum)
+        body, witness = read_file(safe_path(allocated[target], [str(store.artifact_root(attempt['id'])/'staged')]), maximum)
         held = store.one('SELECT sha256 FROM artifact_custody WHERE attempt=? AND path=?', (attempt['id'], allocated[target]))
         if not held or held['sha256'] != witness['sha256']:
             raise Refusal('local model stage lacks exact durable custody')
@@ -1251,7 +1251,7 @@ def rebase(store, job, attempt, run, task):
     discovered = validate_discovered(store, job, answer, rebased)
     # Materialize new immutable service stages, preserving model postimages and
     # input custody. Publication validates both mapping and exact fresh preimages.
-    root = store.home/'artifacts'/attempt['id']/'local-commit'
+    root = store.artifact_root(attempt['id'])/'local-commit'
     root.mkdir(mode=0o700)
     service = {}
     for index, target in enumerate(order):

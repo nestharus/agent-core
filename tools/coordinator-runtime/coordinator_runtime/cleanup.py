@@ -26,7 +26,7 @@ def regular_identity(path):
 def register_artifact(store, attempt, path):
     from .custody import guard_path
     guard_path(store, path)
-    root = store.home / "artifacts" / attempt
+    root = store.artifact_root(attempt)
     path = Path(path)
     if not path.is_absolute() or not path.is_relative_to(root):
         raise Refusal("artifact is outside exact newly owned attempt directory")
@@ -191,7 +191,7 @@ def unlink_exact(store, row):
     path = Path(row["path"])
     if '..' in path.parts or not path.is_absolute():
         raise Refusal("exact original artifact path required")
-    root = store.home / "artifacts" / row["attempt"]
+    root = store.artifact_root(row["attempt"])
     if not path.is_relative_to(root):
         raise Refusal("artifact is outside its original attempt root")
     if any(p.is_symlink() for p in (root, *root.parents)):

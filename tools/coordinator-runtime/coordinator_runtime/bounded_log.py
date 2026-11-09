@@ -121,7 +121,7 @@ def publish(store, board, job, attempt, run, task, fence):
     target = spec['target']
     from .publication import stages
     entry_path = stages(store, attempt['id'])[target]
-    entry, witness = read_file(safe_path(entry_path, [str(store.home/'artifacts'/attempt['id']/'staged')]), spec['max_entry_bytes'])
+    entry, witness = read_file(safe_path(entry_path, [str(store.artifact_root(attempt['id'])/'staged')]), spec['max_entry_bytes'])
     held = store.one('SELECT sha256 FROM artifact_custody WHERE attempt=? AND path=?', (attempt['id'], entry_path))
     if not held or held['sha256'] != witness['sha256'] or not entry or not entry.endswith(b'\n'):
         raise Refusal('actual nonempty newline-terminated bounded entry and durable custody required')
@@ -137,7 +137,7 @@ def publish(store, board, job, attempt, run, task, fence):
         raise Refusal('bounded log precondition changed; no peer overwrite')
     parent, leaf, fd = open_log(store, spec)
     backup_fd = None
-    backup = store.home/'artifacts'/attempt['id']/'bounded-log.before.opaque'
+    backup = store.artifact_root(attempt['id'])/'bounded-log.before.opaque'
     try:
         if metadata(os.fstat(fd)) != {k: before[k] for k in metadata(os.fstat(fd))}:
             raise Refusal('bounded log descriptor changed')
