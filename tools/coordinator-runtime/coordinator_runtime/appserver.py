@@ -111,6 +111,9 @@ class Originals:
         self.owned, self.pending = {}, {}
         self.lock = asyncio.Lock()
 
+    def scope(self):
+        return OriginalScope(self)
+
     def own(self, child, kind, finish, publish):
         key = ident()
         self.owned[key] = dict(child=child, kind=kind, exit=None, finish=finish,
@@ -164,6 +167,34 @@ class Originals:
         async with self.lock:
             for key in list(self.pending):
                 await self.finish(key, grace)
+
+
+class OriginalScope:
+    """One context's keys on the same actual collector, without global close gates."""
+    def __init__(self, collector):
+        self.collector, self.keys = collector, set()
+
+    @property
+    def owned(self):
+        return {key: entry for key, entry in self.collector.owned.items() if key in self.keys}
+
+    @property
+    def pending(self):
+        return {key: entry for key, entry in self.collector.pending.items() if key in self.keys}
+
+    def own(self, child, kind, finish, publish):
+        key = self.collector.own(child, kind, finish, publish)
+        self.keys.add(key)
+        return key
+
+    async def finish(self, key, grace):
+        if key not in self.keys:
+            raise Refusal('original is outside this context collector scope')
+        return await self.collector.finish(key, grace)
+
+    async def collect_pending(self, grace):
+        for key in list(self.pending):
+            await self.finish(key, grace)
 
 
 async def metadata(command, env, limit=1048576, cwd=None, *, originals=None, publish=None):

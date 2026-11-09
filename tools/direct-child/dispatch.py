@@ -20,9 +20,12 @@ import time
 import tomllib
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-import profile_lease  # noqa: E402  (sibling module with CatchSignals; also via runpy)
-import execution_pool
+if __package__:
+    from . import profile_lease, execution_pool
+else:
+    sys.path.insert(0, str(HERE))
+    import profile_lease
+    import execution_pool
 
 DEFAULT_CONFIG = execution_pool.DEFAULT_ROUTES
 CODEX_LAUNCHER = HERE.parent / "direct-codex-child" / "launch.sh"
@@ -86,6 +89,55 @@ def parse_args(argv):
     parser.add_argument('--log-max-bytes', action=Once, type=int,
                         help='direct Codex only: bounded capture; incomplete capture stays explicit')
     return parser.parse_args(argv)
+
+
+class OpaqueCodexExecution:
+    """Consumer-facing execution capability, produced by ordinary dispatch.
+
+    The consumer retains its selector and original profile. Ordinary configured
+    provider internals consume the binding; this interface supplies no served
+    identity/alias attestation and never exports binding fields to the consumer.
+    This is not a fresh-dispatch result or a saved-session attach capability.
+    """
+    def __init__(self, config_path, selector, profile):
+        if selector != 'gpt-xhigh':
+            raise Refusal('continuing review requires its opaque consumer selector')
+        from types import SimpleNamespace
+        args=SimpleNamespace(seat=None,basis=None,pass_=None,kind=None,route=None,
+            model=selector,provider=None,effort=None,profile=profile,
+            override_reason='explicit continuing opaque review consumer selection')
+        setattr(args,'class',None)
+        config,_=load_config(Path(config_path))
+        self.__selection=resolve(config,args)
+        if self.__selection['provider']!='codex':
+            raise Refusal('selected public execution capability is incompatible with this original profile; no fallback')
+        self.__profile=profile
+
+    def prepare(self, argv, profile):
+        if profile!=self.__profile:
+            raise Refusal('original profile changed; no new selection or migration')
+        prepared=list(argv)
+        index=prepared.index('--model')+1
+        if prepared[index]!='gpt-xhigh':
+            raise Refusal('caller selector changed before public execution boundary')
+        prepared[index]=self.__selection['model']
+        prepared[index-1:index-1]=['-c','model_reasoning_effort='+json.dumps(self.__selection['effort'])]
+        return prepared
+
+    @staticmethod
+    def public_command(argv):
+        """Describe the opaque request without publishing internal binding data."""
+        result=list(argv)
+        result[result.index('--model')+1]='gpt-xhigh'
+        for i,value in enumerate(result):
+            if value.startswith('model_reasoning_effort='):
+                result[i]='model_reasoning_effort=<ordinary-provider-internal>'
+        return result
+
+
+def open_opaque_execution(config_path, selector, profile):
+    """No task, context, allocation, private-profile inspection or replay here."""
+    return OpaqueCodexExecution(config_path,selector,profile)
 
 
 # ---------------------------------------------------------------- config

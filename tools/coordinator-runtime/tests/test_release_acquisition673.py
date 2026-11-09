@@ -86,6 +86,7 @@ class Fixture:
                  'tools/branch_release.py', 'tools/operational_contracts.py',
                  'tools/direct-child/execution_pool.py', 'tools/direct-child/dispatch.py',
                  'tools/direct-child/review_context.py',
+                 *('tools/direct-child/'+p for p in ('continuing_review.py', 'opaque_dialogue.py', 'profile_lease.py')),
                  'tools/direct-codex-child/launch.sh',
                  *('tools/message-board/'+n for n in
                    ('catalog.py', 'board_store.py', 'active_listener.py',

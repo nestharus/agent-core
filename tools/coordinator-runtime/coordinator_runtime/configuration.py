@@ -198,6 +198,7 @@ def release(runtime, candidate):
              *(root/'tools/message-board'/p for p in ('catalog.py', 'board_store.py', 'active_listener.py', 'queue_transport.py', 'managed_owner.py')),
              root/'tools/direct-child/execution_pool.py', root/'tools/direct-child/dispatch.py',
              root/'tools/direct-child/review_context.py',
+             *protected_review_sources(root, candidate),
              root/'tools/direct-codex-child/launch.sh', directory/'templates/coordinator-receive.md',
              *(p for p, _ in sources.values()), operator,
              *branch_release_sources(root)]
@@ -228,6 +229,23 @@ def release(runtime, candidate):
         raise Refusal('current public pool unavailable: '+str(exc)) from exc
     return {'root': str(root), 'files': files, 'pool_control': pool_control,
             'qualification': 'source bytes only; no installed provider/native or deployment claim'}
+
+
+def protected_review_sources(root, candidate):
+    """Pin the lazy shared import closure whenever owner Reviews can be selected.
+
+    Template-only historical fixtures and nonopaque consumers do not import the
+    continuing endpoint. An actual opaque owner configuration always binds it,
+    before any service policy can choose the protected caller.
+    """
+    selected = any(task.get('role') == 'Reviews' and task.get('phase') == 'proposer'
+                   and (task.get('execution') == 'owner'
+                        or task.get('binding', {}).get('provider') == 'opaque')
+                   for task in candidate['tasks'].values())
+    if not selected:
+        return []
+    return [root/'tools/direct-child'/name for name in
+            ('continuing_review.py', 'opaque_dialogue.py', 'profile_lease.py')]
 
 
 def candidate(runtime, operator_config, scope_tasks, retention_library=None, bounded_work_log=False, scope_options=None):

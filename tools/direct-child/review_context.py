@@ -39,7 +39,8 @@ async def existing_admission():
     yield
 
 
-def private_write(path, body):
+def private_write(path, body, capacity_check=lambda parent: None):
+    capacity_check(Path(path).parent)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, 'wb') as stream:
         stream.write(body)
@@ -59,7 +60,7 @@ def positive_directory(path):
     return path
 
 
-def make_directory(path):
+def make_directory(path, capacity_check=lambda parent: None):
     """Create an admitted owned parent chain without following existing links."""
     path = Path(path)
     if not path.is_absolute() or '..' in path.parts:
@@ -68,13 +69,14 @@ def make_directory(path):
         try:
             info = part.lstat()
         except FileNotFoundError:
+            capacity_check(part.parent)
             part.mkdir(mode=0o700)
             info = part.lstat()
         if not stat.S_ISDIR(info.st_mode):
             raise ReviewRefusal('owned parent contains an alias/non-directory')
 
 
-def export(directory, items):
+def export(directory, items, capacity_check=lambda parent: None):
     """Only already-admitted bytes enter the model's readable snapshot."""
     if not isinstance(items, list) or not items or len(items) > MAX_ITEMS:
         raise ReviewRefusal('bounded nonempty material list required')
@@ -83,22 +85,23 @@ def export(directory, items):
         raise ReviewRefusal('material needs attributable labels and exact bytes')
     if sum(len(body) for _, body in items) > MAX_INPUT:
         raise ReviewRefusal('complete selected material exceeds snapshot admission')
+    capacity_check(directory.parent)
     directory.mkdir(mode=0o700)
     manifest = []
     for index, (label, body) in enumerate(items):
         name = f'{index:04d}.txt'
         # Text validation is before any source export; no encoded/raw captures.
         body.decode('utf-8')
-        private_write(directory / name, body)
+        private_write(directory / name, body, capacity_check)
         (directory / name).chmod(0o400)
         manifest.append(dict(label=label, file=name, bytes=len(body),
                              sha256=hashlib.sha256(body).hexdigest()))
-    private_write(directory / 'manifest.json', json.dumps(manifest, ensure_ascii=False).encode())
+    private_write(directory / 'manifest.json', json.dumps(manifest, ensure_ascii=False).encode(), capacity_check)
     (directory / 'manifest.json').chmod(0o400)
     return manifest
 
 
-def command(profile, workspace, material, thread=None):
+def command(profile, workspace, material, thread=None, *, filesystem=None):
     """Invocation-local restrictions; opaque selector is forwarded literally.
 
     --sandbox would override default_permissions, so it must not be added.
@@ -108,7 +111,7 @@ def command(profile, workspace, material, thread=None):
     """
     if profile not in PROFILES:
         raise ReviewRefusal('profile outside explicitly supported original accounts')
-    fs = {':root': 'deny', ':minimal': 'read', str(material): 'read', str(workspace): 'read'}
+    fs = filesystem if filesystem is not None else {':root': 'deny', ':minimal': 'read', str(material): 'read', str(workspace): 'read'}
     # JSON strings are TOML basic strings. This constructs argv, never shell.
     filesystem = '{' + ','.join(json.dumps(k) + '=' + json.dumps(v) for k, v in fs.items()) + '}'
     settings = [
@@ -160,19 +163,28 @@ class Context:
     owner; it neither archives nor deletes provider storage. A lost process or
     interrupted turn cannot become a fresh conversation by reopening this path.
     """
-    def __init__(self, root, profile, collector, lifetime, originals, clock=time.monotonic, *, executable):
+    def __init__(self, root, profile, collector, lifetime, originals, clock=time.monotonic, *, executable, protection=None, origin=None, capacity_check=lambda parent: None, execution=None):
         if profile not in PROFILES or not isinstance(collector, str) or not collector:
             raise ReviewRefusal('original profile/collector required')
         if type(lifetime) is not int or not 1 <= lifetime <= 7200:
             raise ReviewRefusal('bounded whole-context lifetime required')
         self.executable = executable_path(executable)
+        created = clock() if origin is None else origin
+        if not isinstance(created, (int, float)) or not 0 <= clock() - created < lifetime:
+            raise ReviewRefusal('original creation origin invalid or expired')
         root = Path(root)
         positive_directory(root.parent)
+        capacity_check(root.parent)
         root.mkdir(mode=0o700)
         self.root, self.workspace = root, root / 'workspace'
+        capacity_check(self.workspace.parent)
         self.workspace.mkdir(mode=0o700)
+        self.capacity_check = capacity_check
         self.profile, self.collector, self.originals = profile, collector, originals
-        self.clock, self.created, self.lifetime = clock, clock(), lifetime
+        self.account_home = str(Path.home())
+        self.clock, self.created, self.lifetime = clock, created, lifetime
+        self.protection = protection
+        self.execution = execution
         self.thread, self.state, self.busy, self.calls = None, 'new', False, 0
 
     def authorize(self, collector, profile, current_authority, current_profiles):
@@ -202,29 +214,37 @@ class Context:
             raise ReviewRefusal('finite selected input/answer/capture limits required')
         directory = Path(directory)
         positive_directory(directory.parent)
+        self.capacity_check(directory.parent)
         directory.mkdir(mode=0o700)
-        manifest = export(directory / 'material', items)
+        manifest = export(directory / 'material', items, self.capacity_check)
+        if self.protection is not None:
+            await self.protection.qualify(self, directory / 'material', publish)
+        self.authorize_creation(current_authority)
         prompt = (text + '\nSelected immutable material is at ' + str(directory / 'material') +
                   '/manifest.json. Read its history first, then complete current method, diff and source. '
                   'Only this snapshot is admitted. Read files in bounded sections and retain unread limits. '
                   'No agents, network access, tests, source writes, private stores or startup discovery. Use only admitted local read commands.\n')
-        private_write(directory / 'prompt.txt', prompt.encode())
-        argv = command(self.profile, self.workspace, directory / 'material', self.thread)
+        private_write(directory / 'prompt.txt', prompt.encode(), self.capacity_check)
+        filesystem = self.protection.filesystem(directory / 'material', self.workspace) if self.protection else None
+        argv = command(self.profile, self.workspace, directory / 'material', self.thread, filesystem=filesystem)
         argv[0] = self.executable
-        private_write(directory / 'launch.json', json.dumps(dict(argv=argv, profile=self.profile,
+        if self.execution is not None:
+            argv = self.execution.prepare(argv, self.profile)
+        private_write(directory / 'launch.json', json.dumps(dict(argv=self.execution.public_command(argv) if self.execution else argv, profile=self.profile,
             collector=self.collector, expected_thread=self.thread, permissions='requested; qualify enforcement separately',
-            model_reference='opaque literal; no resolution/attestation')).encode())
-        env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/home/nes',
-               'CODEX_HOME': '/home/nes/' + self.profile,
+            model_reference='opaque consumer selection; normal provider internals supply no identity attestation')).encode(), self.capacity_check)
+        env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': self.account_home,
+               'CODEX_HOME': str(Path(self.account_home) / self.profile),
                'XDG_CONFIG_HOME': str(self.root / 'xdg'),
                'TMPDIR': str(directory / 'tmp'), 'PYTHONDONTWRITEBYTECODE': '1'}
+        self.capacity_check(directory)
         (directory / 'tmp').mkdir(mode=0o700)
         self.busy = True
         try:
             result = await execute(argv, env, prompt, directory, self.originals, publish,
                 min(self.lifetime, self.created + self.lifetime - self.clock()), shutdown,
                 maximum, capture_max, self.thread, started, admission,
-                lambda: self.authorize_creation(current_authority))
+                lambda: self.authorize_creation(current_authority), self.capacity_check)
         except BaseException:
             self.state = 'interrupted'
             raise
@@ -237,7 +257,7 @@ class Context:
         receipt.update(transport=VERSION, profile=self.profile, collector=self.collector,
                        input=self.calls - 1, material=manifest, executable=self.executable,
                        root_end='not a native root', processing_completion=False)
-        private_write(directory / 'receipt.json', json.dumps(receipt, ensure_ascii=False).encode())
+        private_write(directory / 'receipt.json', json.dumps(receipt, ensure_ascii=False).encode(), self.capacity_check)
         return code, receipt, answer
 
     def close(self, collector):
@@ -251,12 +271,13 @@ class Context:
 
 async def execute(argv, env, prompt, directory, originals, publish, deadline, shutdown,
                   maximum, capture_max, expected_thread, started,
-                  admission=existing_admission, before_spawn=lambda: None):
+                  admission=existing_admission, before_spawn=lambda: None, capacity_check=lambda parent: None):
     """Own before feeding input; numeric END and pipe EOF are independent."""
     evidence = dict(errors=[], stdout_eof=False, stderr_eof=False, bytes={'stdout': 0, 'stderr': 0})
     observed = dict(thread=None, completed=0, failed=False, answer=None, diagnostics=[])
     captures = []
     observations = 0
+    receipt_attempts = []
     stop_at = time.monotonic() + deadline
 
     async def finish(entry):
@@ -265,10 +286,15 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
             await asyncio.wait_for(asyncio.gather(*captures), shutdown)
         except (asyncio.TimeoutError, asyncio.CancelledError):
             evidence['errors'].append('pipe EOF unobserved; capture partial')
-        entry['evidence'] = dict(evidence)
-        private_write(directory / ('original-' + str(observations) + '.json'),
-                      json.dumps(dict(actual_END=entry['exit'], evidence=evidence)).encode())
+        # Reserve the next name before any fallible persistence. A failed
+        # exclusive create/write/flush/fsync remains untouched; normal retry
+        # uses another name under this SAME owned finalizer, never file recovery.
+        receipt_name = 'original-' + str(observations) + '.json'
         observations += 1
+        receipt_attempts.append(receipt_name)
+        entry['evidence'] = dict(evidence, receipt_attempts=list(receipt_attempts))
+        private_write(directory / receipt_name,
+                      json.dumps(dict(actual_END=entry['exit'], evidence=entry['evidence'])).encode(), capacity_check)
 
     def stop(reason):
         evidence['errors'].append(reason)
@@ -319,6 +345,7 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
     async def capture(pipe, name):
         pending = b''
         try:
+            capacity_check(directory)
             with (directory / (name + '.jsonl' if name == 'stdout' else name + '.bin')).open('xb') as stream:
                 while True:
                     data = await pipe.read(16384)
@@ -328,6 +355,7 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
                     before = evidence['bytes'][name]
                     evidence['bytes'][name] += len(data)
                     kept = data[:max(0, capture_max - before)]
+                    capacity_check(directory)
                     stream.write(kept)
                     if evidence['bytes'][name] > capture_max:
                         stop(name + ' capture limit; retained prefix is partial')

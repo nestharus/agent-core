@@ -8,7 +8,9 @@ It is an explicit selection, never fallback from a refused native route.
 No installed selection, service, account or registry changes follow from this source.
 
 The policy has exactly `transport`, `launcher_sha256`, `executable`, `deadline`,
-`method`, `method_files`, `method_closure`, and `components`. `executable` is the
+`method`, `method_files`, `method_closure`, `components`, and `continuing`.
+The actual factory requires the [protected continuing composition](protected-continuing-reviews.md).
+`executable` is the
 explicit absolute public CLI dependency retained by the original Context; policy
 selection does not establish effective provider protection. Component material retains
 the existing repository/origin/paths/history/authority and optional

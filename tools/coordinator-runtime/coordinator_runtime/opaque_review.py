@@ -42,11 +42,14 @@ def binding(task):
 
 def validate(policy):
     fields = {'transport', 'launcher_sha256', 'executable', 'deadline', 'method', 'method_files', 'method_closure', 'components'}
-    if set(policy) != fields or policy['transport'] != VERSION or type(policy['deadline']) is not int or not 1 <= policy['deadline'] <= 7200:
+    if set(policy) - {'continuing'} != fields or policy['transport'] != VERSION or type(policy['deadline']) is not int or not 1 <= policy['deadline'] <= 7200:
         raise Refusal('exact opaque CLI policy and whole-context deadline required')
     from .method_closure import VERSION as CLOSURE
     if policy['method_closure'] != CLOSURE:
         raise Refusal('opaque Reviews requires complete current unified definition closure')
+    if 'continuing' in policy:
+        from .review_composition import declaration
+        declaration(policy)
     module = launcher(policy)
     try:
         module.executable_path(policy['executable'])
@@ -107,70 +110,36 @@ def prompt(policy, acquired):
         encode({k: v for k, v in acquired.items() if k != 'commands'}))
 
 
+def qualified(receipt):
+    from .review_composition import VERSION as PROTECTED
+    value = receipt.get('protection', {})
+    actual = value.get('qualification', {})
+    return (value.get('version') == PROTECTED and value.get('persisted') is True
+            and value.get('listener_finalized') is True and value.get('qualification_input') == 0
+            and actual.get('input') == 0 and actual.get('answered') is True
+            and actual.get('capture_complete') is True and actual.get('actual_END') == 0
+            and actual.get('thread') == receipt.get('thread')
+            and actual.get('profile') == receipt.get('profile')
+            and actual.get('collector') == receipt.get('collector')
+            and bool(value.get('acting_proof')) and bool(value.get('local_controls'))
+            and all(control.get('passed') is True for control in value['local_controls']))
+
+
 def answered(code, receipt, answer, thread, opening):
     return (code == 0 and isinstance(receipt, dict) and receipt.get('transport') == VERSION
             and receipt.get('actual_END') == code and receipt.get('answered') is True
             and receipt.get('capture_complete') is True and receipt.get('errors') == []
             and receipt.get('thread') == thread and receipt.get('turn_completed') == 1
             and receipt.get('turn_failed') is False and receipt.get('lifetime_exceeded') is False
-            and type(receipt.get('input')) is int and (receipt['input'] == 0 if opening else receipt['input'] > 0)
+            and type(receipt.get('input')) is int and (receipt['input'] == 1 if opening else receipt['input'] > 1)
+            and qualified(receipt)
             and isinstance(answer, str) and bool(answer.strip()))
 
 
 async def call(native, runtime, attempt, policy, context, directory, text, opening=False, close=False):
     """Reuse the original collector without inventing live-root ACK/close proof."""
-    from .reviews import _existing
-    module = launcher(policy)
-    await native.collect_pending(runtime)
-    owner = native.public_contexts.get(context['handle'])
-    if close:
-        if owner is None:
-            raise Refusal('original public context object unavailable; no store recovery')
-        receipt = owner.close(runtime.controller)
-        receipt['run'] = context['run']
-        return None, receipt, None  # Close starts no process; no invented END0.
-    runtime.authorize_launch(attempt)
-    binding(runtime.config['tasks'][runtime.job(runtime.attempt(attempt)['job'])['task']])
-    acquired = json.loads(runtime.one('SELECT packet FROM review_calls WHERE attempt=?', (attempt,))['packet'])
-    items = snapshot(policy, acquired)
-    size = sum(len(body) for _, body in items)
-    maximum = runtime.config['limits']['max_result_bytes']
-    runtime.admit_artifact_write(attempt, size + len(text.encode()) + 2 * maximum +
-                                8 * 1024 * 1024 + 1024 * len(items) + 65536, len(items) + 20)
-    module.make_directory(directory.parent)
-    # Context ownership spans the turn; pool admission spans process creation.
-    # Pass a factory so acquisition occurs after preparation, at the spawn.
-    admission = (lambda: runtime.execution_pool.admission(context['profile'])) if opening else _existing
-    with runtime.tx():
-        runtime.authorize_launch(attempt)
-        if opening:
-            if owner is not None:
-                raise Refusal('public context already created; no replay')
-            owner = module.Context(context['handle'], context['profile'], runtime.controller,
-                                   policy['deadline'], native.originals, clock=runtime.clock,
-                                   executable=policy['executable'])
-            owner.created = context['created']
-            native.public_contexts[context['handle']] = owner
-        if (owner is None or owner.thread != context['run'] or owner.profile != context['profile']
-                or owner.collector != runtime.controller or owner.lifetime != policy['deadline']
-                or owner.executable != policy['executable']):
-            raise Refusal('original public context/account/lifetime unavailable or changed')
-        runtime.db.execute("UPDATE review_calls SET state='launch-intent' WHERE attempt=?", (attempt,))
-
-    def started():
-        if runtime.attempt(attempt)['begin'] is None:
-            runtime.begin(attempt, {'process_handle': 'owned-asyncio-subprocess',
-                'original_collector': runtime.controller, 'identity_scope': VERSION + '; not native-root END'})
-
-    code, receipt, answer = await owner.turn(directory, items, text,
-            collector=runtime.controller, profile=context['profile'],
-            current_authority=lambda: runtime.authorize_launch(attempt),
-            current_profiles=[context['profile']] if opening else [],
-            publish=lambda observation: runtime.record_original_end(attempt, observation),
-            maximum=maximum, capture_max=4*1024*1024,
-            shutdown=runtime.config['deadlines']['shutdown'], started=started, admission=admission)
-    receipt['run'] = receipt['thread']
-    return code, receipt, answer
+    from .review_composition import call as protected_call
+    return await protected_call(native, runtime, attempt, policy, context, directory, text, opening, close)
 
 
 def proof(runtime, job, attempt, call, context, actual):
@@ -182,7 +151,7 @@ def proof(runtime, job, attempt, call, context, actual):
             or attempt['ended'] is None or attempt['collected'] is None or attempt['exit'] != 0
             or attempt['capture'] != 'complete' or attempt['error'] or not actual
             or any(not answered(t['actual_END'], t['receipt'], t.get('full_answer'), context['run'],
-                                t['receipt'].get('input') == 0)
+                                t['receipt'].get('input') == 1)
                    or t['receipt'].get('profile') != context['profile']
                    or t['receipt'].get('collector') != context['collector'] for t in actual)):
         raise Refusal('actual opaque context/original/material return incomplete')

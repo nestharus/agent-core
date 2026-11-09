@@ -948,7 +948,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
     def record_original_end(self, attempt, observation):
         """Original collector delivers a later fact, never an effect/hold release."""
         if type(observation.get('exit')) is not int or observation.get('kind') not in {
-                'appserver-model', 'preflight-metadata', 'native-caller', 'opaque-cli-process'} or not observation.get('original'):
+                'appserver-model', 'preflight-metadata', 'native-caller', 'opaque-cli-process',
+                'owned-sandbox-control'} or not observation.get('original'):
             raise Refusal('attributable exact original numeric observation required')
         with self.tx(collection=attempt):
             row = self.attempt(attempt)
