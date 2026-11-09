@@ -15,7 +15,7 @@ import unittest
 from unittest.mock import patch
 
 from coordinator_runtime import historical_verification as h
-from coordinator_runtime import processing, prospective, reviews, resource_scopes, configuration
+from coordinator_runtime import processing, prospective, reviews, resource_scopes, configuration, opaque_review
 from coordinator_runtime.board import Board, EXTENSION
 from coordinator_runtime.software import BOARD_SCHEMA
 from coordinator_runtime.contracts import Refusal, digest, encode, ident
@@ -27,6 +27,19 @@ class Principal:
     def acting_session(self, expected):
         if self.actor != expected: raise Refusal('fictional current principal mismatch')
         return self.actor
+
+
+def original_review_policy(caller):
+    """Synthetic archived selection, not a current service-policy admission.
+
+    Keep the original public caller dependency for historical ceiling checks.
+    Give Store.start_job the supported owner binding discriminator instead of
+    asking the concrete route executor to create an owner attempt. The legacy
+    caller fields remain archived metadata; this mixed historical record is not
+    a complete current opaque CLI policy and never reaches service execution.
+    """
+    return dict(transport=opaque_review.VERSION, caller=str(caller),
+                caller_sha256=hashlib.sha256(caller.read_bytes()).hexdigest())
 
 
 class Historical1041(unittest.TestCase):
@@ -46,7 +59,7 @@ class Historical1041(unittest.TestCase):
         caller=self.repo/'fake-native-provider.py'
         caller.write_text('"""Offline provider fixture identity; never invoked as a native provider."""\n')
         task=self.config['tasks']['reviews-proposer']
-        task.update(execution='owner',network=False,cwd=str(self.repo),binding=reviews.BINDING)
+        task.update(execution='owner',network=False,cwd=str(self.repo),binding=dict(opaque_review.BINDING))
         task['effect_authority']['read_roots']=[str(self.repo)]
         self.config['tasks']['work-integrator']['cwd']=str(self.other)
         self.config['tasks']['work-integrator']['effect_authority']['read_roots']=[str(self.other)]
@@ -78,7 +91,7 @@ CREATE TABLE threads(thread_id INTEGER,opener TEXT);
         original=processing.implementation()
         self.current_implementation=original
         selection=dict(tasks=['reviews-proposer'],future_intake=True,retained_events=[],recover_controls={},
-            service={'max_inflight':100,'reviews':{'reviews-proposer':dict(caller=str(caller),caller_sha256=hashlib.sha256(caller.read_bytes()).hexdigest())}},
+            service={'max_inflight':100,'reviews':{'reviews-proposer':original_review_policy(caller)}},
             expires=200,max_starts=100,max_runtime_rows=10000,max_shared_rows=10000,max_shared_payload_bytes=1000000,
             basis=dict(configuration=digest(self.config),implementation=original,event_boundary=0,
                 roles={r:dict(future_after=0,original=dict(binding=dict(id=self.grants[r],issued_by=self.work),events=[]))

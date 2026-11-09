@@ -85,6 +85,7 @@ class Fixture:
                  'tools/coordinator-runtime/final-release-risk.md',
                  'tools/branch_release.py', 'tools/operational_contracts.py',
                  'tools/direct-child/execution_pool.py', 'tools/direct-child/dispatch.py',
+                 'tools/direct-child/review_context.py',
                  'tools/direct-codex-child/launch.sh',
                  *('tools/message-board/'+n for n in
                    ('catalog.py', 'board_store.py', 'active_listener.py',
@@ -169,7 +170,8 @@ class ReleaseAcquisition(unittest.TestCase):
             f.directory/'coordinator', f.directory/'templates/coordinator-receive.md',
             f.directory/'final-release-risk.md', f.root/'tools/branch_release.py',
             f.root/'tools/operational_contracts.py', f.root/'tools/direct-child/execution_pool.py',
-            f.root/'tools/direct-child/dispatch.py', f.root/'tools/direct-codex-child/launch.sh',
+            f.root/'tools/direct-child/dispatch.py', f.root/'tools/direct-child/review_context.py',
+            f.root/'tools/direct-codex-child/launch.sh',
             *(f.root/'tools/message-board'/p for p in
               ('catalog.py', 'board_store.py', 'active_listener.py', 'queue_transport.py', 'managed_owner.py')),
             *(f.provider/p for p in PROVIDERS), f.operator, *f.templates}
