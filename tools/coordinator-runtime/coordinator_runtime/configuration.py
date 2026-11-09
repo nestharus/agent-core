@@ -197,6 +197,7 @@ def release(runtime, candidate):
     paths = [*sorted(modules.glob('*.py')), directory/'coordinator',
              *(root/'tools/message-board'/p for p in ('catalog.py', 'board_store.py', 'active_listener.py', 'queue_transport.py', 'managed_owner.py')),
              root/'tools/direct-child/execution_pool.py', root/'tools/direct-child/dispatch.py',
+             root/'tools/direct-child/review_context.py',
              root/'tools/direct-codex-child/launch.sh', directory/'templates/coordinator-receive.md',
              *(p for p, _ in sources.values()), operator,
              *branch_release_sources(root)]

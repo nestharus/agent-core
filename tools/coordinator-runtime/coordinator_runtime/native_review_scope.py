@@ -186,6 +186,8 @@ def _authenticate(runtime, row, record):
         if bound['proof'] is not None:
             runtime.processing.boards['Reviews']._software_job_grant(runtime, consumer)
     proof = reviews.collected_proof(runtime, job, attempt)
+    if proof and proof.get('kind') != 'selected-ordinary-review':
+        raise Refusal('public CLI proof is not native-root proof; select distinct report authority')
     if not proof or proof['material'].get('selected_task') != p['source_task']:
         raise Refusal('original collected native context required')
     context = runtime.one('SELECT capability,collector,run,state FROM review_contexts WHERE component=?', (proof['component'],))

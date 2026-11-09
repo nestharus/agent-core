@@ -948,7 +948,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
     def record_original_end(self, attempt, observation):
         """Original collector delivers a later fact, never an effect/hold release."""
         if type(observation.get('exit')) is not int or observation.get('kind') not in {
-                'appserver-model', 'preflight-metadata', 'native-caller'} or not observation.get('original'):
+                'appserver-model', 'preflight-metadata', 'native-caller', 'opaque-cli-process'} or not observation.get('original'):
             raise Refusal('attributable exact original numeric observation required')
         with self.tx(collection=attempt):
             row = self.attempt(attempt)
@@ -1237,8 +1237,9 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             task = self.config["tasks"][row["task"]]
             context = None
             if self.processing and self.processing.review_task(row['task']):
-                from .reviews import route_binding
-                task = {**task, 'binding': route_binding(task)}
+                from .reviews import execution_binding
+                policy = self.processing.current()[1]['service']['reviews'][row['task']]
+                task = {**task, 'binding': execution_binding(task, policy)}
                 member = json.loads(row['members'])[0]
                 source = self.event(member['event'])
                 from .branches import review_key
