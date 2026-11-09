@@ -55,13 +55,15 @@ def identity(store, job, attempt, outcome):
     returned = json.loads(call['answer'])
     expected = reviews.proposal_result(returned, call['component'], acquired,
                                        call['collector'], attempt['id'], turns)
+    calls_field = ('original_review_calls' if proof.get('kind') == 'selected-opaque-cli-review'
+                   else 'native_original_calls')
     fields = ('exit', 'capture', 'cleanup', 'error')
     if (call['collector'] != store.controller or acquired.get('selected_task') != job['task']
             or not turns or call['answer'] != turns[-1].get('full_answer')
             or expected != answer or outcome.get('result') != answer
             or any(outcome.get(k) != attempt[k] for k in fields)
-            or outcome.get('detail', {}).get('native_original_calls') != turns
-            or json.loads(attempt['detail']).get('native_original_calls') != turns
+            or outcome.get('detail', {}).get(calls_field) != turns
+            or json.loads(attempt['detail']).get(calls_field) != turns
             or any(record[k] != attempt[k] for k in ('result', 'error', 'exit', 'capture', 'job'))):
         raise Refusal('informative report differs from its whole original call/outcome/collection')
     context = store.one('SELECT * FROM review_contexts WHERE component=?', (call['component'],))
@@ -95,7 +97,9 @@ def identity(store, job, attempt, outcome):
             'call': digest(call), 'outcome': digest(outcome), 'collection': digest(record),
             'context': digest(context_call), 'history': digest(history),
             'attempt_truth': {k: attempt[k] for k in ('binding', 'begin', 'ended', 'collected',
-                                                    'exit', 'capture', 'cleanup', 'result', 'error')}}
+                                                    'exit', 'capture', 'cleanup', 'result', 'error')},
+            **({'execution_kind': proof['kind'], 'native_owner_execution': False}
+               if proof.get('kind') == 'selected-opaque-cli-review' else {})}
 
 
 def record(store, event, job, attempt, outcome):

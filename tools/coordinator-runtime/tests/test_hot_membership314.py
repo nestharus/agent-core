@@ -274,7 +274,11 @@ class HotMembership(unittest.IsolatedAsyncioTestCase):
             # Real harmless owned child/END, no native/provider protocol or IDs.
             child=await actual_spawn(sys.executable,'-c','import sys; sys.stdin.read()',stdin=asyncio.subprocess.PIPE,**kwargs)
             children.append((child,argv));spawned.set();return child
-        name='fictional-original-attempt'
+        name='fresh-control-original1171'
+        # A real owned journal row is needed for actual END publication. The
+        # native identity remains NULL: this is a harmless-process mechanism.
+        self.runtime.db.execute('INSERT INTO attempts(id,kind,controller,profile,binding,created) VALUES(?,?,?,NULL,?,?)',
+                                (name,'task',self.runtime.controller,encode(reviews.BINDING),self.runtime.clock()))
         with patch.object(self.runtime,'authorize_launch',side_effect=lambda unused:self.current()), \
              patch.object(self.runtime,'begin',return_value=None), \
              patch('coordinator_runtime.reviews.asyncio.create_subprocess_exec',side_effect=harmless_spawn):
@@ -284,13 +288,16 @@ class HotMembership(unittest.IsolatedAsyncioTestCase):
             frozen=copy.deepcopy(context)
             self.assertIsNone(children[0][0].returncode)
             children[0][0].stdin.close()
-            code,receipt,answer=await running
+            try:
+                code,receipt,answer=await running
+            except Exception:
+                self.fail('fresh owned finalization observation: '+encode(native.original_status()))
             self.assertEqual(code,0)
             self.assertEqual(receipt['class'],'incomplete')
             self.assertIsNone(answer)
             self.assertEqual(context,frozen)
             with self.assertRaisesRegex(Refusal,'empty'):
-                await native.call(self.runtime,name,policy,context,self.f.directory/'excluded-input','future input',[])
+                await native.call(self.runtime,name,policy,context,self.f.directory/'excluded-input','future input',[],opening=True)
             self.assertEqual(len(children),1)
             # Fictional owned handle for the harmless close subprocess; no native run.
             Path(context['handle']).write_text(encode({'v':1,'uid':os.getuid(),'run':'fictional-protocol-run',
@@ -305,7 +312,17 @@ class HotMembership(unittest.IsolatedAsyncioTestCase):
             code,receipt,answer=await draining
             self.assertEqual(code,0)
             self.assertEqual(receipt['class'],'incomplete','local exit cannot fabricate native close success')
-        self.unchanged_history()
+        observations=json.loads(self.runtime.attempt(name)['detail'])['original_end_observations']
+        self.assertEqual([o['exit'] for o in observations],[0,0])
+        self.assertEqual([o['kind'] for o in observations],['native-caller']*2)
+        self.assertTrue(all(o['evidence_complete'] for o in observations))
+        self.assertFalse(native.originals.owned)
+        self.assertFalse(native.originals.pending)
+        self.assertIsNone(self.runtime.attempt(name)['session'])
+        for table,rows in self.original_rows.items():
+            current=self.runtime.rows('SELECT * FROM '+table)
+            if table=='attempts':current=[r for r in current if r['id']!=name]
+            self.assertEqual(current,rows,table)
 
     async def test_unavailable_review_route_refuses_without_borrowing_or_affecting_other_work(self):
         context={'profile':'.codex4','route':None,'handle':str(self.f.directory/'declaration'),'run':None,'created':self.runtime.clock()}

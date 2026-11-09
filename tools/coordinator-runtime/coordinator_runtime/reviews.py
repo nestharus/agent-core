@@ -34,6 +34,34 @@ FAMILIES = {'organization-and-communication','cross-change-understanding','purpo
             'service-capability-and-headroom','operational-evidence-capabilities','agent-reasoning-integrity'}
 
 
+def route_binding(task):
+    """Keep the existing concrete route executor distinct from opaque ownership.
+
+    A route operand is not a model-name invocation. In particular, changing the
+    attempt's binding to BINDING cannot realize the selected opaque owner task.
+    This guard neither resolves a route nor declares that another supported
+    opaque continuation interface is absent.
+    """
+    if task.get('execution') == 'owner' or task.get('binding', {}).get('provider') == 'opaque':
+        raise Refusal('route-only Reviews cannot invoke selected opaque gpt-xhigh; '
+                      'retain owner execution; supported opaque continuing entry required')
+    return dict(BINDING)
+
+
+def execution_binding(task, policy):
+    if policy.get('transport') == 'opaque-cli-v1':
+        from .opaque_review import binding
+        return binding(task)
+    return route_binding(task)
+
+
+def call_answered(policy, code, receipt, answer, run, opening=False):
+    if policy.get('transport') == 'opaque-cli-v1':
+        from .opaque_review import answered as public_answered
+        return public_answered(code, receipt, answer, run, opening)
+    return answered(code, receipt, answer, run, opening)
+
+
 def coverage(returned,packet,architecture):
     """Account for the actual method, without treating a label as reading proof."""
     account=returned.get('coverage')
@@ -181,19 +209,26 @@ def validate(runtime, choices):
         task = runtime.config['tasks'].get(name, {})
         if task.get('role') != 'Reviews' or task.get('phase') != 'proposer' or task.get('effects') != 'none':
             raise Refusal('ordinary review requires a selected read-only Reviews proposer')
-        if (set(policy) - {'method_closure'} != {'caller', 'caller_sha256', 'routes', 'deadline', 'method', 'method_files', 'components'}
-                or not 1 <= policy['deadline'] <= 7200):
-            raise Refusal('exact native caller/routes/deadline/method/components required')
-        caller_current(policy)
+        execution_binding(task, policy)
+        public = policy.get('transport') == 'opaque-cli-v1'
+        if public:
+            from .opaque_review import validate as validate_public
+            validate_public(policy)
+        else:
+            if (set(policy) - {'method_closure'} != {'caller', 'caller_sha256', 'routes', 'deadline', 'method', 'method_files', 'components'}
+                    or not 1 <= policy['deadline'] <= 7200):
+                raise Refusal('exact native caller/routes/deadline/method/components required')
+            caller_current(policy)
         if method_files(policy['method'], policy.get('method_closure'), runtime.config.get('artifact_exclusions', [])) != policy['method_files']:
             raise Refusal('current ordinary definition bodies differ from selected pins')
-        if not isinstance(policy['routes'], dict) or set(policy['routes']) - set(runtime.config['profiles']):
+        if not public and (not isinstance(policy['routes'], dict) or set(policy['routes']) - set(runtime.config['profiles'])):
             raise Refusal('review routes must name prospectively authorized public profiles')
-        for route in policy['routes'].values():
+        for route in policy.get('routes', {}).values():
             required_text(route, 'declared Sol high account route', 128)
         for component, material in policy['components'].items():
             required_text(component, 'component', 128)
-            if set(material) - {'prior_histories','relationship_paths'} != {'repository', 'origin', 'paths', 'history', 'authority'}:
+            optional = {'prior_histories', 'relationship_paths'} | ({'situation'} if public else set())
+            if set(material) - optional != {'repository', 'origin', 'paths', 'history', 'authority'}:
                 raise Refusal('component needs repository/origin/paths/history and read authority')
             required_text(material['authority'], 'actual read/source authority')
             from .resource_scopes import root
@@ -281,10 +316,14 @@ def material(policy, packet, prior):
         commands.append(shlex.join(['cat', str(history)]))
     return {'packet': packet, 'repository': repository, 'source': source, 'method_files': policy['method_files'],
             'history': str(history), 'history_sha256': sha(history_body), 'prior_histories': prior_histories, 'correction_diff': diff,
-            'commands': commands, 'read_authority': selected['authority'],'relationship_paths':selected.get('relationship_paths',[])}
+            'commands': commands, 'read_authority': selected['authority'],'relationship_paths':selected.get('relationship_paths',[]),
+            **({'situation': selected['situation']} if policy.get('transport') == 'opaque-cli-v1' else {})}
 
 
 def prompt(policy, acquired, read_command):
+    if policy.get('transport') == 'opaque-cli-v1':
+        from .opaque_review import prompt as public_prompt
+        return public_prompt(policy, acquired)
     return ('Perform the current ordinary unified static reviewer procedure at ' + policy['method'] + '. '
             'Read it and every incorporated definition. Architecture first, then continue all nine families '
             'and all constituent questions in this same conversation. Return the architecture pass when ready; '
@@ -392,6 +431,7 @@ class Native:
     """Each call is an owned original subprocess; no provider/session fabrication."""
     def __init__(self):
         self.originals = Originals()
+        self.public_contexts = {}
 
     def original_status(self):
         return [self.originals.observation(key) for key in self.originals.owned]
@@ -405,6 +445,9 @@ class Native:
 
     async def call(self, runtime, attempt, policy, context, directory, text, commands, opening=False, close=False):
         self.shutdown = runtime.config['deadlines']['shutdown']
+        if policy.get('transport') == 'opaque-cli-v1':
+            from .opaque_review import call as public_call
+            return await public_call(self, runtime, attempt, policy, context, directory, text, opening, close)
         await self.collect_pending(runtime)
         runtime.admit_artifact_write(attempt, 2*16777216+2*runtime.config['limits']['max_result_bytes']+65536, 16)
         directory.mkdir(mode=0o700, parents=True, exist_ok=False)
@@ -424,9 +467,11 @@ class Native:
             runtime.authorize_launch(attempt)
             if policy['routes'].get(context['profile']) != context['route'] or not context['route']:
                 raise Refusal('bound review account route unavailable/changed; original context retained')
-        # Each NEW input obeys current user membership. Close drains existing
-        # ownership even after exclusion, without admitting new model work.
-        guard = _existing() if close else runtime.execution_pool.admission(context['profile'])
+        # Pool membership allocates NEW contexts. An explicit continuation stays
+        # on its original account, including after a future-launch pool change.
+        # Current task/source/grant authority and the exact route/handle checks
+        # still apply to every input; close only drains existing ownership.
+        guard = runtime.execution_pool.admission(context['profile']) if opening and not close else _existing()
         child, key = None, None
         capture_errors, captures = [], []
         timed_out = False
@@ -567,6 +612,7 @@ class Executor:
         if job.get('task'):
             runtime.authorize_launch(attempt)
             task = runtime.config['tasks'][job['task']]
+            execution_binding(task, policy)
             if task.get('require_package_scope'):
                 from .contracts import scoped_task
                 task = scoped_task(job['task'], task, runtime.one(
@@ -628,7 +674,8 @@ class Executor:
             read_command = shlex.join(['/usr/bin/python3', '-B', str(Path(__file__).with_name('review_reader.py')), str(facade)])
             if opening:
                 profile = runtime.attempt(attempt)['profile']
-                route = required_text(policy['routes'].get(profile), 'declared review account route unavailable; no substitution', 128)
+                route = ('opaque-cli-v1' if policy.get('transport') == 'opaque-cli-v1' else
+                         required_text(policy['routes'].get(profile), 'declared review account route unavailable; no substitution', 128))
                 context = {'component': component, 'capability': runtime.processing.key, 'profile': profile,
                            'route': route, 'handle': str(runtime.home / 'review-handles' / attempt),
                            'run': None, 'collector': runtime.controller, 'state': 'opening', 'head': None,
@@ -676,8 +723,10 @@ class Executor:
                         if observed==branch['root'] or runtime.one("SELECT address FROM branch_contexts WHERE branch=? AND kind='builder' AND address=?",(branch['id'],observed)):
                             raise Refusal('ordinary reviewer must remain separate from responsible Root and builders')
                         runtime.db.execute('INSERT OR IGNORE INTO branch_contexts VALUES(?,?,?,?,?,?,?,?,?,NULL)',
-                                           (branch['id'],'review',packet['component'],observed,'observed-native-run',context['profile'],runtime.controller,'available',encode(receipt)))
-                if not answered(code, receipt, answer, observed, opening=opening and len(turns)==1):
+                                           (branch['id'],'review',packet['component'],observed,
+                                            'observed-opaque-cli-thread' if policy.get('transport') == 'opaque-cli-v1' else 'observed-native-run',
+                                            context['profile'],runtime.controller,'available',encode(receipt)))
+                if not call_answered(policy, code, receipt, answer, observed, opening=opening and len(turns)==1):
                     raise Refusal('original native call incomplete/failed; retained full return and possible live root')
                 returned = parse_json(answer)
                 if (not isinstance(returned, dict) or set(returned) != {'semantic', 'summary', 'report', 'history_entry', 'coverage', 'stage'}
@@ -702,7 +751,9 @@ class Executor:
                 # simply requests the pending work in the defining home.
                 text = ('Continue the remaining ordinary unified procedure in this SAME context. '
                         'Conserve the complete architecture pass and return stage=complete with the whole '
-                        'coverage/history/findings/diagnosis and explicit unexamined areas. No new goal or repair input.')
+                        'coverage/history/findings/diagnosis and explicit unexamined areas. '
+                        + ('The authentic situation remains challengeable; no expected findings or repair hints are added.'
+                           if policy.get('transport') == 'opaque-cli-v1' else 'No new goal or repair input.'))
             selected = policy['components'][packet['component']]
             history = Path(selected['history'])
             history.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -718,13 +769,19 @@ class Executor:
                                    (packet['head'], sha(before + entry.encode()), component))
             # This is an observed native run address, not a fabricated UUID or
             # attestation of hidden provider session/turn identities.
-            runtime.session(attempt, context['run'], str(turns[-1]['receipt']['turn']['input']),
-                            {'identity_kind': 'observed-native-run', 'native_provider_session': 'not exposed'})
+            public = policy.get('transport') == 'opaque-cli-v1'
+            index = turns[-1]['receipt']['input'] if public else turns[-1]['receipt']['turn']['input']
+            runtime.session(attempt, context['run'], str(index),
+                            {'identity_kind': 'observed-opaque-cli-thread' if public else 'observed-native-run',
+                             'native_provider_session': 'not exposed'})
             result = proposal_result(returned, component, acquired, runtime.controller, attempt, turns)
             return {'exit': code, 'capture': 'complete', 'cleanup': 'continuing-context-held', 'result': result, 'error': None,
-                    'detail': {'native_original_calls': turns,
-                               'static_authority': 'selected static procedure; sole whole-command material facade; no exact read-isolation claim',
-                               'tool_capture': 'native caller exports; no fabricated app-server tool completion'}}
+                    'detail': {'original_review_calls': turns, 'transport': policy.get('transport', 'native-route'),
+                               **({'native_original_calls': turns} if not public else {'native_owner_execution': False}),
+                               'static_authority': ('positive immutable material snapshot; restricted public CLI permission profile'
+                                                    if public else 'selected static procedure; sole whole-command material facade; no exact read-isolation claim'),
+                               'tool_capture': ('public CLI JSON events, bounded and separately accounted'
+                                                if public else 'native caller exports; no fabricated app-server tool completion')}}
         except BaseException:
             with runtime.tx():
                 call=runtime.one('SELECT state FROM review_calls WHERE attempt=?',(attempt,))
@@ -759,7 +816,9 @@ class Executor:
         with runtime.tx():
             saved = json.loads(runtime.one('SELECT receipt FROM review_calls WHERE attempt=?',(call['attempt'],))['receipt'] or '[]') + [{'close_actual_END': code, 'receipt': receipt}]
             runtime.db.execute('UPDATE review_calls SET receipt=? WHERE attempt=?', (encode(saved), call['attempt']))
-            did_close = closed(code, receipt, context['run'])
+            did_close = (receipt.get('transport') == 'opaque-cli-v1' and receipt.get('local_owner_closed') is True
+                         and receipt.get('caller_processes_collected') is True and receipt.get('run') == context['run']
+                         if policy.get('transport') == 'opaque-cli-v1' else closed(code, receipt, context['run']))
             runtime.db.execute('UPDATE review_contexts SET state=?,closed_at=? WHERE component=?',
                                ('closed' if did_close else 'interrupted', runtime.clock() if did_close else None, component))
             if did_close:
@@ -780,10 +839,17 @@ def collected_proof(runtime, job, attempt):
     call = runtime.one("SELECT * FROM review_calls WHERE attempt=? AND state='collected'", (attempt['id'],))
     if not call:
         return None
+    # A historical rewritten attempt binding cannot certify the selected opaque
+    # owner task. Do not promote such a call into current Source qualification.
+    policy = runtime.processing.current()[1].get('service', {}).get('reviews', {}).get(job['task'], {})
+    execution_binding(runtime.config['tasks'][job['task']], policy)
     snapshot=runtime.one('SELECT context FROM review_call_contexts WHERE attempt=?',(attempt['id'],))
     context=json.loads(snapshot['context']) if snapshot else runtime.one('SELECT * FROM review_contexts WHERE component=?', (call['component'],))
     turns = json.loads(call['receipt'])
     actual = [t for t in turns if 'actual_END' in t and 'close_intent' not in t]
+    if policy.get('transport') == 'opaque-cli-v1':
+        from .opaque_review import proof
+        return proof(runtime, job, attempt, call, context, actual)
     if (not context or attempt['session'] != context['run'] or not context['run']
             or attempt['controller'] != call['collector'] or json.loads(attempt['binding']) != BINDING
             or attempt['begin'] is None or attempt['ended'] is None or attempt['collected'] is None

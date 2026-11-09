@@ -4,6 +4,11 @@
 
 It does not decide seat authority or context boundaries, and it does not check that a class or kind claim is true. The caller asserts both and owns them. It does not select tasks, allocate worktrees, authorize effects, or replace the review and delivery lifecycle.
 
+The explicit coordinator [opaque Reviews integration](../coordinator-runtime/opaque-review1157.md)
+uses `review_context.py` for a positive read-only material snapshot and an owned
+public CLI thread. It is selected separately from `dispatch.py`; it changes no
+default route and supplies no native-root proof or automatic fallback.
+
 ## Observe, Frame, Decide and Act
 
 The current method uses separated defining homes, live since 2026-10-05. Start at [AGENTS](/mnt/c/Users/xteam/OneDrive/Documents/projects/oulipoly/AGENTS.md) → [LOAD_MAP](/mnt/c/Users/xteam/OneDrive/Documents/projects/oulipoly/LOAD_MAP.md), then follow the contribution's level entry, definition and relevant evidence. Seat names route to these homes; this dispatcher's seat selectors and [model routes](#resolution) remain operational launch choices. Earlier returns reporting unavailable `agents/` or `core/` paths retain their supplied-path scope; reachable definitions establish neither profile import loading nor efficacy.
