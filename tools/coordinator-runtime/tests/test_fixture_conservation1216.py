@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 from coordinator_runtime import opaque_review, reviews
 from coordinator_runtime.contracts import Refusal
-from fixture_conservation import conserve, readback, verify, body
+from fixture_conservation import conserve, readback, verify, body, CloseGate
 import test_historical_verification1041 as historical
 
 
@@ -25,6 +25,7 @@ class Conservation1216(unittest.TestCase):
         original = self.area / 'original'
         original.mkdir()
         connection = sqlite3.connect(original / 'journal.sqlite')
+        gate = CloseGate(original, self.area / 'conserved', connection.close)
         try:
             self.assertEqual(connection.execute('PRAGMA journal_mode=WAL').fetchone()[0], 'wal')
             connection.execute('PRAGMA wal_autocheckpoint=0')
@@ -37,7 +38,7 @@ class Conservation1216(unittest.TestCase):
             self.assertIn('journal.sqlite-wal', expected)
             self.assertIn('journal.sqlite-shm', expected)
             self.assertGreater(len(expected['journal.sqlite-wal']), 0)
-            record = conserve(original, self.area / 'conserved')
+            record = gate.preserve()
             result = readback(record, self.area / 'logical')
             reader = sqlite3.connect((self.area / 'logical/journal.sqlite').as_uri() + '?mode=ro', uri=True)
             try:
@@ -49,7 +50,7 @@ class Conservation1216(unittest.TestCase):
             self.assertEqual(result['databases'][0]['integrity'], [('ok',)])
             self.assertEqual({p.name: body(p) for p in Path(record['physical']).iterdir()}, expected)
         finally:
-            connection.close()  # Normal close is allowed only after conservation.
+            gate.close()  # Retries before close; failed attempts and live ownership stay.
         self.assertEqual(verify(record), len(expected))
         self.assertEqual(body(Path(record['physical']) / 'journal.sqlite-shm'), expected['journal.sqlite-shm'])
 

@@ -153,3 +153,35 @@ def readback(record, destination):
     retained = verify(record)
     return dict(databases=results, readback_copy_changes=changes, conserved_files_verified=retained,
                 meaning='logical readback of separate copy; not exact-byte preservation of that readback copy')
+
+
+class CloseGate:
+    """Keep an owned fixture live until verified conservation permits close.
+
+    Failed attempts are never reused or erased. The live registry retains the
+    callback (and its connection) on failure; the same owner can retry normally.
+    This is ordinary failure ownership, not host-death or unlimited-resource proof.
+    """
+    pending = []
+
+    def __init__(self, root, destination, close):
+        self.root, self.destination, self.close_original = Path(root), Path(destination), close
+        self.attempts, self.record, self.closed = 0, None, False
+        self.pending.append(self)
+
+    def preserve(self):
+        if self.record is None:
+            self.attempts += 1
+            candidate = conserve(self.root, self.destination.with_name(
+                self.destination.name + '-attempt-' + str(self.attempts)))
+            self.record = candidate
+        verify(self.record)
+        return self.record
+
+    def close(self):
+        if self.closed:
+            return
+        self.preserve()  # On failure the callback is unreachable and stays owned.
+        self.close_original()
+        self.closed = True
+        self.pending.remove(self)

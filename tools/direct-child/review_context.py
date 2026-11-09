@@ -277,13 +277,19 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
     observed = dict(thread=None, completed=0, failed=False, answer=None, diagnostics=[])
     captures = []
     observations = 0
+    protocol_failed = False
     receipt_attempts = []
     stop_at = time.monotonic() + deadline
 
     async def finish(entry):
         nonlocal observations
         try:
-            await asyncio.wait_for(asyncio.gather(*captures), shutdown)
+            results = await asyncio.wait_for(asyncio.gather(*captures, return_exceptions=True), shutdown)
+            for result in results:
+                if isinstance(result, BaseException):
+                    error = 'capture task failed: ' + type(result).__name__
+                    if error not in evidence['errors']:
+                        evidence['errors'].append(error)
         except (asyncio.TimeoutError, asyncio.CancelledError):
             evidence['errors'].append('pipe EOF unobserved; capture partial')
         # Reserve the next name before any fallible persistence. A failed
@@ -303,19 +309,27 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
         except ProcessLookupError:
             pass
 
+    def reject(reason):
+        nonlocal protocol_failed
+        protocol_failed = True
+        observed['failed'] = True
+        stop(reason)
+
     def event(line):
         try:
             record = json.loads(line)
             kind = record['type']
+            if not isinstance(kind, str):
+                raise TypeError('event kind must be a string')
         except (ValueError, KeyError, TypeError):
-            stop('invalid JSON event; no complete capture claim')
+            reject('invalid JSON event; no complete capture claim')
             return
         if kind == 'thread.started':
             value = record.get('thread_id')
             if (not isinstance(value, str) or not re.fullmatch(r'[0-9a-fA-F-]{36}', value)
                     or observed['thread'] not in (None, value)
                     or expected_thread not in (None, value)):
-                stop('public thread identity missing/changed')
+                reject('public thread identity missing/changed')
             else:
                 observed['thread'] = value
         if kind == 'turn.completed':
@@ -323,22 +337,22 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
         if kind in {'turn.failed', 'error'}:
             observed['failed'] = True
         item = record.get('item', {})
-        if not isinstance(item, dict):
-            stop('malformed item event; capture partial')
+        if not isinstance(item, dict) or ('type' in item and not isinstance(item['type'], str)):
+            reject('malformed item event; capture partial')
             return
         if kind in {'error', 'turn.failed'} or item.get('type') == 'error':
             if len(observed['diagnostics']) >= 64:
-                stop('diagnostic count exceeds selected bound; capture partial')
+                reject('diagnostic count exceeds selected bound; capture partial')
                 return
             observed['diagnostics'].append(diagnostic(record, item))
         if kind.startswith('item.') and item.get('type') not in {
                 'agent_message', 'reasoning', 'command_execution', 'todo_list', 'plan', 'error'}:
-            stop('unexpected item activity; tool/effect semantics unclassified; preserve original effects')
+            reject('unexpected item activity; tool/effect semantics unclassified; preserve original effects')
             return
         if kind == 'item.completed' and item.get('type') == 'agent_message':
             answer = item.get('text')
             if not isinstance(answer, str) or len(answer.encode()) > maximum:
-                stop('complete answer exceeds admitted UTF-8 output bound')
+                reject('complete answer exceeds admitted UTF-8 output bound')
             else:
                 observed['answer'] = answer
 
@@ -365,10 +379,18 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
                     lines = pending.split(b'\n')
                     pending = lines.pop()
                     for line in lines:
-                        if line:
-                            event(line)
-                if name == 'stdout' and pending:
-                    event(pending)
+                        if line and not protocol_failed:
+                            try:
+                                event(line)
+                            except Exception as exc:
+                                # Reject semantic handling, but continue retaining and
+                                # draining this same original's bytes to actual EOF.
+                                reject('event handler failed: ' + type(exc).__name__)
+                if name == 'stdout' and pending and not protocol_failed:
+                    try:
+                        event(pending)
+                    except Exception as exc:
+                        reject('event handler failed: ' + type(exc).__name__)
         except (OSError, UnicodeError) as exc:
             stop(name + ' capture failed: ' + type(exc).__name__)
 

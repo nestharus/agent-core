@@ -19,27 +19,39 @@ from fixture_conservation import capacity, conserve, readback, verify, write, di
 
 
 class Recorder(unittest.TestResult):
-    def __init__(self, output):
+    def __init__(self, output, fixture_root=Path('/fixtures')):
         super().__init__()
         self.output = output
+        self.fixture_root = fixture_root
+        self.snapshot_attempts = 0
+        self.snapshotting = False
+        self.conservation_pending = False
+        capacity(output)
         self.stream = (output / 'events.jsonl').open('x')
         self.current = None
         self.all_records = []
         self.physical = []
         self.snapshotted = False
         self.connections = []
+        self.original_connect = sqlite3.connect
 
     def event(self, kind, **fields):
+        capacity(self.output)
         self.stream.write(json.dumps(dict(kind=kind, **fields), sort_keys=True) + '\n')
         self.stream.flush()
         os.fsync(self.stream.fileno())
 
     def startTest(self, test):
+        if self.conservation_pending:
+            raise RuntimeError('previous required fixture conservation remains pending')
         super().startTest(test)
         self.current = dict(id=test.id(), outcome='UNFINISHED', assertions=[], lines={}, body_entered=False,
                             subtests=[], conservation=[])
-        self.names_before = set(Path('/fixtures').iterdir())
+        self.names_before = set(self.fixture_root.iterdir())
         self.snapshotted = False
+        self.snapshot_attempts = 0
+        self.snapshotting = False
+        self.conservation_pending = False
         self.connections = []
         self.event('start', id=test.id())
 
@@ -60,13 +72,23 @@ class Recorder(unittest.TestResult):
         return self.trace
 
     def snapshot(self, test):
+        if self.snapshotting:
+            return
+        self.snapshotting = True
+        try:
+            self._snapshot(test)
+        finally:
+            self.snapshotting = False
+
+    def _snapshot(self, test):
         if self.current is None or self.snapshotted:
             return
-        self.snapshotted = True
-        area = self.output / ('case-' + str(self.testsRun))
+        self.conservation_pending = True
+        self.snapshot_attempts += 1
+        area = self.output / ('case-' + str(self.testsRun) + '-attempt-' + str(self.snapshot_attempts))
         directory(area)
         # Each name was created by this synchronous case in an empty owned root.
-        created = sorted(set(Path('/fixtures').iterdir()) - self.names_before)
+        created = sorted(set(self.fixture_root.iterdir()) - self.names_before)
         for index, root in enumerate(created):
             if root.is_file():
                 # Fixed witnesses outside the per-fixture directories also stay.
@@ -92,6 +114,51 @@ class Recorder(unittest.TestResult):
             memory.append(dict(path=str(target), bytes=len(image), meaning='logical image, not original physical file'))
         self.current['memory'] = memory
         self.event('conserved-before-close', id=self.current['id'], originals=[str(p) for p in created])
+        self.snapshotted = True
+        self.conservation_pending = False
+
+    def connect(self, *args, **kwargs):
+        self_recorder = self
+        factory = kwargs.get('factory', sqlite3.Connection)
+        class GuardedConnection(factory):
+            def close(self):
+                self_recorder.before_close()
+                return super().close()
+
+            def execute(self, *args, **kwargs):
+                self_recorder.before_close()
+                return super().execute(*args, **kwargs)
+
+            def executemany(self, *args, **kwargs):
+                self_recorder.before_close()
+                return super().executemany(*args, **kwargs)
+
+            def executescript(self, *args, **kwargs):
+                self_recorder.before_close()
+                return super().executescript(*args, **kwargs)
+
+            def commit(self):
+                self_recorder.before_close()
+                return super().commit()
+
+            def rollback(self):
+                self_recorder.before_close()
+                return super().rollback()
+
+            def __exit__(self, *args):
+                self_recorder.before_close()
+                return super().__exit__(*args)
+        kwargs['factory'] = GuardedConnection
+        connection = self.original_connect(*args, **kwargs)
+        if self.current is not None:
+            self.connections.append(connection)
+        return connection
+
+    def before_close(self):
+        # Ordinary close cannot consume an oracle whose copy failed. Keep the
+        # same live connections and retry into a new retained attempt directory.
+        if self.conservation_pending and not self.snapshotting:
+            self.snapshot(None)
 
     def addSuccess(self, test):
         super().addSuccess(test)
@@ -124,6 +191,7 @@ class Recorder(unittest.TestResult):
 
     def stopTest(self, test):
         super().stopTest(test)
+        self.snapshot(test)  # Never hand back a successful case with pending bytes.
         completed = {**self.current, 'lines': {k: sorted(v) for k, v in self.current['lines'].items()}}
         write(self.output / ('case-' + str(self.testsRun) + '.json'),
               json.dumps(completed, indent=2, sort_keys=True).encode())
@@ -143,11 +211,6 @@ def main():
     old_cleanups = unittest.TestCase.doCleanups
     old_teardown = unittest.TestCase._callTearDown
     old_connect = sqlite3.connect
-    def connect(*args, **kwargs):
-        connection = old_connect(*args, **kwargs)
-        if recorder.current is not None:
-            recorder.connections.append(connection)
-        return connection
     def cleanups(test):
         recorder.snapshot(test)
         return old_cleanups(test)
@@ -156,7 +219,7 @@ def main():
         return old_teardown(test)
     unittest.TestCase.doCleanups = cleanups
     unittest.TestCase._callTearDown = teardown
-    sqlite3.connect = connect
+    sqlite3.connect = recorder.connect
     sys.settrace(recorder.trace)
     try:
         for identity in ids:
