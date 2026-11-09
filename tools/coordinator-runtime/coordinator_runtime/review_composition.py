@@ -18,6 +18,7 @@ from .resource_scopes import root
 
 VERSION = 'protected-continuing-v1'
 PROGRAM_VERSION = 'protected-continuing-v2'
+RUNTIME_VERSION = 'protected-continuing-v3'
 MODULES = ('profile_lease', 'execution_pool', 'dispatch', 'review_context',
            'opaque_dialogue', 'continuing_review')
 FIELDS = {'version', 'source_files', 'pool_control', 'runtime_reads',
@@ -28,8 +29,10 @@ def declaration(policy):
     value = policy.get('continuing')
     if not isinstance(value, dict):
         raise Refusal('selected protected continuing composition required before execution')
-    fields = FIELDS | {'executable_identity'} if value.get('version') == PROGRAM_VERSION else FIELDS
-    if set(value) != fields or value['version'] not in {VERSION, PROGRAM_VERSION}:
+    fields = FIELDS | {'executable_identity'} if value.get('version') in {PROGRAM_VERSION, RUNTIME_VERSION} else FIELDS
+    if value.get('version') == RUNTIME_VERSION:
+        fields = fields | {'probe_helper'}
+    if set(value) != fields or value['version'] not in {VERSION, PROGRAM_VERSION, RUNTIME_VERSION}:
         raise Refusal('selected protected continuing composition required before execution')
     if (not isinstance(value['source_files'], dict)
             or set(value['source_files']) != {name+'.py' for name in MODULES}):
@@ -46,12 +49,15 @@ def declaration(policy):
     for expected in [*value['source_files'].values(), value['executable_sha256']]:
         if not isinstance(expected, str) or len(expected) != 64 or any(c not in '0123456789abcdef' for c in expected):
             raise Refusal('exact SHA256 dependency identity required')
-    if value['version'] == PROGRAM_VERSION:
+    if value['version'] in {PROGRAM_VERSION, RUNTIME_VERSION}:
         program = value['executable_identity']
         if (not isinstance(program, dict) or set(program) != {'bytes', 'max_bytes'}
                 or type(program['bytes']) is not int or type(program['max_bytes']) is not int
                 or not 0 < program['bytes'] <= program['max_bytes'] <= 1024**3):
             raise Refusal('explicit finite complete executable identity allowance required')
+    if value['version'] == RUNTIME_VERSION:
+        from .public_runtime import helper_declaration
+        helper_declaration(value['probe_helper'])
     control = value['pool_control']
     if not isinstance(control, dict) or set(control) != {'routes', 'static_sha256'}:
         raise Refusal('public static pool control binding required')
@@ -119,14 +125,16 @@ def dependencies(runtime, attempt, policy, package):
     if getattr(package, 'failed', True):
         raise Refusal('original source namespace failed; no partial reuse')
     executable = admitted_path(runtime, attempt, policy['executable'],
-                               source_read=value['version'] == PROGRAM_VERSION)
+                               source_read=value['version'] in {PROGRAM_VERSION, RUNTIME_VERSION})
     routes = admitted_path(runtime, attempt, value['pool_control']['routes'])
     if str(routes) != runtime.config.get('execution_pool_routes'):
         raise Refusal('execution and admission must share the selected public control')
     for path in value['runtime_reads']:
-        admitted_path(runtime, attempt, path)
+        admitted_path(runtime, attempt, path, source_read=value['version'] == RUNTIME_VERSION)
+    if value['version'] == RUNTIME_VERSION:
+        probe_helper(runtime, attempt, policy)
     from .reviews import sha
-    if value['version'] == PROGRAM_VERSION:
+    if value['version'] in {PROGRAM_VERSION, RUNTIME_VERSION}:
         from .public_program import identity
         program = value['executable_identity']
         observed = identity(executable, program['bytes'], program['max_bytes'],
@@ -140,6 +148,25 @@ def dependencies(runtime, attempt, policy, package):
     pool = package.execution_pool.Pool(routes)
     pool.assert_control(raw, value['pool_control'])
     return routes
+
+
+def probe_helper(runtime, attempt, policy):
+    """Current canonical helper identity/rights and explicit trusted runtime.
+
+    Used again when constructing each actual local/provider canary command.
+    No private startup lookup and no inference from an earlier origin query.
+    """
+    from .public_runtime import check_helper
+    value = declaration(policy)
+    helper = value['probe_helper']
+    paths = [helper['path'], *helper['runtime_directories']]
+    # All lexical/current authority checks precede any identity acquisition.
+    for path in paths:
+        admitted_path(runtime, attempt, path, source_read=True)
+    if not set(paths) <= set(value['runtime_reads']):
+        raise Refusal('probe helper and runtime must share the actual filesystem read map')
+    check_helper(helper, runtime.config.get('artifact_exclusions', []))
+    return helper['path']
 
 
 class SelectedOwner:
@@ -157,7 +184,8 @@ class SelectedOwner:
         self.capacity(self.root.parent)
         execution = package.dispatch.open_opaque_execution(routes, 'gpt-xhigh', context['profile'])
         protection = package.continuing_review.SandboxProtection(
-            self.root, policy['executable'], value['runtime_reads'], self.capacity)
+            self.root, policy['executable'], value['runtime_reads'], self.capacity,
+            probe_helper=(lambda: self.current_probe_helper()) if value['version'] == RUNTIME_VERSION else None)
         self.endpoint = package.continuing_review.ExecEndpoint(
             self.root, policy['executable'], native.originals.scope(), runtime.execution_pool.admission,
             self.authorize, protection, self.capacity, None, execution=execution)
@@ -169,6 +197,10 @@ class SelectedOwner:
             self.endpoint, 'gpt-xhigh', context['profile'], runtime.controller, self.authorize,
             lifetime=policy['deadline'], clock=runtime.clock, origin=context['created'])
         self.bind(attempt)
+
+    def current_probe_helper(self):
+        self.runtime.authorize_launch(self.attempt)
+        return probe_helper(self.runtime, self.attempt, self.policy)
 
     def capacity(self, parent):
         parent = root(str(parent), self.runtime.config.get('artifact_exclusions', []))

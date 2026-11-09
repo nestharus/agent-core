@@ -707,6 +707,29 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                     raise Refusal('software launch is not the current owned task attempt')
                 self.task_launch_authorizer(row)
 
+    def authorize_analysis(self, attempt):
+        """Current ordinary use at local turn dispatch, including continuations.
+
+        Earlier preparation does not reserve future eligibility. Cooperating
+        journal mutations cannot interleave this synchronous transaction; wall
+        time and noncooperating external changes retain their finite race window.
+        Later result/delivery checks remain independently required.
+        """
+        with (nullcontext() if self.db.in_transaction else self.tx()):
+            self.authorize_launch(attempt)
+            row = self.attempt(attempt)
+            if row['job']:
+                from .report_scope import integration_inputs
+                job = self.job(row['job'])
+                integration_inputs(self, job)
+                # Whole authentication can do finite work. Reaffirm the actual
+                # report-use deadline after it, immediately before dispatch.
+                if self.processing and job['task'] == 'reviews-integrator':
+                    record = self.processing.current()[1].get('service', {}).get('legacy_resources', {}).get('Reviews', {})
+                    policy = record.get('service_report')
+                    if policy and policy['expires'] <= self.clock():
+                        raise Refusal('service report expired before actual analysis dispatch')
+
     def claim_classification(self):
         with self.tx():
             if not self._classification_available():

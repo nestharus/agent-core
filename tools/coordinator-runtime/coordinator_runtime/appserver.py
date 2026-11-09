@@ -314,6 +314,7 @@ def feature_names(text, require_false=False):
 class Peer:
     def __init__(self, child, limit):
         self.child, self.limit = child, limit
+        self.before_turn = None
         self.pending, self.finals = {}, {}
         self.turn_requests = {}
         self.completed_turns, self.final_items, self.late_finals = set(), {}, []
@@ -357,7 +358,13 @@ class Peer:
             self.hold_capture('foreign-final-turn')
 
     async def send(self, value):
-        self.child.stdin.write((encode(value)+"\n").encode())
+        body = (encode(value)+"\n").encode()
+        if value.get('method') == 'turn/start' and self.before_turn is not None:
+            # exchange is scheduled by wait_for, after all ordinary setup awaits.
+            # No await separates the current check and local material dispatch.
+            # This is a cooperative send boundary, not remote execution atomicity.
+            self.before_turn()
+        self.child.stdin.write(body)
         await self.child.stdin.drain()
 
     async def rpc(self, method, params, timeout=20):
@@ -715,6 +722,7 @@ class AppServer:
                 store.begin(attempt, {**preflight_result, "argv": argv, "process_handle": "owned-asyncio-subprocess",
                                       "pid_information_only": child.pid, 'execution_pool_admission': admission})
             peer = Peer(child, self.config["limits"]["max_result_bytes"])
+            peer.before_turn = lambda: store.authorize_analysis(attempt)
             outcome['detail']['protocol_progress'] = peer.progress
             outcome['detail']['startup_stage'] = 'protocol'
             peer.owned_storage = owned_storage

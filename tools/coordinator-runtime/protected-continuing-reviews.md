@@ -20,6 +20,39 @@ routing, not a universal adversarial or descendant theorem. Requested flags,
 public dependency pins and a fictional test are distinct from effective live
 protection. Independent current operating observation and acceptance remain owed.
 
+
+## Canonical helper and current ordinary use
+
+A new `protected-continuing-v3` composition retains v2's finite complete
+executable identity and adds `probe_helper`: canonical Python program
+`path`, exact `bytes`, finite `max_bytes`, `sha256`, the three named
+`runtime_directories`, and `startup: python-isolated-no-site-no-bytecode`.
+The same `probe_command` builds local controls and the provider's expected
+command with `-I -S -B -c`. Current source-read rights, complete helper identity
+and root-owned nonwritable public runtime chains are checked before use. Isolated
+startup ignores account/cwd Python injection and site hooks; trusted loader and
+runtime directories remain OS premises, not hash-closed trees. Legacy v1/v2
+contracts retain their earlier invocation and its qualification limits.
+
+`public_runtime_reads` is a separate prospective configuration option for
+finite complete programs and expressly trusted named runtime directories. Its
+`public-program-runtime-read-v1` entries bind the existing small source-file
+configuration/owner/stopped-original-grant proof, exact immutable source,
+program sizes/hashes and `capability: future-only-new`. The genuine next
+capability must select that resulting exact configuration and source before
+new use. This representation creates no current grant or execution right.
+Execute-only QA remains execute-only; its public tool/run/export contract is
+separate. Evidence-file limits remain one MiB per file and four MiB total.
+
+For ordinary AppServer analysis, the Peer rechecks current launch authority and
+whole report eligibility/resources synchronously immediately before the local
+`turn/start` input write, after RPC scheduling and all setup awaits. Continuation
+uses the same boundary. Cooperating journal mutation cannot interleave that
+check; external changes, wall-clock passage and remote execution retain a finite
+race window. The check is no lease renewal or global atomicity guarantee. A
+later result/delivery check can truthfully refuse after an authorized start,
+retaining the same original, whole reports, failed captures and recovery duties.
+
 ## Policy and current authority
 
 An executable `opaque-cli-v1` policy requires `continuing` with exactly:
@@ -73,9 +106,18 @@ They are not relabeled as CLI, model or native processes. Store retains its
 numeric-status, original-collector and immutable-observation guards. Every exec
 turn separately records its numeric END and stdout/stderr EOF/capture state.
 Persistence or publication failure retains the same capable in-memory finalizer.
-A normal retry reserves a new exclusive receipt name before writing and
-preserves failed or partial earlier bytes. It grants no crash succession, lost
-handle recovery or automatic task replay.
+For local controls and exec turns, evidence persistence happens before the
+original is released. A normal retry reserves a new exclusive receipt name before
+writing and preserves failed or partial earlier bytes. Publication-only retries
+reuse completed evidence. An ordinary local-control drain admission/read/write
+fault records incomplete capture instead of permanently re-awaiting the same
+completed failed task. Same-original unsuccessful finalization can then progress
+with actual numeric END, settled capture tasks, usable evidence storage and
+successful publication. Real EOF may be known or unknown independently of capture
+completeness; an unsuccessful control cannot qualify protection. Missing END or
+unfulfilled persistence/publication duties still retain the original and prevent
+local close. This grants no crash succession, lost handle recovery or automatic
+task replay.
 
 The proof includes qualification separately from substantive input indices:
 qualification is input 0, first architecture is input 1, remaining is input 2.

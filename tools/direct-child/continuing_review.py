@@ -36,6 +36,17 @@ print(json.dumps(r))
 """
 
 
+def probe_command(allowed, outside, write, port, helper=None):
+    """One command builder shared by local and provider qualification.
+
+    The selected callback rechecks public identity and lawful read authority.
+    Isolated Python startup ignores account/cwd/PYTHONPATH and site hooks.
+    Legacy compositions retain their earlier invocation and its qualifications.
+    """
+    prefix = [helper(), '-I', '-S', '-B'] if helper else ['/usr/bin/python3']
+    return [*prefix, '-c', PROBE, str(allowed), str(outside), str(write), str(port)]
+
+
 class SandboxProtection:
     """Actual discriminating local sandbox controls, renewed for each export.
 
@@ -43,13 +54,14 @@ class SandboxProtection:
     before callers deliver substantive material. These controls alone establish
     the local sandbox backend only, not complete provider tool routing.
     """
-    def __init__(self, root, executable, runtime_reads, capacity_check):
+    def __init__(self, root, executable, runtime_reads, capacity_check, *, probe_helper=None):
         self.root, self.executable = Path(root), executable
         if not runtime_reads or any(not Path(p).is_absolute() for p in runtime_reads):
             raise Refusal('explicit public runtime read dependencies required')
         self.runtime_reads = tuple(runtime_reads)
         self.capacity_check = capacity_check
         self.proofs = []
+        self.probe_helper = probe_helper
 
     def filesystem(self, material, workspace):
         return {':root': 'deny', ':minimal': 'read',
@@ -70,7 +82,7 @@ class SandboxProtection:
             port = server.sockets[0].getsockname()[1]
             filesystem = self.filesystem(material, context.workspace)
             encoded = '{' + ','.join(json.dumps(k)+'='+json.dumps(v) for k,v in filesystem.items()) + '}'
-            program = ['/usr/bin/python3', '-c', PROBE, str(allowed), str(outside), str(write), str(port)]
+            program = probe_command(allowed, outside, write, port, self.probe_helper)
             argv = [self.executable, 'sandbox', '-C', str(context.workspace),
                     '-c', 'permissions.review-material.filesystem='+encoded,
                     '-c', 'permissions.review-material.network.enabled=false',
@@ -101,10 +113,39 @@ class SandboxProtection:
         evidence = dict(stdout_eof=False, stderr_eof=False, errors=[])
         captures = []
         child = None
+        results, receipt_attempts = [], []
+        capture_failures_recorded = False
         async def finish(entry):
-            await asyncio.wait_for(asyncio.gather(*captures), 3)
-            entry['evidence'] = dict(evidence)
+            nonlocal results, capture_failures_recorded
+            # A completed failed drain is evidence of incomplete capture, not an
+            # endlessly retryable capture operation. Keep real EOF facts intact.
+            results = await asyncio.wait_for(
+                asyncio.gather(*captures, return_exceptions=True), 3)
+            if not capture_failures_recorded:
+                for stream_name, result in zip(('stdout', 'stderr'), results):
+                    if isinstance(result, BaseException):
+                        evidence['errors'].append(
+                            stream_name+' capture failed: '+type(result).__name__)
+                capture_failures_recorded = True
+            evidence['capture_complete'] = bool(evidence['stdout_eof']
+                and evidence['stderr_eof'] and not evidence['errors'])
+            # Persist before discharging this original's evidence duty. Reserve
+            # each exclusive name first so partial failed writes survive retry.
+            suffix = '' if not receipt_attempts else '-'+str(len(receipt_attempts))
+            path = directory/(name+'.original'+suffix+'.json')
+            receipt_attempts.append(path.name)
+            receipt = dict(original=key, actual_END=entry['exit'],
+                evidence=dict(evidence),
+                stderr_bytes=len(results[1]) if isinstance(results[1], bytes) else None,
+                receipt_attempts=list(receipt_attempts),
+                collection_failures=list(entry['failures']))
+            entry['evidence'] = dict(evidence, receipt=path.name,
+                receipt_attempts=list(receipt_attempts), receipt_persisted=False)
+            private_write(path, json.dumps(receipt).encode(), self.capacity_check)
+            entry['evidence']['receipt_persisted'] = True
         # Register the actual handle before capture setup or input delivery.
+        if self.probe_helper:
+            self.probe_helper()  # Recheck after any earlier awaited control.
         child = await asyncio.create_subprocess_exec(*argv,
             env={'PATH':'/usr/local/bin:/usr/bin:/bin','HOME':context.account_home,
                  'CODEX_HOME':str(Path(context.account_home)/context.profile)},
@@ -134,10 +175,8 @@ class SandboxProtection:
             context.originals.owned[key]['exit'] = code
         finally:
             code = await context.originals.finish(key,3)
-        raw, error = [t.result() for t in captures]
-        private_write(directory/(name+'.original.json'),json.dumps(dict(original=key,
-            actual_END=code,evidence=evidence,stderr_bytes=len(error))).encode(),self.capacity_check)
-        if code != 0 or error or evidence['errors']:
+        raw, error = results
+        if code != 0 or error or not evidence['capture_complete']:
             raise Refusal('sandbox control original failed; preserved captures and numeric END')
         return json.loads(raw)
 
@@ -153,6 +192,7 @@ class ExecEndpoint:
         self.root, self.executable, self.originals = Path(root), executable, originals
         self.admission, self.authority, self.protection = admission, authority, protection
         self.capacity_check, self.publish = capacity_check, publish
+        self.probe_helper = protection.probe_helper
         self.context, self.owner, self.receipts = None, None, []
         self.execution = execution
         self.clock = time.monotonic
@@ -299,10 +339,9 @@ class ContinuingReview:
         server=await asyncio.start_server(lambda r,w:w.close(),'127.0.0.1',0)
         try:
             port=server.sockets[0].getsockname()[1]
-            argv=['/usr/bin/python3','-c',PROBE,
-                  str(directory/'material/protection-canary.txt'),
-                  str(directory/'protection/outside.txt'),
-                  str(directory/'material/provider-write.txt'),str(port)]
+            argv=probe_command(directory/'material/protection-canary.txt',
+                  directory/'protection/outside.txt', directory/'material/provider-write.txt',
+                  port, getattr(self.endpoint, 'probe_helper', None))
             expected=shlex.join(argv)
             prompt=('This is the sole owned nonsecret tool-protection qualification turn. '
                     'No review/method/history/source is admitted yet. No children, messages or other providers. '
