@@ -81,9 +81,11 @@ def parser():
     sub.add_parser("status")
     placement = sub.add_parser('select-artifact-placement', help='Finite future-only storage; SAME journal and old paths')
     placement.add_argument('--selection', required=True)
+    placement.add_argument('--capability', help='Explicit current retained-processing authority')
     current = sub.add_parser('original-current-status', help='Selected current recovery observation; no disposition rights')
     current.add_argument('attempt')
     current.add_argument('--role', required=True)
+    current.add_argument('--capability', help='Explicit current retained-processing authority')
 
     for name in ('historical-resource-authorize', 'historical-resource-project', 'historical-resource-revoke'):
         resource = sub.add_parser(name, help='Current respective field custodians; conditional cooperative ceilings only')
@@ -753,14 +755,25 @@ def operate(args, store):
         return asyncio.run(ordinary.accept(store, actor, args.attempt, args.decision, read_record(args.receipt)))
     if args.command == 'execution-pool':
         return store.execution_pool.status()
+    if args.command in {'select-artifact-placement', 'original-current-status'}:
+        role = 'Work' if args.command == 'select-artifact-placement' else args.role
+        actor = actual_actor(store.config['roles'][role]['owner'])
+        if getattr(args, 'capability', None):
+            from . import processing
+            boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
+            store.processing = processing.Access(store, args.capability, boards)
+            store.processing.current()
+            board = boards[role]
+        else:
+            store.processing = None  # Omission selects ordinary authority, never inherited retained access.
+            board = Board(store.config, role)
+        board.verify_authority(store)
     if args.command == 'select-artifact-placement':
         actor = actual_actor(store.enrollment('Work')['owner'])
-        Board(store.config, 'Work').verify_authority(store)
         return store.select_artifact_placement(actor, read_record(args.selection))
     if args.command == 'original-current-status':
         from .oneoff import current_status
         actor = actual_actor(store.enrollment(args.role)['owner'])
-        Board(store.config, args.role).verify_authority(store)
         return current_status(store, args.attempt, args.role, actor)
     if args.command in {"init", "status"}:
         return store.status()

@@ -385,10 +385,10 @@ class Dispatcher:
         if self.store.integration_retirement_recorded(job_id):return
         job = self.store.job(job_id)
         task = self.config["tasks"][job["task"]]
-        self.store.admit_artifact_write(attempt, 4096, 1)
-        directory = self.store.artifact_root(attempt)
-        directory.mkdir(mode=0o700, parents=True, exist_ok=False)
         try:
+            self.store.admit_artifact_write(attempt, 4096, 1)
+            directory = self.store.artifact_root(attempt)
+            directory.mkdir(mode=0o700, parents=True, exist_ok=False)
             with native_review_scope.acquisition(self.store, job):
                 local_integration.current_sources(self.store, job)
                 admission = self.store.one("SELECT * FROM admissions WHERE package=?", (job["package"],))

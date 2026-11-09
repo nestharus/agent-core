@@ -385,6 +385,10 @@ async def serve_owned(runtime, boards, key, emit, models=None, review_transport=
             runtime.db.execute('INSERT INTO service_runs VALUES(?,?,?,?,?,NULL,NULL)',
                                (runtime.controller, key, str(path), 'serving', runtime.clock()))
         dispatcher = Dispatcher(runtime, boards, models, review_transport)
+        controls = set()
+        control_failure = None
+        closing = False
+
         async def connection(reader, writer):
             authorized = False
             try:
@@ -428,7 +432,29 @@ async def serve_owned(runtime, boards, key, emit, models=None, review_transport=
                 await writer.drain()
             writer.close()
             await writer.wait_closed()
-        server = await asyncio.start_unix_server(connection, path=path, limit=65537)
+        def accepted(reader, writer):
+            if closing:
+                writer.close()
+                return
+            async def owned():
+                try:
+                    await connection(reader, writer)
+                finally:
+                    writer.close()
+                    await writer.wait_closed()
+
+            def completed(task):
+                nonlocal control_failure
+                controls.discard(task)
+                error = asyncio.CancelledError() if task.cancelled() else task.exception()
+                if error is not None and control_failure is None:
+                    control_failure = error
+
+            task = asyncio.create_task(owned())
+            controls.add(task)
+            task.add_done_callback(completed)
+
+        server = await asyncio.start_unix_server(accepted, path=path, limit=65537)
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, dispatcher.stopping.set)
@@ -440,19 +466,37 @@ async def serve_owned(runtime, boards, key, emit, models=None, review_transport=
                   'state': 'serving', 'process_END': None, 'wake': dispatcher.wake.status()})
             await dispatcher.run(emit)
         finally:
-            if dispatcher.wake is not None:
-                dispatcher.wake.close()
-            # Live contexts remain owned and explicitly reported if close fails.
-            for context in runtime.rows("SELECT component FROM review_contexts WHERE collector=? AND state!='closed'", (runtime.controller,)):
-                try:
-                    policy=reviews.context_policy(runtime,context['component'],selection['service']['reviews'])
-                    await dispatcher.reviews.close(context['component'], policy)
-                except Exception as exc:
-                    runtime.record_operational_error(context['component'], {'error': str(exc)}, 'Reviews', 'original-context-close')
-            draining = asyncio.create_task(dispatcher.drain_originals(emit))
-            await AppServer.join_finalization(draining, {'state': 'draining-originals'})
+            closing = True
             server.close()
-            await server.wait_closed()
+
+            async def finish():
+                try:
+                    await server.wait_closed()
+                    if dispatcher.wake is not None:
+                        dispatcher.wake.close()
+                finally:
+                    try:
+                        # Accepted control work may still be before registration.
+                        # Its capable task must finish before the final drain.
+                        returned = await asyncio.gather(*controls, return_exceptions=True)
+                        for value in returned:
+                            if isinstance(value, BaseException):
+                                raise value
+                        if control_failure is not None:
+                            raise control_failure
+                        for context in runtime.rows("SELECT component FROM review_contexts WHERE collector=? AND state!='closed'", (runtime.controller,)):
+                            try:
+                                policy=reviews.context_policy(runtime,context['component'],selection['service']['reviews'])
+                                await dispatcher.reviews.close(context['component'], policy)
+                            except Exception as exc:
+                                runtime.record_operational_error(context['component'], {'error': str(exc)}, 'Reviews', 'original-context-close')
+                    finally:
+                        # Fallible reporting/socket/context operations cannot skip
+                        # the exact owners, including new context-close callers.
+                        await dispatcher.drain_originals(emit)
+
+            finishing = asyncio.create_task(finish())
+            await AppServer.join_finalization(finishing, {'detail': {}, 'state': 'closing-service'})
             receipt = dispatcher.recover_originals()
             with runtime.tx():
                 runtime.db.execute("UPDATE service_runs SET state='returned-awaiting-parent-END',returned=?,receipt=? WHERE controller=?",

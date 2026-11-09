@@ -769,3 +769,303 @@ class Collection1114(unittest.IsolatedAsyncioTestCase):
         self.config['artifact_exclusions']=[str(expected.parent)]
         with self.assertRaises(Refusal):self.store.placement_usage()
         self.assertEqual(self.store.one('SELECT root FROM attempt_artifact_roots WHERE attempt=?',(first,))['root'],str(expected))
+
+    async def test_initial_arena_entry_refusal_collects_truthful_no_start(self):
+        self.placement1127(max_entries=1)
+        message,job,attempt=self.reservation()
+        self.runtime.models=type('Model',(),{'run':AsyncMock(side_effect=AssertionError('no model may start'))})()
+        self.runtime.boards['Work']=object()  # Unselected ordinary effect adapter, no real Board.
+        await self.runtime.execute(job['id'],attempt)
+        row=self.store.attempt(attempt)
+        self.assertIsNotNone(row['collected']);self.assertIsNone(row['begin']);self.assertIsNone(row['exit'])
+        self.assertEqual(row['capture'],'not-started');self.assertEqual(row['cleanup'],'no-session-created')
+        self.assertTrue(json.loads(row['detail'])['known_not_started'])
+        self.assertIn('admission exhausted',row['error']);self.runtime.models.run.assert_not_called()
+        self.assertFalse(self.store.artifact_root(attempt).exists())
+        self.assertEqual(self.store.job(job['id'])['effects'],'none')
+        self.assertIsNone(self.store.one('SELECT processed_at FROM events WHERE id=?',(message['id'],))['processed_at'])
+        self.evidence1118('allocation-refusal1133',attempt=row,job=self.store.job(job['id']))
+
+    async def test_initial_mkdir_failure_collects_truthful_no_start(self):
+        _,job,attempt=self.reservation()
+        directory=self.store.artifact_root(attempt);mkdir=Path.mkdir
+        def refused(path,*args,**kwargs):
+            if path==directory:raise OSError('fictional owned namespace mkdir refused')
+            return mkdir(path,*args,**kwargs)
+        self.runtime.models=type('Model',(),{'run':AsyncMock(side_effect=AssertionError('no model may start'))})()
+        self.runtime.boards['Work']=object()  # Unselected ordinary effect adapter, no real Board.
+        with patch.object(Path,'mkdir',refused):await self.runtime.execute(job['id'],attempt)
+        row=self.store.attempt(attempt)
+        self.assertIsNotNone(row['collected']);self.assertIsNone(row['begin']);self.assertIsNone(row['exit'])
+        self.assertTrue(json.loads(row['detail'])['known_not_started'])
+        self.assertEqual(row['capture'],'not-started');self.assertEqual(row['cleanup'],'no-session-created')
+        self.assertIn('mkdir refused',row['error']);self.runtime.models.run.assert_not_called()
+        self.assertFalse(directory.exists());self.assertEqual(self.store.job(job['id'])['effects'],'none')
+        self.evidence1118('mkdir-refusal1133',attempt=row)
+
+    async def test_future_destination_charges_only_growing_arena_but_all_actual_usage(self):
+        from coordinator_runtime.contracts import Backpressure
+        first=self.placement1127('old-arena',max_bytes=16384)
+        old=Path(first['selection']['root']);fill=old/'retained.txt';fill.touch()
+        fill.write_bytes(b'x'*(16384-old.stat().st_size-1))
+        before=self.store.placement_usage();self.assertEqual(before[0]['bytes'],16383)
+        # Expiry does not remove actual usage or charge new growth to this arena.
+        self.now+=101
+        second=self.placement1127('new-arena')
+        _,_,attempt=self.reservation();root=self.store.artifact_root(attempt)
+        self.assertEqual(root.parent,Path(second['selection']['root']))
+        self.store.admit_artifact_write(attempt,8192,2)
+        root.mkdir();(root/'new.txt').write_text('new destination only')
+        self.store.budget(None,8192)
+        journal_owned=self.store.home/'journal-owned1133.txt';journal_owned.write_bytes(b'journal-owned growth remains charged')
+        actual=self.store.usage()
+        self.assertEqual(actual['artifact_placements'][0],before[0])
+        self.assertEqual(fill.stat().st_size,16383-old.stat().st_size)
+        self.assertGreater(actual['bytes'],sum(p['bytes'] for p in actual['artifact_placements']))
+        with self.assertRaisesRegex(Backpressure,'exhausted'):
+            self.store.placement_usage(2,admission=first['admission'])
+        # Retained overage, global pressure and journal/site floors still refuse.
+        with fill.open('ab') as stream:stream.write(b'xx')
+        with self.assertRaisesRegex(Backpressure,'exhausted'):self.store.budget(None,1)
+        with fill.open('r+b') as stream:stream.truncate(16383-old.stat().st_size)
+        prior=self.config['limits']['max_bytes'];self.config['limits']['max_bytes']=actual['bytes']+8192
+        try:
+            with self.assertRaises(Backpressure):self.store.admit_artifact_write(attempt,8192,1)
+        finally:self.config['limits']['max_bytes']=prior
+        headroom=self.store.placement_headroom
+        def no_shared_site(site,spec,incoming=0,entries=0):
+            if site==old and incoming:raise Backpressure('fictional shared site floor')
+            return headroom(site,spec,incoming,entries)
+        with patch.object(self.store,'placement_headroom',side_effect=no_shared_site):
+            with self.assertRaisesRegex(Backpressure,'shared site floor'):
+                self.store.admit_artifact_write(attempt,8192,1)
+        def no_journal(site,spec,incoming=0,entries=0):
+            if site==self.store.home and incoming:raise Backpressure('fictional journal floor')
+            return headroom(site,spec,incoming,entries)
+        with patch.object(self.store,'placement_headroom',side_effect=no_journal):
+            with self.assertRaisesRegex(Backpressure,'journal floor'):self.store.budget(None,8192)
+        self.evidence1118('destination1133',before=before,after=actual,new_root=str(root))
+
+    async def test_noncanonical_new_operands_refuse_before_any_metadata(self):
+        # Every target below is NEW owned fiction; no real held path or alias.
+        parent=self.area/'lexical1133';parent.mkdir()
+        self.config['artifact_exclusions']=[str(parent/'opaque')]
+        selection=dict(root=str(parent/'fresh'),authority='fictional right',expires=self.now+100,
+            max_attempts=4,max_entries=100,max_bytes=1024**2,min_free_bytes=1,min_free_inodes=1,
+            journal_min_free_bytes=1,journal_min_free_inodes=1)
+        observed=[]
+        def forbidden(*args,**kw):
+            observed.append(str(args[0]) if args else 'metadata');raise AssertionError('metadata before lexical refusal')
+        cases=['/'+str(parent/'opaque'/'child'),'/'+str(self.store.home/'child'),
+               '/'+str(parent/'fresh'),str(parent)+'/a/../fresh',str(parent)+'//fresh',str(parent)+'/fresh/']
+        for operand in cases:
+            with self.subTest(operand=operand),patch.object(Path,'is_symlink',forbidden),\
+                 patch.object(Path,'exists',forbidden),patch.object(Path,'stat',forbidden),\
+                 patch.object(Path,'mkdir',forbidden),patch('coordinator_runtime.store.os.statvfs',forbidden):
+                with self.assertRaisesRegex(Refusal,'plain artifact root'):
+                    self.store.select_artifact_placement(self.config['roles']['Work']['owner'],{**selection,'root':operand})
+        self.assertEqual(observed,[])
+        # Canonical exclusions and ordinary positive independent admission remain.
+        with self.assertRaises(Refusal):
+            self.store.select_artifact_placement(self.config['roles']['Work']['owner'],{**selection,'root':str(parent/'opaque'/'child')})
+        admitted=self.store.select_artifact_placement(self.config['roles']['Work']['owner'],selection)
+        self.assertEqual(admitted['selection'],selection)
+        self.evidence1118('lexical1133',refused=cases,metadata_before_refusal=observed,positive=admitted)
+
+    async def service_closing1133(self, ingress):
+        from coordinator_runtime import service,reviews,processing
+        from coordinator_runtime.contracts import digest,encode
+        from types import SimpleNamespace
+        import fcntl
+        message,job,attempt=self.reservation()
+        key='fictional-service1133'
+        detail={**json.loads(self.store.attempt(attempt)['detail']),'processing_capability':key}
+        self.store.db.execute('UPDATE attempts SET detail=? WHERE id=?',(encode(detail),attempt))
+        self.prepare(attempt)
+        self.store.collect(attempt,dict(exit=0,capture='not-started',cleanup='no-session-created',result=None,
+                                      error='fictional collected model',detail={'known_not_started':True}))
+        native=reviews.Native();native.shutdown=.01
+        selection=dict(basis=dict(configuration=digest(self.config),implementation=processing.implementation(),
+                           roles={'Work':dict(original=dict(events=[dict(id=message['id'],hash=digest(message))]),future_after=0)}),
+                       retained_events=[message['id']],recover_controls={},
+                       service=dict(reviews={}),future_intake=True,tasks=[job['task']])
+        self.store.db.execute('INSERT INTO processing_capabilities VALUES(?,?,?,0,NULL,0)',
+                              (key,encode(selection),'fictional-Work'))
+        ready=asyncio.Event();entered=asyncio.Event();release=asyncio.Event();draining=asyncio.Event()
+        child=None;actual=[];notices=[];dispatchers=[]
+        rows=self.store.rows
+        def selected_rows(sql,values=()):
+            if sql.startswith('SELECT component FROM review_contexts'):
+                return [] if ingress else [{'component':'fictional-context1133'}]
+            return rows(sql,values)
+        async def close(executor,component,policy):
+            nonlocal child
+            entered.set()
+            if ingress:await release.wait()  # Accepted control BEFORE registration.
+            child=await asyncio.create_subprocess_exec('/usr/bin/python3.12','-B','-c','import time;time.sleep(60)',
+                                                       stdout=asyncio.subprocess.PIPE)
+            real_wait=child.wait
+            child.real_wait1133=real_wait
+            child.wait=AsyncMock(side_effect=OSError('fictional original wait unavailable'))
+            async def evidence(entry):await asyncio.wait_for(child.stdout.read(),.01)
+            delivery_errors=[]
+            def deliver(obs):
+                try:self.store.record_original_end(attempt,obs)
+                except Exception as exc:
+                    if not delivery_errors:print('SERVICE1133-DELIVERY '+repr(exc),flush=True)
+                    delivery_errors.append(type(exc).__name__);raise
+            original=native.originals.own(child,'native-caller',evidence,deliver)
+            native.originals.pending[original]=native.originals.owned[original]
+            if not ingress:raise Refusal('fictional close pending')
+            return dict(closed=False,provider_root='held')
+        async def activity(dispatcher,emit):
+            dispatchers.append(dispatcher)
+            if ingress:await dispatcher.stopping.wait()
+        def emit(value):
+            notices.append(value)
+            if value.get('state')=='serving':ready.set()
+            if value.get('state')=='draining-originals':draining.set()
+        wake=SimpleNamespace(start=lambda:None,close=lambda:None,status=lambda:{'fictional':True})
+        running=None;writer=None
+        try:
+            with patch.object(self.store,'rows',side_effect=selected_rows),\
+                 patch.object(service.Dispatcher,'run',activity),\
+                 patch.object(service.Dispatcher,'recover_originals',lambda d:{'collector':d.store.controller,'processing_complete':False}),\
+                 patch.object(reviews.Executor,'close',close),\
+                 patch.object(reviews,'context_policy',return_value={}),\
+                 patch('coordinator_runtime.service_wake.ServiceWake',return_value=wake),\
+                 patch.object(self.store,'record_operational_error',side_effect=sqlite3.OperationalError('fictional reporting refused')):
+                running=asyncio.create_task(service.serve_owned(self.store,{},key,emit,models=object(),review_transport=native))
+                await asyncio.wait_for(ready.wait(),3)
+                if ingress:
+                    reader,writer=await asyncio.open_unix_connection(path=service.endpoint(self.store,key))
+                    writer.write((encode(dict(capability=key,operation='close-review',component='fictional-context1133'))+'\n').encode())
+                    await writer.drain();await asyncio.wait_for(entered.wait(),3)
+                    dispatchers[0].stopping.set()
+                    # Give shutdown the next scheduling turns; accepted callback
+                    # has no registry entry yet and still must retain its owner.
+                    for _ in range(8):await asyncio.sleep(0)
+                    self.assertFalse(running.done());self.assertEqual(native.original_status(),[])
+                    with self.assertRaises(OSError):
+                        await asyncio.open_unix_connection(path=service.endpoint(self.store,key))
+                    release.set()
+                await asyncio.wait_for(draining.wait(),3)
+                self.assertFalse(running.done());self.assertTrue(native.original_status())
+                self.assertFalse(any('service_observations' in n and 'collector' in n for n in notices))
+                self.assertIsNone(self.store.one('SELECT returned FROM service_runs')['returned'])
+                fd=os.open(self.store.home/'service.lock',os.O_RDWR)
+                try:
+                    with self.assertRaises(BlockingIOError):fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                finally:os.close(fd)
+                child.wait=child.real_wait1133
+                if ingress:
+                    await asyncio.wait_for(running,3)
+                    answer=json.loads(await asyncio.wait_for(reader.readline(),3))
+                    self.assertFalse(answer['closed'])
+                    self.assertIsNotNone(self.store.one('SELECT returned FROM service_runs')['returned'])
+                else:
+                    with self.assertRaisesRegex(sqlite3.OperationalError,'reporting refused'):
+                        await asyncio.wait_for(running,3)
+                    self.assertIsNone(self.store.one('SELECT returned FROM service_runs')['returned'])
+                actual.append(await child.real_wait1133())
+                self.assertEqual(native.original_status(),[])
+                obs=json.loads(self.store.attempt(attempt)['detail'])['original_end_observations'][-1]
+                self.assertEqual(obs['exit'],actual[-1]);self.assertEqual(obs['kind'],'native-caller')
+                self.evidence1118('service-ingress1133' if ingress else 'service-report-refusal1133',
+                                  actual_END=actual,notices=notices,original_observation=obs)
+        finally:
+            release.set()
+            if child is not None:
+                child.wait=child.real_wait1133
+                await appserver.end_owned(child,.1)
+            if writer is not None:writer.close();await writer.wait_closed()
+            if running is not None and not running.done():
+                dispatchers[0].stopping.set()
+                try:await asyncio.wait_for(running,3)
+                except sqlite3.OperationalError:pass
+
+    async def test_service_close_reporting_failure_still_retains_and_collects_new_original(self):
+        await self.service_closing1133(False)
+
+    async def test_service_joins_accepted_control_before_registration_and_final_original_drain(self):
+        await self.service_closing1133(True)
+
+    async def test_current_recipient_and_placement_CLI_use_explicit_lawful_grant_mode(self):
+        from coordinator_runtime import cli,processing,oneoff
+        from coordinator_runtime.board import Board
+        from coordinator_runtime.contracts import digest,encode
+        from contextlib import contextmanager
+        message,job,attempt=self.reservation('Reviews');self.prepare(attempt)
+        self.store.begin(attempt,{'fictional':True})
+        self.store.collect(attempt,dict(exit=None,capture='incomplete',cleanup='held',result=None,
+                                       error='original unknown',detail={}))
+        self.store.record_original_end(attempt,dict(original=attempt,kind='appserver-model',exit=7))
+        original=self.store.one('SELECT * FROM results WHERE attempt=?',(attempt,))
+        self.config['software_delegation']=dict(grantor=self.config['roles']['Work']['owner'],authority='fictional-lawful-right')
+        # Only membership/catalog transport and actual session identity are
+        # fictional. Ordinary/retained grant checks, Access, source/hold guards,
+        # current projection and placement admission all run unchanged.
+        conn=sqlite3.connect(':memory:',isolation_level=None);conn.row_factory=sqlite3.Row
+        self.addCleanup(conn.close)
+        conn.executescript('CREATE TABLE coordinator_grants_v1(id,board_id,role,owner,actor,runtime,runtime_dev,runtime_ino,issued_by,authority,revoked);'
+                           'CREATE TABLE coordinator_software_grants_v1(grant_id,configuration);')
+        stat=self.store.path.stat()
+        for role in self.config['roles']:
+            enrolled=self.store.enrollment(role);selected=self.config['roles'][role]
+            conn.execute('INSERT INTO coordinator_grants_v1 VALUES(?,?,?,?,?,?,?,?,?,?,NULL)',
+                (enrolled['grant_id'],selected['board_id'],role,selected['owner'],self.config['actor'],
+                 str(self.store.path),stat.st_dev,stat.st_ino,self.config['software_delegation']['grantor'],'fictional-lawful-right'))
+            conn.execute('INSERT INTO coordinator_software_grants_v1 VALUES(?,?)',(enrolled['grant_id'],digest(self.config)))
+        class Ordinary(Board):
+            def __init__(board,config,role):board.config=config;board.role=role;board.selected=config['roles'][role]
+            @contextmanager
+            def opened(board,**kw):yield conn
+        class Retained(processing.ProcessingBoard,Ordinary):
+            __init__=Ordinary.__init__
+        def current(role,cap=None):
+            args=['original-current-status',attempt,'--role',role]+(['--capability',cap] if cap else [])
+            return cli.operate(cli.parser().parse_args(args),self.store)
+        spec=dict(root=str(self.area/'cli-ordinary-arena'),authority='fictional exclusive right',expires=self.now+100,
+            max_attempts=4,max_entries=100,max_bytes=1024**2,min_free_bytes=1,min_free_inodes=1,
+            journal_min_free_bytes=1,journal_min_free_inodes=1)
+        selection_file=self.area/'selection1133.json';selection_file.write_text(encode(spec))
+        with patch.object(cli,'Board',Ordinary),patch.object(processing,'ProcessingBoard',Retained),\
+             patch.object(cli,'actual_actor',side_effect=lambda owner:owner):
+            for role in ('Work','Reviews'):
+                view=current(role);self.assertEqual(view['current_attempt_exit'],7)
+                self.assertFalse(view['permission_to_resume']);self.assertFalse(view['permission_to_dispose'])
+            cli.operate(cli.parser().parse_args(['select-artifact-placement','--selection',str(selection_file)]),self.store)
+            conn.execute("UPDATE coordinator_grants_v1 SET revoked='fictional-revocation'")
+            self.store.db.execute('UPDATE enrollments SET intake=0')
+            roles={}
+            for role in self.config['roles']:
+                grant=dict(conn.execute('SELECT * FROM coordinator_grants_v1 WHERE role=?',(role,)).fetchone())
+                roles[role]=dict(original=dict(binding=Retained._binding(grant),
+                    events=self.store.rows('SELECT id,hash FROM events WHERE role=?',(role,))),future_after=0)
+            key='fictional-current1133'
+            selection=dict(basis=dict(configuration=digest(self.config),implementation=processing.implementation(),roles=roles),
+                retained_events=[message['id']],recover_controls={},future_intake=False,tasks=[job['task']],expires=self.now+100)
+            self.store.db.execute('INSERT INTO processing_capabilities VALUES(?,?,?,0,NULL,0)',
+                                  (key,encode(selection),self.config['roles']['Work']['owner']))
+            for role in ('Work','Reviews'):
+                with self.assertRaises(Refusal):current(role)
+                view=current(role,key);self.assertEqual(view['current_attempt_exit'],7)
+                self.assertEqual(view['original_end_observations'][-1]['collector'],self.store.controller)
+                self.assertEqual(view['capture'],'incomplete');self.assertFalse(view['permission_to_dispose'])
+            spec['root']=str(self.area/'cli-retained-arena');selection_file.write_text(encode(spec))
+            with self.assertRaises(Refusal):
+                cli.operate(cli.parser().parse_args(['select-artifact-placement','--selection',str(selection_file)]),self.store)
+            admitted=cli.operate(cli.parser().parse_args(['select-artifact-placement','--selection',str(selection_file),'--capability',key]),self.store)
+            with self.assertRaises(Refusal):current('QA',key)
+            with patch.object(cli,'actual_actor',side_effect=Refusal('fictional foreign actor')):
+                with self.assertRaisesRegex(Refusal,'foreign actor'):current('Work',key)
+            self.store.set_hold(message['id'],'fictional source privacy hold')
+            for role in ('Work','Reviews'):
+                with self.assertRaises(Refusal):current(role,key)
+            self.store.set_hold(message['id'],None)
+            with self.assertRaisesRegex(Refusal,'absent'):current('Work','fictional-absent')
+            conn.execute("UPDATE coordinator_grants_v1 SET runtime_ino=runtime_ino+1 WHERE role='Work'")
+            with self.assertRaisesRegex(Refusal,'binding changed'):current('Work',key)
+        self.assertEqual(self.store.one('SELECT * FROM results WHERE attempt=?',(attempt,)),original)
+        self.assertEqual(self.store.one('SELECT intake FROM enrollments WHERE role=?',('Work',))['intake'],0)
+        self.evidence1118('lawful-current1133',retained_admission=admitted,historical_result=original)

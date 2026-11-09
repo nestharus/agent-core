@@ -280,5 +280,59 @@ class Correction(unittest.TestCase):
         self.assertEqual(self.s.rows('PRAGMA foreign_key_check'), [])
 
 
+    def test_qualified_mapped_episode_retires_with_enduring_identity_and_no_reuse(self):
+        spec=dict(root=str(self.area/'mapped1133'),authority='fictional new arena right',expires=self.now+100,
+            max_attempts=8,max_entries=100,max_bytes=4*1024**2,min_free_bytes=1,min_free_inodes=1,
+            journal_min_free_bytes=1,journal_min_free_inodes=1)
+        admission=self.s.select_artifact_placement(self.config['roles']['Work']['owner'],spec)
+        message,job,attempt=self.completed()
+        mappings=self.s.rows('SELECT * FROM attempt_artifact_roots ORDER BY attempt')
+        expected=self.s.artifact_root(attempt)
+        # The full original recovery is actually conserved in this new fixture.
+        archive=self.area/'full-original1133.json';archive.write_text(encode(self.bundle(attempt)))
+        saved=archive.read_bytes()
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.s.db.execute('DELETE FROM attempt_artifact_roots WHERE attempt=?',(attempt,))
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.s.db.execute('UPDATE attempt_artifact_roots SET root=? WHERE attempt=?',(str(self.area/'wrong'),attempt))
+        self.admission();self.s.processing.key='fictional1092'
+        self.refuse(message)  # Processing+24h has not passed.
+        self.s.processing=None;self.age(message);self.admission();self.s.processing.key='fictional1092'
+        receipt=self.receipt(message);bad={**receipt,'holds':{**receipt['holds'],'privacy':['fictional hold']}}
+        self.refuse(message,bad)
+        self.assertEqual(self.s.rows('SELECT * FROM retired_attempt_artifact_roots'),[])
+        retired=retirement.apply(self.s,message['id'],'fictional-issuer',receipt)
+        self.assertIsNone(self.s.one('SELECT id FROM attempts WHERE id=?',(attempt,)))
+        self.assertIsNone(self.s.one('SELECT id FROM events WHERE id=?',(message['id'],)))
+        historical=self.s.rows('SELECT attempt,admission,root FROM retired_attempt_artifact_roots ORDER BY attempt')
+        self.assertEqual(historical,mappings)
+        self.assertEqual(self.s.artifact_root(attempt),expected)
+        self.assertEqual(archive.read_bytes(),saved)
+        proof=json.loads(self.s.one('SELECT retirement FROM retired_attempt_artifact_roots WHERE attempt=?',(attempt,))['retirement'])
+        self.assertEqual(proof['receipt'],receipt);self.assertEqual(proof['actor'],'fictional-issuer')
+        self.assertEqual(proof['cohort'],retired['retired'])
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.s.db.execute('DELETE FROM retired_attempt_artifact_roots WHERE attempt=?',(attempt,))
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.s.db.execute('UPDATE retired_attempt_artifact_roots SET root=? WHERE attempt=?',(str(self.area/'wrong'),attempt))
+        # The active FK and no-reuse trigger still protect the old identity.
+        self.s.processing=None
+        self.s.select_artifact_placement(self.config['roles']['Work']['owner'],
+            {**spec,'root':str(self.area/'next1133'),'expires':self.now+100})
+        _,_,fresh=self.completed('new-after-retirement')
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.s.db.execute('INSERT INTO attempt_artifact_roots VALUES(?,?,?)',
+                              (attempt,admission['admission'],str(expected)))
+        self.assertNotEqual(self.s.artifact_root(fresh),expected)
+        self.assertEqual(self.s.db.execute('PRAGMA foreign_keys').fetchone()[0],1)
+        self.assertEqual(self.s.rows('PRAGMA foreign_key_check'),[])
+        self.s.close()
+        self.s=Store(self.config,controller='fictional-readback1133',clock=lambda:self.now)
+        self.assertEqual(self.s.artifact_root(attempt),expected)
+        self.assertEqual(self.s.rows('SELECT attempt,admission,root FROM retired_attempt_artifact_roots ORDER BY attempt'),mappings)
+        self.assertEqual(self.s.rows('PRAGMA foreign_key_check'),[])
+        (self.area/'MAPPED-RETIREMENT1133.json').write_text(encode(dict(mapping=historical,retired=retired,proof=proof)))
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

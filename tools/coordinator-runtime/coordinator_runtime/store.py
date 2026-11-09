@@ -70,7 +70,20 @@ CREATE TRIGGER IF NOT EXISTS artifact_placement_admissions_no_delete BEFORE DELE
  BEGIN SELECT RAISE(ABORT,'immutable original artifact placement'); END;
 CREATE TRIGGER IF NOT EXISTS attempt_artifact_roots_no_update BEFORE UPDATE ON attempt_artifact_roots
  BEGIN SELECT RAISE(ABORT,'immutable original artifact placement'); END;
-CREATE TRIGGER IF NOT EXISTS attempt_artifact_roots_no_delete BEFORE DELETE ON attempt_artifact_roots
+CREATE TABLE IF NOT EXISTS retired_attempt_artifact_roots(
+ attempt TEXT PRIMARY KEY,admission TEXT NOT NULL REFERENCES artifact_placement_admissions(id),
+ root TEXT NOT NULL UNIQUE,retirement TEXT NOT NULL);
+CREATE TRIGGER IF NOT EXISTS retired_attempt_artifact_roots_no_update BEFORE UPDATE ON retired_attempt_artifact_roots
+ BEGIN SELECT RAISE(ABORT,'immutable retired artifact identity'); END;
+CREATE TRIGGER IF NOT EXISTS retired_attempt_artifact_roots_no_delete BEFORE DELETE ON retired_attempt_artifact_roots
+ BEGIN SELECT RAISE(ABORT,'immutable retired artifact identity'); END;
+CREATE TRIGGER IF NOT EXISTS attempt_artifact_roots_no_reuse BEFORE INSERT ON attempt_artifact_roots
+ WHEN EXISTS(SELECT 1 FROM retired_attempt_artifact_roots WHERE attempt=NEW.attempt OR root=NEW.root)
+ BEGIN SELECT RAISE(ABORT,'retired artifact identity cannot be reused'); END;
+DROP TRIGGER IF EXISTS attempt_artifact_roots_no_delete;
+CREATE TRIGGER attempt_artifact_roots_no_delete BEFORE DELETE ON attempt_artifact_roots
+ WHEN NOT EXISTS(SELECT 1 FROM retired_attempt_artifact_roots
+                 WHERE attempt=OLD.attempt AND admission=OLD.admission AND root=OLD.root)
  BEGIN SELECT RAISE(ABORT,'immutable original artifact placement'); END;
 CREATE TABLE IF NOT EXISTS results(
  attempt TEXT PRIMARY KEY,job TEXT,event TEXT,result TEXT,error TEXT,
@@ -266,7 +279,9 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
     def artifact_root(self, attempt):
         # Missing mapping means LEGACY forever, including pre-admission attempts.
         row = self.one('SELECT r.root,a.selection FROM attempt_artifact_roots r '
-                       'JOIN artifact_placement_admissions a ON a.id=r.admission WHERE r.attempt=?', (attempt,))
+                       'JOIN artifact_placement_admissions a ON a.id=r.admission WHERE r.attempt=? '
+                       'UNION ALL SELECT r.root,a.selection FROM retired_attempt_artifact_roots r '
+                       'JOIN artifact_placement_admissions a ON a.id=r.admission WHERE r.attempt=?', (attempt, attempt))
         root = Path(row['root']) if row else self.home/'artifacts'/attempt
         if row and root != Path(json.loads(row['selection'])['root'])/attempt:
             raise Refusal('original artifact mapping changed; retain original custody')
@@ -300,6 +315,10 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         if type(selection['expires']) not in (int, float) or not self.clock() < selection['expires'] < self.clock()+86400:
             raise Refusal('finite current placement admission required')
         root = Path(selection['root'])
+        # Match the existing lexical resource boundary before ANY metadata.
+        if (not root.is_absolute() or root.anchor == '//' or '..' in root.parts
+                or str(root) != selection['root']):
+            raise Refusal('independent new plain artifact root required')
         guard_path(self, str(root))  # lexical exclusions BEFORE metadata
         if any(Path(p).is_relative_to(root) for p in self.config.get('artifact_exclusions', [])):
             raise Refusal('future arena contains an opaque namespace; no acquisition')
@@ -331,32 +350,52 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 v.f_favail < selection['min_free_inodes']+entries):
             raise Backpressure('future artifact allocation headroom lost; no fallback')
 
-    def placement_usage(self, incoming=0):
+    def placement_usage(self, incoming=0, *, admission=None, entries=0, journal_incoming=0):
         from .custody import guard_path
-        result = []
+        result, sites = [], []
+        if incoming and admission is None:
+            raise Refusal('incoming artifact allocation needs its exact destination')
         for row in self.rows('SELECT id,selection FROM artifact_placement_admissions ORDER BY rowid'):
             spec = json.loads(row['selection']); root = Path(spec['root'])
+            growth = incoming if row['id'] == admission else 0
+            new_entries = entries if row['id'] == admission else 0
             guard_path(self, str(root))
             if any(Path(p).is_relative_to(root) for p in self.config.get('artifact_exclusions', [])):
                 raise Refusal('artifact arena contains an opaque namespace; no enumeration')
             if any(p.is_symlink() for p in (root, *root.parents)):
                 raise Refusal('admitted artifact arena became an alias')
             pending, count, total = [root], 0, 0
+            device = None
             while pending:
                 path = pending.pop()
                 guard_path(self, str(path))
                 info = path.lstat()
+                if path == root:
+                    device = info.st_dev
                 if info.st_uid != os.getuid() or stat.S_ISLNK(info.st_mode):
                     raise Refusal('foreign/aliased artifact entry; keep without traversal')
                 count += 1; total += info.st_size
-                if count > spec['max_entries'] or total+incoming > spec['max_bytes']:
+                if count+new_entries > spec['max_entries'] or total+growth > spec['max_bytes']:
                     raise Backpressure('cumulative future artifact admission exhausted; no fallback')
                 if stat.S_ISDIR(info.st_mode):
                     pending.extend(path.iterdir())
-            self.placement_headroom(root, spec, incoming)
-            self.placement_headroom(self.home, {'min_free_bytes': spec['journal_min_free_bytes'],
-                                                'min_free_inodes': spec['journal_min_free_inodes']}, incoming, 1)
+            sites.append((row['id'], root, spec, device))
             result.append(dict(admission=row['id'], root=str(root), entries=count, bytes=total))
+        if admission is not None and not any(key == admission for key, _, _, _ in sites):
+            raise Refusal('incoming artifact destination is not admitted')
+        destination = next((dev for key, _, _, dev in sites if key == admission), None)
+        journal_device = self.home.lstat().st_dev if sites else None
+        # Logical arena ceilings follow the actual destination. Physical free
+        # space is shared by allocations on the same device, including journal
+        # growth; preserve every applicable site floor before those writes.
+        for _, root, spec, device in sites:
+            physical_bytes = (incoming if device == destination else 0) + (journal_incoming if device == journal_device else 0)
+            physical_entries = (entries if device == destination else 0) + int(journal_incoming > 0 and device == journal_device)
+            self.placement_headroom(root, spec, physical_bytes, physical_entries)
+            self.placement_headroom(self.home, {'min_free_bytes': spec['journal_min_free_bytes'],
+                                                'min_free_inodes': spec['journal_min_free_inodes']},
+                                    journal_incoming + (incoming if destination == journal_device else 0),
+                                    int(journal_incoming > 0) + (entries if destination == journal_device else 0))
         return result
 
     def admit_artifact_write(self, attempt, incoming, entries):
@@ -365,7 +404,9 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         if not row:
             return  # Legacy behavior and original home remain unchanged.
         spec = json.loads(row['selection'])
-        usage = next(p for p in self.placement_usage(incoming) if p['admission'] == row['id'])
+        usage = next(p for p in self.placement_usage(incoming, admission=row['id'], entries=entries) if p['admission'] == row['id'])
+        if self.usage()['bytes']+incoming+capacity.PRESSURE_RESERVE >= self.config['limits']['max_bytes']:
+            raise Backpressure('cumulative journal/artifact bytes held; conserve before admitting more')
         if usage['entries']+entries > spec['max_entries']:
             raise Backpressure('future artifact entry admission exhausted; no fallback')
         self.placement_headroom(Path(spec['root']), spec, incoming, entries)
@@ -377,10 +418,11 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         spec = json.loads(row['selection'])
         if row['configuration'] != digest(self.config) or self.clock() >= spec['expires']:
             raise Refusal('future artifact admission expired/changed; no fallback')
-        count = self.one('SELECT COUNT(*) n FROM attempt_artifact_roots WHERE admission=?', (row['id'],))['n']
+        count = sum(self.one(f'SELECT COUNT(*) n FROM {table} WHERE admission=?', (row['id'],))['n']
+                    for table in ('attempt_artifact_roots', 'retired_attempt_artifact_roots'))
         if count >= spec['max_attempts']:
             raise Backpressure('future artifact attempt admission exhausted; no fallback')
-        self.placement_usage(4096)
+        self.placement_usage(4096, admission=row['id'])
         self.db.execute('INSERT INTO attempt_artifact_roots VALUES(?,?,?)',
                         (attempt, row['id'], str(Path(spec['root'])/attempt)))
 
@@ -417,7 +459,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             if not self.db.in_transaction:
                 raise Refusal('duty credit allocation requires the source write transaction')
             admitted.charge(self, kind, event=event, job=job)
-        self.placement_usage(incoming)
+        self.placement_usage(journal_incoming=incoming)
         usage, limits = self.usage(), self.config["limits"]
         if usage["bytes"] + incoming + capacity.PRESSURE_RESERVE >= limits["max_bytes"]:
             raise Backpressure("cumulative journal/artifact bytes held; conserve before admitting more")

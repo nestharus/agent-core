@@ -66,6 +66,8 @@ def basis(store, root):
     witnesses['job_births'] = [store.one('SELECT * FROM prospective_job_positions WHERE job=?', (n,)) for n in sorted(jobs)]
     recovery = oneoff.retirement_material(store, attempts)
     witnesses['recovery'] = recovery
+    witnesses['artifact_roots'] = [store.one('SELECT * FROM attempt_artifact_roots WHERE attempt=?', (a,))
+                                   for a in sorted(attempts)]
     return {'root': root, 'members': selected, 'basis': digest({'configuration': store.config, 'rows': witnesses}),
             'sources': {n: store.one('SELECT hash FROM events WHERE id=?', (n,))['hash'] for n in sorted(events)},
             'occurrences': {n: digest(store.one('SELECT * FROM alerts WHERE id=?', (n,))) for n in sorted(occurrences)},
@@ -255,6 +257,16 @@ def apply(store, root, actor, receipt):
         # branch/context closure, with their original snapshots and raw returns.
         for table, column in [('recovery_requests','job'),('recovery_dispositions','job'),('owner_results','job'),('qa_package_owners','job')]:
             delete(table,column,members['jobs'])
+        # Conserve the exact enduring association and its qualified disposition.
+        # The episode's payload rows may retire; historical roots never retarget.
+        for attempt in members['attempts']:
+            mapping = store.one('SELECT * FROM attempt_artifact_roots WHERE attempt=?', (attempt,))
+            if mapping:
+                proof = encode(dict(actor=actor, at=store.clock(), cohort=current, receipt=receipt))
+                store.budget(None, len(proof.encode())+4096)
+                store.db.execute('INSERT INTO retired_attempt_artifact_roots VALUES(?,?,?,?)',
+                                 (attempt, mapping['admission'], mapping['root'], proof))
+                delete('attempt_artifact_roots', 'attempt', [attempt])
         delete('attempts','id',members['attempts'])
         # Per-job birth retires only with the same fully qualified cohort.
         # Never reset sqlite_sequence: future epochs/jobs keep this frontier.

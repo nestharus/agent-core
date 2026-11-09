@@ -199,9 +199,9 @@ processing completed. The first receipt remains immutable.
 Dispatcher planned stop joins active tasks and then retains the actual model,
 metadata and native caller owners until exact wait/evidence/delivery debts are
 discharged. A draining-originals notice is nonterminal. Cancellation joins that
-drain. The continuing service keeps its endpoint available through this drain;
-status includes separate originals even when the uncollected model-row list is
-empty. An unavailable journal/evidence destination may keep normal stop pending
+drain. The continuing service keeps its endpoint available through the initial
+Dispatcher drain; status includes separate originals even when the uncollected
+model-row list is empty. An unavailable journal/evidence destination may keep normal stop pending
 indefinitely with a capable owner. There is no crash/restart/kernel/descendant
 promise, owner reconstruction, provider-root adoption or forced finite END.
 
@@ -265,3 +265,66 @@ readback must agree jointly. No source, noGit, read-only, HOME, origin, current
 selection or retained witness safeguard is removed. Complete existing selectors
 remain fixed; new controls join their complete selected modules. Generic
 qualification is not actual service/provider admission or native acceptance.
+
+
+Decision1133 service and placement progress
+-----------------------------------------
+
+Planned service closing seals control ingress after the Dispatcher returns and
+joins every previously accepted callback, including work not yet registered as
+an original. It then closes contexts and drains the actual original registries
+in a finally boundary. Socket, wake, callback or context-error reporting failure
+cannot skip this drain or produce a returned service receipt. Cancellation joins
+the whole closing task. Reporting failure remains a failure after collection;
+wait/evidence/delivery refusal may keep the capable original owner nonterminal.
+Completed callbacks are removed and their first failure is retained for closing.
+This supplies no crash/restart, descendant or forced finite-END guarantee.
+
+Both `original-current-status ATTEMPT --role ROLE` and
+`select-artifact-placement --selection FILE` accept an optional `--capability KEY`.
+Omitting it uses ordinary Board authority, which still rejects revoked grants.
+Supplying it selects the existing ProcessingBoard and Access context: current
+capability, source/configuration/selection and exact original revoked software
+grant checks remain mandatory. There is no automatic fallback. Work or the
+original role custodian still needs actual actor identity and current source
+access. The status read changes no resume, effect, retirement or disposal rights.
+
+Legitimate episode retirement conserves each mapped association in an immutable
+historical ledger with its exact cohort, issuer and all-custodian disposition.
+Only then may the active mapping FK be removed with the qualified episode.
+Both active and historical roots resolve to the same original path forever;
+retired identities cannot be reused or retargeted. The ledger, original admission
+and their journal charge remain. Historical mappings still count against that
+admission's lifetime attempt bound. Full recovery and result conservation,
+actual whole processing+24h, every hold and all existing structural checks still
+precede retirement. This does not delete any actual current data, release an
+existing hold, or promise physical journal/platform reclamation.
+
+Every retained arena, including expired arenas, contributes its actual bytes and
+entries to admission. Incoming artifact bytes/entries are charged to their exact
+admission; journal incoming growth is checked at the original journal against
+all applicable journal floors. Unchanged arenas retain their own actual cap and
+physical-floor checks without receiving hypothetical logical arena growth.
+Allocations on the same underlying device still contribute to every applicable
+physical site floor, including original-journal floors. Global cumulative
+journal/artifact capacity remains mandatory. No fallback is added.
+New placement operands must have a canonical single-root absolute spelling,
+without dot/parent, repeated slash or trailing slash normalization, before any
+metadata or creation; canonical exclusions and overlap guards still follow.
+
+Initial artifact admission and directory creation now lie inside the ordinary
+task outcome boundary. When either refuses before any child starts, the normal
+collector records a not-started result with no numeric process exit, no created
+session and known-not-started detail. Source/effect/consumer/processing failures
+and custody remain independently held. Later real child collection remains the
+existing original-owner protocol.
+
+The added controls remain in the complete existing selected modules. They use
+new owned fictional namespaces, real Unix sockets/subprocess handles and SQLite,
+with fictional grant/actor/catalog and workflow scheduling seams. They distinguish
+service report failure and accepted pre-registration control work; lawful ordinary
+versus retained grant access and source/recipient refusal; fully qualified mapped
+retirement plus immutable identity; independent destination progress plus retained,
+global and journal-floor refusal; pre-metadata lexical refusal; and truthful
+allocation/mkdir no-start progress. They are generic technical qualification,
+not actual configured service/native/provider or independent acceptance.
