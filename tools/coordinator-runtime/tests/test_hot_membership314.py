@@ -290,7 +290,7 @@ class HotMembership(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(answer)
             self.assertEqual(context,frozen)
             with self.assertRaisesRegex(Refusal,'empty'):
-                await native.call(self.runtime,name,policy,context,self.f.directory/'excluded-input','future input',[])
+                await native.call(self.runtime,name,policy,context,self.f.directory/'excluded-input','future input',[],opening=True)
             self.assertEqual(len(children),1)
             # Fictional owned handle for the harmless close subprocess; no native run.
             Path(context['handle']).write_text(encode({'v':1,'uid':os.getuid(),'run':'fictional-protocol-run',

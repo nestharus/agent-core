@@ -1237,8 +1237,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             task = self.config["tasks"][row["task"]]
             context = None
             if self.processing and self.processing.review_task(row['task']):
-                from .reviews import BINDING
-                task = {**task, 'binding': BINDING}
+                from .reviews import route_binding
+                task = {**task, 'binding': route_binding(task)}
                 member = json.loads(row['members'])[0]
                 source = self.event(member['event'])
                 from .branches import review_key

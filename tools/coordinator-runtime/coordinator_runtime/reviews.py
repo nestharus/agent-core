@@ -34,6 +34,20 @@ FAMILIES = {'organization-and-communication','cross-change-understanding','purpo
             'service-capability-and-headroom','operational-evidence-capabilities','agent-reasoning-integrity'}
 
 
+def route_binding(task):
+    """Keep the existing concrete route executor distinct from opaque ownership.
+
+    A route operand is not a model-name invocation. In particular, changing the
+    attempt's binding to BINDING cannot realize the selected opaque owner task.
+    This guard neither resolves a route nor declares that another supported
+    opaque continuation interface is absent.
+    """
+    if task.get('execution') == 'owner' or task.get('binding', {}).get('provider') == 'opaque':
+        raise Refusal('route-only Reviews cannot invoke selected opaque gpt-xhigh; '
+                      'retain owner execution; supported opaque continuing entry required')
+    return dict(BINDING)
+
+
 def coverage(returned,packet,architecture):
     """Account for the actual method, without treating a label as reading proof."""
     account=returned.get('coverage')
@@ -181,6 +195,7 @@ def validate(runtime, choices):
         task = runtime.config['tasks'].get(name, {})
         if task.get('role') != 'Reviews' or task.get('phase') != 'proposer' or task.get('effects') != 'none':
             raise Refusal('ordinary review requires a selected read-only Reviews proposer')
+        route_binding(task)
         if (set(policy) - {'method_closure'} != {'caller', 'caller_sha256', 'routes', 'deadline', 'method', 'method_files', 'components'}
                 or not 1 <= policy['deadline'] <= 7200):
             raise Refusal('exact native caller/routes/deadline/method/components required')
@@ -424,9 +439,11 @@ class Native:
             runtime.authorize_launch(attempt)
             if policy['routes'].get(context['profile']) != context['route'] or not context['route']:
                 raise Refusal('bound review account route unavailable/changed; original context retained')
-        # Each NEW input obeys current user membership. Close drains existing
-        # ownership even after exclusion, without admitting new model work.
-        guard = _existing() if close else runtime.execution_pool.admission(context['profile'])
+        # Pool membership allocates NEW contexts. An explicit continuation stays
+        # on its original account, including after a future-launch pool change.
+        # Current task/source/grant authority and the exact route/handle checks
+        # still apply to every input; close only drains existing ownership.
+        guard = runtime.execution_pool.admission(context['profile']) if opening and not close else _existing()
         child, key = None, None
         capture_errors, captures = [], []
         timed_out = False
@@ -567,6 +584,7 @@ class Executor:
         if job.get('task'):
             runtime.authorize_launch(attempt)
             task = runtime.config['tasks'][job['task']]
+            route_binding(task)
             if task.get('require_package_scope'):
                 from .contracts import scoped_task
                 task = scoped_task(job['task'], task, runtime.one(
@@ -780,6 +798,9 @@ def collected_proof(runtime, job, attempt):
     call = runtime.one("SELECT * FROM review_calls WHERE attempt=? AND state='collected'", (attempt['id'],))
     if not call:
         return None
+    # A historical rewritten attempt binding cannot certify the selected opaque
+    # owner task. Do not promote such a call into current Source qualification.
+    route_binding(runtime.config['tasks'][job['task']])
     snapshot=runtime.one('SELECT context FROM review_call_contexts WHERE attempt=?',(attempt['id'],))
     context=json.loads(snapshot['context']) if snapshot else runtime.one('SELECT * FROM review_contexts WHERE component=?', (call['component'],))
     turns = json.loads(call['receipt'])
