@@ -274,6 +274,7 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
     observed = dict(thread=None, completed=0, failed=False, answer=None, diagnostics=[])
     captures = []
     observations = 0
+    receipt_attempts = []
     stop_at = time.monotonic() + deadline
 
     async def finish(entry):
@@ -282,10 +283,15 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
             await asyncio.wait_for(asyncio.gather(*captures), shutdown)
         except (asyncio.TimeoutError, asyncio.CancelledError):
             evidence['errors'].append('pipe EOF unobserved; capture partial')
-        entry['evidence'] = dict(evidence)
-        private_write(directory / ('original-' + str(observations) + '.json'),
-                      json.dumps(dict(actual_END=entry['exit'], evidence=evidence)).encode(), capacity_check)
+        # Reserve the next name before any fallible persistence. A failed
+        # exclusive create/write/flush/fsync remains untouched; normal retry
+        # uses another name under this SAME owned finalizer, never file recovery.
+        receipt_name = 'original-' + str(observations) + '.json'
         observations += 1
+        receipt_attempts.append(receipt_name)
+        entry['evidence'] = dict(evidence, receipt_attempts=list(receipt_attempts))
+        private_write(directory / receipt_name,
+                      json.dumps(dict(actual_END=entry['exit'], evidence=entry['evidence'])).encode(), capacity_check)
 
     def stop(reason):
         evidence['errors'].append(reason)

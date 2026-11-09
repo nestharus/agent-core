@@ -91,3 +91,52 @@ public sandbox-policy input and task root. Fixtures never auto-delete. Its
 fictional transport/shape cases are separate from actual local sandbox controls;
 none is a provider qualification. Use one source-bound focused final record at
 readiness rather than restamping earlier results or running unrelated suites.
+
+## Qualification failure and receipt progress
+
+Qualification commits next-input admission after proof persistence and owned
+listener finalization both succeed. A raised qualification call leaves
+`protection_qualified` false even when its favorable command and proof bytes
+survive. The single-attempt restriction still prevents replay. Local close can
+collect the original handle; failure gives no new context or lifetime.
+
+The acting oracle counts every runtime-attributed exact command completion
+before interpreting its result. There must be exactly one, with successful END,
+completed status and all four discriminating operation results. A contradictory,
+failed or malformed exact execution beside a favorable one refuses admission.
+Unrelated commands retain their own outcomes; they are not protection proof.
+
+Each original evidence-persistence attempt reserves its receipt name first.
+Post-create write, flush or fsync failure keeps the failed physical file and
+exact in-memory original. A normal same-owner `Originals.finish` retry writes the
+next name if persistence is available, carrying earlier receipt-attempt names
+and failure observations. No prior file is reopened, overwritten or removed.
+Capacity failure can still leave collection pending. Publication-only retries
+reuse the completed evidence and do not create another evidence receipt.
+Numeric process END, evidence-finalizer completion, pipe EOF, publication, local
+close and whole processing retain their different meanings. This supplies no
+hard-crash successor, escaped-descendant theorem or automatic recovery loop.
+
+## Coordinator composition and receiving boundary
+
+The current coordinator source has a distinct `opaque-cli-v1` selection contract
+in `coordinator_runtime/opaque_review.py`. It pins the public Context launcher and
+constructs it without this endpoint's protection/execution dependencies. The
+Reviews executor separately associates an observed reviewer with its branch and
+keeps it different from the responsible Root and builders; it transports the
+whole proposal to the sole Reviews integrator. Sharing Context does not select
+this protected composition.
+
+The local-control publisher emits `owned-sandbox-control`. The existing Store
+numeric-original callback admits only `appserver-model`, `preflight-metadata`,
+`native-caller` and `opaque-cli-process`; choosing that callback directly is
+incompatible. Relabeling a control process does not supply compatibility.
+Likewise `native_review_scope._authenticate` requires
+`selected-ordinary-review` and explicitly refuses generic CLI proof. Changing
+that receiver or claiming native proof is not part of this contribution.
+
+A caller must establish the applicable selection, current task/source authority,
+admitted material, protection dependencies, publisher and receiving contract
+before claiming adoption. The generic endpoint cannot satisfy a selected native
+receiver's native-proof requirement. Source availability and focused local tests
+do not select a caller, install it or establish operating/receiving applicability.

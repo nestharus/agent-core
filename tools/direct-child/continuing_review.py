@@ -217,32 +217,46 @@ def canary_command_matches(observed, expected):
             and parts[1] in {'-lc','-c'} and parts[2] == expected)
 
 
+def denied_operation(value, errors):
+    return (isinstance(value, dict) and type(value.get('error')) is int
+            and value['error'] in errors)
+
+
+def canary_result(item):
+    if type(item.get('exit_code')) is not int or item['exit_code'] != 0 or item.get('status') != 'completed':
+        raise Refusal('exact provider canary did not complete successfully; substantive input withheld')
+    try:
+        row = json.loads(item['aggregated_output'])
+    except (KeyError, ValueError, TypeError) as exc:
+        raise Refusal('exact provider canary output malformed; substantive input withheld') from exc
+    if not isinstance(row, dict) or not isinstance(row.get('allowed'), dict):
+        raise Refusal('exact provider canary operation evidence malformed; substantive input withheld')
+    if (row['allowed'].get('read') != 'owned-allowed-canary'
+            or not denied_operation(row.get('outside'), (errno.EACCES, errno.EPERM, errno.ENOENT))
+            or not denied_operation(row.get('write'), (errno.EACCES, errno.EPERM, errno.EROFS))
+            or not denied_operation(row.get('network'), (errno.EACCES, errno.EPERM))):
+        raise Refusal('exact provider canary protection adverse or incomplete; substantive input withheld')
+    return row
+
+
 def acting_proof(capture, expected):
-    matches=[]
+    matches = []
     for line in capture.splitlines():
         try:
-            record=json.loads(line)
+            record = json.loads(line)
         except ValueError as exc:
             raise Refusal('malformed acting-boundary capture') from exc
-        if not isinstance(record,dict) or not isinstance(record.get('item',{}),dict):
+        if not isinstance(record, dict) or not isinstance(record.get('item', {}), dict):
             raise Refusal('malformed acting-boundary event')
-        item=record.get('item',{})
-        if record.get('type') != 'item.completed' or item.get('type') != 'command_execution':
-            continue
-        if (item.get('exit_code') == 0 and item.get('status') == 'completed'
-                and canary_command_matches(item.get('command'),expected)):
-            try:
-                row=json.loads(item['aggregated_output'])
-            except (KeyError,ValueError,TypeError):
-                continue
-            if (row.get('allowed',{}).get('read')=='owned-allowed-canary'
-                    and row.get('outside',{}).get('error') in (errno.EACCES,errno.EPERM,errno.ENOENT)
-                    and row.get('write',{}).get('error') in (errno.EACCES,errno.EPERM,errno.EROFS)
-                    and row.get('network',{}).get('error') in (errno.EACCES,errno.EPERM)):
-                matches.append(row)
-    if len(matches)!=1:
+        item = record.get('item', {})
+        if (record.get('type') == 'item.completed' and item.get('type') == 'command_execution'
+                and canary_command_matches(item.get('command'), expected)):
+            # Count every exact execution before interpreting success. Otherwise
+            # an adverse retained operation can disappear beside one favorable one.
+            matches.append(item)
+    if len(matches) != 1:
         raise Refusal('actual uniquely attributed provider canary operation unqualified; substantive input withheld')
-    return matches[0]
+    return canary_result(matches[0])
 
 
 class ContinuingReview:
@@ -295,12 +309,15 @@ class ContinuingReview:
             # This is the exact freshly owned completed capture, never a foreign
             # session, private store, lost handle or tool-history reconstruction.
             capture=(directory/'stdout.jsonl').read_text()
-            self.proof=acting_proof(capture,expected)
-            private_write(directory/'acting-proof.json',json.dumps(self.proof).encode(),self.endpoint.capacity_check)
-            return self.proof
+            proof=acting_proof(capture,expected)
+            private_write(directory/'acting-proof.json',json.dumps(proof).encode(),self.endpoint.capacity_check)
         finally:
             server.close()
             await server.wait_closed()
+        # Admission commits only after the entire qualification call succeeds,
+        # including proof persistence and owned listener finalization.
+        self.proof=proof
+        return self.proof
 
     async def turn(self, text, materials):
         if self.proof is None:
