@@ -714,6 +714,35 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                              outcome.get("exit"), outcome["capture"], self.clock(),))
             oneoff.collected(self, attempt)
 
+    def record_original_end(self, attempt, observation):
+        """Original collector delivers a later fact, never an effect/hold release."""
+        if type(observation.get('exit')) is not int or observation.get('kind') not in {
+                'appserver-model', 'preflight-metadata', 'native-caller'} or not observation.get('original'):
+            raise Refusal('attributable exact original numeric observation required')
+        with self.tx(collection=attempt):
+            row = self.attempt(attempt)
+            if row['controller'] != self.controller:
+                raise Refusal('later observation belongs to the original collector')
+            detail = json.loads(row['detail'])
+            observations = list(detail.get('original_end_observations', []))
+            prior = next((x for x in reversed(observations) if x['original'] == observation['original']), None)
+            if prior:
+                if any(prior[k] != observation[k] for k in ('kind', 'exit')):
+                    raise Refusal('original numeric observation cannot change')
+                if all(prior.get(k) == value for k, value in observation.items()):
+                    return  # Delivery retry, not a new observation or processing clock.
+            receipt = {**observation, 'collector': self.controller, 'attempt': attempt, 'observed_at': self.clock()}
+            self.budget(None, len(encode(receipt).encode()) + 4096)
+            detail['original_end_observations'] = observations + [receipt]
+            changes = {'detail': encode(detail)}
+            initial = self.one('SELECT exit FROM results WHERE attempt=?', (attempt,))
+            if observation['kind'] == 'appserver-model' and initial and initial['exit'] is None:
+                if row['exit'] is not None:
+                    raise Refusal('later model END cannot replace a current numeric observation')
+                changes.update(exit=observation['exit'], ended=receipt['observed_at'],
+                               collected=receipt['observed_at'], state='collected')
+            oneoff.observe_end(self, attempt, changes)
+
     def classification_failed(self, attempt, error):
         with self.tx():
             self.db.execute("UPDATE events SET state='classification-held',error=? WHERE classifier=? AND state='classifying'",

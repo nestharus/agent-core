@@ -162,3 +162,25 @@ writes. Existing bind ancestors are not private-body or containment evidence.
 The current worker root is remounted read-only after bind construction; the
 explicit effects bind remains writable. This realizes the existing denied
 unselected-write control, which a writable synthetic root did not enforce.
+
+
+## Decision1118 continuing originals
+
+Shared AppServer debt reconciliation is serialized and occurs inside the new
+reservation's normal outcome boundary. A failed retry or journal delivery
+refuses that launch truthfully. Numeric later observations reach the original
+Store through record_original_end; current attempt status and attributed
+oneoff progress grow while the immutable first results row and recovery
+snapshot retain their earlier UNKNOWN. The first native caller receipt also
+stays immutable; a separate same-identity observation records later END. Current
+source/privacy admission still precedes sealed recovery-body access. Capture, error, cleanup, effect,
+consumer, recovery and processing holds are not discharged by this observation.
+
+Metadata preflight and Reviews.Native retain separate exact caller handles
+before fallible setup/begin, join finite finalization through cancellation,
+and retain wait/evidence/delivery debt with their actual owner for retry.
+Metadata END is not the model child's END; native caller END is not provider
+root completion. Registries are in memory, not restart/kernel/descendant
+capabilities. Collection1114 includes real original controls for existing debt,
+late journal delivery, non-fixture preflight and the separate Reviews caller.
+No native provider or installed service is invoked by these synthetic controls.

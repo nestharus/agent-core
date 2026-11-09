@@ -17,7 +17,7 @@ from pathlib import Path
 import re
 
 from .contracts import (PROFILES, Refusal, canonical_uuid, encode, parse_json,
-                        task_result, task_result_issues, task_result_instructions, report_only, digest)
+                        task_result, task_result_issues, task_result_instructions, report_only, digest, ident)
 from . import storage, readiness, observations
 
 RPC_METHODS = frozenset({'initialize', 'config/read', 'thread/start', 'thread/read',
@@ -97,9 +97,91 @@ def decode_final(text):
     return value
 
 
-async def metadata(command, env, limit=1048576, cwd=None):
+class CollectionPending(Refusal):
+    """The original owner retains exact wait/evidence capability, never a PID."""
+    def __init__(self, owner, key):
+        self.collector, self.original = owner, key
+        self.observation = owner.observation(key)
+        super().__init__('original collection/evidence pending; exact owner retained')
+
+
+class Originals:
+    """In-memory caller ownership, separate from provider roots and durable facts."""
+    def __init__(self):
+        self.owned, self.pending = {}, {}
+        self.lock = asyncio.Lock()
+
+    def own(self, child, kind, finish, publish):
+        key = ident()
+        self.owned[key] = dict(child=child, kind=kind, exit=None, finish=finish,
+                               publish=publish, evidence_done=False, failures=[])
+        return key
+
+    def observation(self, key):
+        entry = self.owned[key]
+        return dict(original=key, kind=entry['kind'], exit=entry['exit'],
+                    evidence_complete=entry['evidence_done'], failures=list(entry['failures']),
+                    evidence=entry.get('evidence'),
+                    meaning='exact owned caller wait; no provider-root, effect or processing closure')
+
+    async def collect(self, key, grace):
+        entry = self.owned[key]
+        if entry['exit'] is None:
+            try:
+                entry['exit'] = await end_owned(entry['child'], grace)
+                entry['evidence_done'] = False  # Refresh any earlier UNKNOWN receipt with this later numeric END.
+            except (Exception, asyncio.CancelledError) as exc:
+                entry['failures'].append(dict(stage='wait', type=type(exc).__name__))
+        # A drain or receipt failure must never bypass the wait above. Conversely,
+        # failed wait must not bypass independent finite capture finalization.
+        if not entry['evidence_done']:
+            try:
+                await entry['finish'](entry)
+                entry['evidence_done'] = True
+            except (Exception, asyncio.CancelledError) as exc:
+                entry['failures'].append(dict(stage='evidence', type=type(exc).__name__))
+        published = False
+        if type(entry['exit']) is int:
+            try:
+                entry['publish'](self.observation(key))
+                published = True
+            except Exception as exc:
+                entry['failures'].append(dict(stage='delivery', type=type(exc).__name__))
+        if type(entry['exit']) is int and entry['evidence_done'] and published:
+            self.pending.pop(key, None)
+            self.owned.pop(key)
+            return entry['exit']
+        self.pending[key] = entry
+        raise CollectionPending(self, key)
+
+    async def finish(self, key, grace):
+        # Cancellation cannot detach a capable original during its final tail.
+        task = asyncio.create_task(self.collect(key, grace))
+        await AppServer.join_finalization(task, self.observation(key))
+        return task.result()
+
+    async def collect_pending(self, grace):
+        async with self.lock:
+            for key in list(self.pending):
+                await self.finish(key, grace)
+
+
+async def metadata(command, env, limit=1048576, cwd=None, *, originals=None, publish=None):
     child = await asyncio.create_subprocess_exec(*command, env=env,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL, limit=limit+1, cwd=cwd)
+    originals = originals if originals is not None else Originals()
+    async def discard_tail(entry):
+        remaining = 2*limit+131072
+        async def drain():
+            nonlocal remaining
+            while remaining > 0:
+                block = await child.stdout.read(min(65536, remaining))
+                if not block:
+                    return
+                remaining -= len(block)
+            raise Refusal('metadata tail exceeds finite drain bound')
+        await asyncio.wait_for(drain(), 1)
+    key = originals.own(child, 'preflight-metadata', discard_tail, publish or (lambda observation: None))
     try:
         async def complete_output():
             output = bytearray()
@@ -110,20 +192,12 @@ async def metadata(command, env, limit=1048576, cwd=None):
             return output
         output = await asyncio.wait_for(complete_output(), 20)
         code = await asyncio.wait_for(child.wait(), 20)
+        originals.owned[key]['exit'] = code
         if code:
             raise MetadataFailure(code, command)
         return output.decode()
     finally:
-        await end_owned(child, 3)
-        # Retire this metadata pipe after bounded overflow, too. No raw output
-        # is retained and no descendant/process absence is inferred from EOF.
-        async def discard_tail():
-            remaining=2*limit+131072
-            while remaining>0:
-                block=await child.stdout.read(min(65536,remaining))
-                if not block:return
-                remaining-=len(block)
-        with suppress(Exception):await asyncio.wait_for(discard_tail(),1)
+        await originals.finish(key, 3)
 
 
 async def end_owned(child, grace):
@@ -158,12 +232,13 @@ def mcp_rows(text):
     return result
 
 
-async def preflight(codex, profile, expected_version, storage_flags=(), cwd=None):
+async def preflight(codex, profile, expected_version, storage_flags=(), cwd=None, *, originals=None, publish=None):
     if '--strict-config' in storage_flags:
         raise Refusal('runtime-only strict-config cannot be forwarded to metadata commands')
     env = environment(profile)
     async def probe(command):
-        return await metadata(command,env,cwd=cwd) if cwd is not None else await metadata(command,env)
+        options = {'originals': originals, 'publish': publish} if originals is not None else {}
+        return await metadata(command, env, cwd=cwd, **options) if cwd is not None else await metadata(command, env, **options)
     version = (await probe([codex, "--version"])).strip()
     if version != expected_version:
         raise Refusal("installed CLI differs from offline schema qualification")
@@ -547,9 +622,11 @@ class AppServer:
         # Exact handles survive exceptional wait failure; no PID reconstruction.
         self.pending_collections = {}
         self.owned_collections = {}
+        self.collection_stores = {}
+        self.pending_lock = asyncio.Lock()
+        self.metadata_originals = Originals()
 
     async def run(self, store, attempt, prompt, spec, schema=None):
-        await self.collect_pending()
         row = store.attempt(attempt)
         binding, profile = json.loads(row["binding"]), row["profile"]
         outcome = {"exit": None, "capture": "unknown", "cleanup": "unknown", "result": None,
@@ -562,12 +639,17 @@ class AppServer:
             'automatic_store_deletion':False, 'known_thread':None}
         child = peer = watcher = None
         try:
+            # Refusal/reconciliation failures belong to this reserved attempt's
+            # normal not-started outcome, rather than escaping before it exists.
+            await self.collect_pending()
+            await self.metadata_originals.collect_pending(self.config['deadlines']['shutdown'])
             store.authorize_launch(attempt)
             async with store.execution_pool.admission(profile):
                 pass  # Refuse an already disabled reservation before provider preflight too.
             owned_storage = storage.prepare(store, attempt)
             outcome['detail']['startup_stage'] = 'preflight'
-            argv, preflight_result = await self.command(profile, storage.flags(owned_storage), spec['cwd'])
+            argv, preflight_result = await self.command(profile, storage.flags(owned_storage), spec['cwd'],
+                publish=lambda observation: store.record_original_end(attempt, observation))
             outcome['detail']['startup_stage'] = 'process-creation'
             store.authorize_launch(attempt)
             # Admission and BEGIN share the operator-update lock. It is released
@@ -581,6 +663,7 @@ class AppServer:
                     stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.DEVNULL, limit=1048577)
                 self.owned_collections[attempt] = (child, outcome)
+                self.collection_stores[attempt] = store
                 outcome["detail"]["creation"] = "owned"
                 store.begin(attempt, {**preflight_result, "argv": argv, "process_handle": "owned-asyncio-subprocess",
                                       "pid_information_only": child.pid, 'execution_pool_admission': admission})
@@ -599,6 +682,8 @@ class AppServer:
             outcome["detail"]["capacity_error"] = isinstance(exc, (RpcFailure, TurnFailure)) and exc.capacity
             if isinstance(exc, (RpcFailure, TurnFailure)):
                 outcome["detail"]["causal_failure"] = exc.projection
+            if isinstance(exc, CollectionPending):
+                outcome['detail']['separate_original_debt'] = exc.observation
             if isinstance(exc, MetadataFailure):
                 outcome['detail']['metadata_failure'] = exc.projection
         finally:
@@ -666,6 +751,7 @@ class AppServer:
         if child is not None and outcome['exit'] is not None:
             self.pending_collections.pop(attempt, None)
             self.owned_collections.pop(attempt, None)
+            self.collection_stores.pop(attempt, None)
         if child is not None and outcome['exit'] is None:
             self.pending_collections[attempt] = (child, outcome)
             outcome['detail']['collection_debt'] = 'exact-handle-retained-in-AppServer.pending_collections; collect_pending required'
@@ -680,13 +766,25 @@ class AppServer:
             if outcome['exit'] is not None else 'unconfirmed')
 
     async def collect_pending(self):
-        for attempt, (child, outcome) in list(self.pending_collections.items()):
-            await self.retry_collection(child, outcome)
-            if outcome['exit'] is not None:
-                self.pending_collections.pop(attempt)
-                self.owned_collections.pop(attempt, None)
-        if self.pending_collections:
-            raise Refusal('prior original collection debt retains exact handles; new launches refused')
+        # Shared Dispatcher calls reconcile one debt at a time. Keep a numeric
+        # observation here until its durable recipient accepts it, too.
+        async with self.pending_lock:
+            for attempt, (child, outcome) in list(self.pending_collections.items()):
+                if outcome['exit'] is None:
+                    await self.retry_collection(child, outcome)
+                if type(outcome['exit']) is int:
+                    try:
+                        self.collection_stores[attempt].record_original_end(attempt, {
+                            'original': attempt, 'kind': 'appserver-model', 'exit': outcome['exit'],
+                            'meaning': 'later exact original wait; earlier UNKNOWN and all other holds conserved'})
+                    except Exception as exc:
+                        outcome['detail']['collection_delivery_failure'] = type(exc).__name__
+                        continue
+                    self.pending_collections.pop(attempt)
+                    self.owned_collections.pop(attempt, None)
+                    self.collection_stores.pop(attempt, None)
+            if self.pending_collections:
+                raise Refusal('prior original collection/evidence debt retains exact owner; new launches refused')
 
     @staticmethod
     async def finish_watcher(watcher, outcome):
@@ -700,11 +798,12 @@ class AppServer:
         except Exception as exc:
             outcome['detail']['storage_watcher_failure'] = type(exc).__name__
 
-    async def command(self, profile, storage_flags=(), cwd=None):
+    async def command(self, profile, storage_flags=(), cwd=None, *, publish=None):
         if self.fixture_command:
             return self.fixture_command, {"fixture": True, "mcp": "fixture-only", "delegation_capability": "not-established"}
         codex = self.config.get("codex", "codex")
-        flags, facts = await preflight(codex, profile, self.config["protocol_cli_version"], storage_flags,cwd)
+        flags, facts = await preflight(codex, profile, self.config["protocol_cli_version"], storage_flags, cwd,
+                                       originals=self.metadata_originals, publish=publish)
         return [codex, *flags, "app-server", "--strict-config", "--listen", "stdio://"], facts
 
     async def session(self, peer, store, attempt, prompt, spec, binding, profile, schema, outcome):

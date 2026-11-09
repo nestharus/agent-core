@@ -216,6 +216,33 @@ def advance(store, attempt, changes, basis):
                          (collection_digest(store.attempt(attempt)), attempt))
 
 
+def observe_end(store, attempt, changes):
+    """Collector-only extension of the current view; the sealed UNKNOWN stays original.
+
+    Unlike disposition progress, this also serves classifiers and uncollected
+    attempts. Only Store's exact-original observation path may call it.
+    """
+    if not store.db.in_transaction or set(changes) - {'detail', 'exit', 'ended', 'collected', 'state'}:
+        raise Refusal('later original observation requires its collection transaction')
+    row = store.attempt(attempt)
+    if row['controller'] != store.controller:
+        raise Refusal('later original observation requires its original controller')
+    capsule = store.one('SELECT * FROM oneoff_recovery WHERE attempt=?', (attempt,))
+    retained = store.one('SELECT * FROM oneoff_collection_recovery WHERE attempt=?', (attempt,))
+    receipted = False
+    if capsule and capsule['collection_hash'] is not None:
+        authorize_recovery(store, attempt)  # Preserve current source/privacy admission before sealed body access.
+        original_collection(store, row, capsule)
+        receipted = record_progress(store, row, changes, 'later exact original numeric-END observation')
+    elif retained:
+        raise Refusal('original recovery gap retains later observation delivery debt')
+    columns = ','.join(key+'=?' for key in changes)
+    store.db.execute('UPDATE attempts SET '+columns+' WHERE id=?', (*changes.values(), attempt))
+    if receipted:
+        store.db.execute('UPDATE oneoff_collection_recovery SET current_hash=? WHERE attempt=?',
+                         (collection_digest(store.attempt(attempt)), attempt))
+
+
 def require_progress_owner(store, row):
     if row['collected'] is None or not row['job'] or not store.owns_disposition(store.job(row['job']), row):
         raise Refusal('derived progress belongs to the collected original disposition owner')

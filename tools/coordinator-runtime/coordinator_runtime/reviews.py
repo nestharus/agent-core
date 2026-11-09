@@ -12,7 +12,7 @@ import re
 import shlex
 
 from .contracts import Refusal, digest, encode, parse_json, regular_path, required_text
-from .appserver import end_owned
+from .appserver import Originals
 
 BINDING = {'model': 'gpt-6.1-sol', 'effort': 'high', 'provider': 'openai'}
 SCHEMA = """
@@ -390,7 +390,14 @@ def closed(code, receipt, run):
 
 class Native:
     """Each call is an owned original subprocess; no provider/session fabrication."""
+    def __init__(self):
+        self.originals = Originals()
+
+    async def collect_pending(self, runtime):
+        await self.originals.collect_pending(runtime.config['deadlines']['shutdown'])
+
     async def call(self, runtime, attempt, policy, context, directory, text, commands, opening=False, close=False):
+        await self.collect_pending(runtime)
         directory.mkdir(mode=0o700, parents=True, exist_ok=False)
         prompt_path, allow_path = directory / 'input.txt', directory / 'allow.json'
         prompt_path.write_text(text)
@@ -411,27 +418,11 @@ class Native:
         # Each NEW input obeys current user membership. Close drains existing
         # ownership even after exclusion, without admitting new model work.
         guard = _existing() if close else runtime.execution_pool.admission(context['profile'])
-        async with guard:
-            caller_current(policy)
-            if not opening:
-                handle_run(context)
-            if not close:
-                if not opening and runtime.clock() >= context['created'] + policy['deadline']:
-                    raise Refusal('original whole-root lifetime elapsed; no new root or renewed deadline')
-                runtime.authorize_launch(attempt)
-                with runtime.tx():
-                    runtime.db.execute("UPDATE review_calls SET state='launch-intent' WHERE attempt=?",(attempt,))
-            try:
-                child = await asyncio.create_subprocess_exec(*argv, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            except OSError:
-                if not close and runtime.attempt(attempt)['begin'] is None:
-                    with runtime.tx():
-                        runtime.db.execute("UPDATE review_calls SET state='prepared' WHERE attempt=?",(attempt,))
-                raise  # Affirmative local process-creation refusal, no model admission.
-            if not close and runtime.attempt(attempt)['begin'] is None:
-                runtime.begin(attempt, {'process_handle': 'owned-asyncio-subprocess', 'original_collector': runtime.controller,
-                                        'identity_scope': 'native caller; not provider root completion'})
-        capture_errors = []
+        child, key = None, None
+        capture_errors, captures = [], []
+        timed_out = False
+        code = None
+
         async def capture(pipe, name):
             size = 0
             try:
@@ -447,32 +438,69 @@ class Native:
             except (OSError, Refusal) as exc:
                 capture_errors.append(name + ': ' + str(exc))
                 if child.returncode is None:
-                    child.terminate()
-        captures = [asyncio.create_task(capture(child.stdout, 'caller.stdout')),
-                    asyncio.create_task(capture(child.stderr, 'caller.stderr'))]
-        timed_out = False
-        code = None
-        try:
-            # A bound ends only this caller, not a claim that its live root died.
-            code = await asyncio.wait_for(asyncio.shield(child.wait()), policy['deadline'] + 100)
-        except asyncio.TimeoutError:
-            timed_out = True
-            code = await end_owned(child, runtime.config['deadlines']['shutdown'])
-        finally:
-            if child.returncode is None:
-                code = await end_owned(child, runtime.config['deadlines']['shutdown'])
-            if code is None:
-                code = child.returncode  # Still null if no numeric END was collected.
-            # Pipe EOF is part of original collection, separately bounded from
-            # process END (a descendant may still hold an inherited pipe).
+                    try:
+                        child.terminate()
+                    except ProcessLookupError:
+                        pass
+
+        async def finish_capture(entry):
+            # Numeric wait and capture closure are independent observations.
             try:
                 await asyncio.wait_for(asyncio.gather(*captures), runtime.config['deadlines']['shutdown'])
             except asyncio.TimeoutError:
                 capture_errors.append('caller pipe EOF unobserved within original shutdown bound')
-            (directory / 'original.json').write_text(encode({
-                'argv': argv, 'actual_END': code, 'caller_bound_exceeded': timed_out,
-                'capture_errors': capture_errors,
-                'meaning': 'owned caller subprocess collection; not model answer or root end'}))
+            if len(captures) != 2:
+                capture_errors.append('caller capture setup incomplete')
+            entry['evidence'] = {'capture_errors': list(capture_errors)}
+            record = encode({
+                'argv': argv, 'original': key, 'actual_END': entry['exit'],
+                'caller_bound_exceeded': timed_out, 'capture_errors': capture_errors,
+                'collection_failures': list(entry['failures']),
+                'meaning': 'owned caller subprocess collection; not model answer or provider-root end'})
+            # The first receipt, including UNKNOWN, is historical evidence.
+            # Later collection adds a separate observation with the same identity.
+            try:
+                stream = (directory / 'original.json').open('x')
+            except FileExistsError:
+                stream = (directory / 'original-observations.jsonl').open('a')
+            with stream:
+                stream.write(record+'\n')
+
+        try:
+            async with guard:
+                caller_current(policy)
+                if not opening:
+                    handle_run(context)
+                if not close:
+                    if not opening and runtime.clock() >= context['created'] + policy['deadline']:
+                        raise Refusal('original whole-root lifetime elapsed; no new root or renewed deadline')
+                    runtime.authorize_launch(attempt)
+                    with runtime.tx():
+                        runtime.db.execute("UPDATE review_calls SET state='launch-intent' WHERE attempt=?",(attempt,))
+                try:
+                    child = await asyncio.create_subprocess_exec(*argv, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                except OSError:
+                    if not close and runtime.attempt(attempt)['begin'] is None:
+                        with runtime.tx():
+                            runtime.db.execute("UPDATE review_calls SET state='prepared' WHERE attempt=?",(attempt,))
+                    raise
+                # Record exact native-caller ownership before capture setup,
+                # admission-context exit or runtime.begin can fail.
+                key = self.originals.own(child, 'native-caller', finish_capture,
+                    lambda observation: runtime.record_original_end(attempt, observation))
+                captures.append(asyncio.create_task(capture(child.stdout, 'caller.stdout')))
+                captures.append(asyncio.create_task(capture(child.stderr, 'caller.stderr')))
+                if not close and runtime.attempt(attempt)['begin'] is None:
+                    runtime.begin(attempt, {'process_handle': 'owned-asyncio-subprocess', 'original_collector': runtime.controller,
+                                            'identity_scope': 'native caller; not provider root completion'})
+            try:
+                code = await asyncio.wait_for(asyncio.shield(child.wait()), policy['deadline'] + 100)
+                self.originals.owned[key]['exit'] = code
+            except asyncio.TimeoutError:
+                timed_out = True
+        finally:
+            if child is not None:
+                code = await self.originals.finish(key, runtime.config['deadlines']['shutdown'])
         maximum = runtime.config['limits']['max_result_bytes']
         try:
             receipt_path = regular_path(str(out / 'result.json'))
