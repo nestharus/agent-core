@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from .contracts import Refusal, encode, collected_task_result, collected_capture, digest
-from .custody import safe_path, read_file
+from .custody import safe_path, read_file, guard_path, guard_bounded_log
 from . import publication, readiness, bounded_log, local_integration
 
 SCHEMA = """
@@ -49,6 +49,11 @@ def execution_policy(store, task):
         if any(Path(name) == Path(p) or Path(name).is_relative_to(Path(p))
                for p in store.config.get('artifact_exclusions', [])):
             raise Refusal('routine target excluded before metadata')
+    for name in policy['targets'] if policy else []:
+        if bounded_log.selected(task) and name == policy['bounded_log']['target']:
+            guard_bounded_log(store, name)
+        else:
+            guard_path(store, name, task)
     return policy_for(task)
 
 
@@ -57,6 +62,7 @@ def snapshot(store, targets):
     for name in targets:
         if Path(name).name == 'WORK_LOG.md':
             raise Refusal('whole-log snapshot unavailable')
+        guard_path(store, name)
         path = safe_path(name, targets)
         try:
             body, witness = read_file(path, store.config['limits'].get('max_artifact_bytes', 33554432))

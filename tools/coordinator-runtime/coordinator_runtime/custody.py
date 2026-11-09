@@ -128,9 +128,9 @@ def _stage_origin(store, stage):
     return None if policy['bounded_log']['target'] == target else target
 
 
-def _path_origins(store, path, tasks):
+def _path_origins(store, path, tasks, bounded_target=None):
     refuse_excluded(store, path)
-    for current in tasks:
+    for current in tasks if path != bounded_target else []:
         refuse_log(path, current)
     known = store.one('SELECT sha256 FROM artifacts WHERE path=?', (path,))
     hashes = [known['sha256']] if known else []
@@ -154,7 +154,7 @@ def _hash_origins(store, sha256, sizes):
     return paths
 
 
-def _guard_sources(store, hashes, paths, task):
+def _guard_sources(store, hashes, paths, task, bounded_target=None):
     """Follow recorded relationships before bodies, without filesystem searches.
 
     Distinct visited sets retain transitive stage restrictions and terminate
@@ -170,7 +170,7 @@ def _guard_sources(store, hashes, paths, task):
             if path in seen_paths:
                 continue
             seen_paths.add(path)
-            linked_hashes, targets = _path_origins(store, path, tasks)
+            linked_hashes, targets = _path_origins(store, path, tasks, bounded_target)
             hashes.extend(linked_hashes)
             paths.extend(targets)
             continue
@@ -199,6 +199,20 @@ def refuse_excluded(store, path):
 def guard_path(store, path, task=None):
     try:
         _guard_sources(store, [], [str(path)], task)
+    except sqlite3.DatabaseError as exc:
+        raise Refusal('retained origin metadata unavailable or corrupt') from exc
+
+
+def guard_bounded_log(store, target):
+    """Admit only the selected limited observation, never a whole-log body.
+
+    The selected target's log label permits its existing prefix operation.
+    Exclusions and every recorded origin still apply, including other logs.
+    No body is read or hashed to discover an otherwise unknown association.
+    """
+    target = origin_path(target)
+    try:
+        _guard_sources(store, [], [target], None, bounded_target=target)
     except sqlite3.DatabaseError as exc:
         raise Refusal('retained origin metadata unavailable or corrupt') from exc
 

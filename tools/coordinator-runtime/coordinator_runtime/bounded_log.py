@@ -10,7 +10,7 @@ from pathlib import Path
 import stat
 
 from .contracts import Refusal, digest, encode
-from .custody import safe_path, read_file
+from .custody import safe_path, read_file, guard_bounded_log
 from .cleanup import open_parent
 
 KIND = 'catalog-bounded-log-v1'
@@ -71,6 +71,7 @@ def open_log(store, spec):
     if any(Path(name) == Path(p) or Path(name).is_relative_to(Path(p))
            for p in store.config.get('artifact_exclusions', [])):
         raise Refusal('bounded log excluded before metadata')
+    guard_bounded_log(store, name)
     path = safe_path(name, [name])
     parent, leaf = open_parent(Path('/'), path)
     try:

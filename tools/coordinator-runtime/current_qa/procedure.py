@@ -24,7 +24,7 @@ PROTECTIONS = {
     'independent-current-authority': ['test_historical_admission1057', 'test_processing188',
                                       'test_processing194', 'test_processing206'],
     'retained-resources-and-capacity': ['test_capacity48', 'test_bounded311', 'test_retained168',
-                                       'test_retained329', 'test_windows76'],
+                                       'test_retained329', 'test_windows76', 'test_ordinary_origin1182'],
     'collection-and-currentness': ['test_post_await_admission743', 'test_ordinary_boundaries749', 'test_current_collection1093', 'test_current_relationships1098'],
     'independent-same-package-receivers': ['test_qa_branch672'],
     'whole-owned-lifecycle': ['test_oneoff1077.Recovery', 'test_correction1092', 'test_collection1114'],
