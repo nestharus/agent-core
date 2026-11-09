@@ -356,3 +356,10 @@ Tests use fake CLIs and a fake native caller (the CLI tests replace the configur
 ```bash
 python3 -m unittest discover -s tools/direct-child -p 'test_*.py'
 ```
+
+## Explicit continuing review contract
+
+[Protected continuing review](continuing-review.md) is a separate opt-in public
+contract for opaque selection, qualification and SAME-owner follow-on. Ordinary
+dispatch remains fresh/no-resume. Its actual first-turn operation controls and
+original custody are distinct from independent review quality and delivery.
