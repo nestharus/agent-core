@@ -21,18 +21,14 @@ def prepare(candidate, area):
     area.mkdir(mode=0o700)
     instance = area / 'instance'; instance.mkdir(mode=0o700)
     writable = area / 'writable'; writable.mkdir(mode=0o700)
-    export = area / 'export'; export.mkdir(mode=0o700)
-    for name in CANDIDATE:
-        target = export / name; target.parent.mkdir(parents=True, exist_ok=True)
-        exclusive(target, (candidate / name).read_bytes())
     source = Path(__file__).absolute().parent
     for name in SCRIPTS:
         exclusive(instance / name, (source / name).read_bytes())
     scripts = {name: record(instance / name) for name in SCRIPTS}
-    manifest = {'version': 1, 'base': BASE, 'tree': TREE, 'parent': PARENT,
+    manifest = {'version': 2, 'component_release': {'base': BASE, 'tree': TREE, 'parent': PARENT},
                 'run_id': uuid.uuid4().hex, 'candidate': str(candidate),
                 'candidate_files': CANDIDATE, 'scripts': scripts, 'tools': TOOLS,
-                'export': str(export), 'output': str(writable / 'result')}
+                'output': str(writable / 'result')}
     exclusive(instance / 'MANIFEST.json', encode(manifest))
     pin = record(instance / 'MANIFEST.json')['sha256']
     # Script-only argv, with dependency verification before any package import.
@@ -55,7 +51,7 @@ def prepare(candidate, area):
                 'readback': {'argv': ['/usr/bin/python3.12', '-B', str(instance / 'readback_entry.py')],
                              'executable_sha256': TOOLS['/usr/bin/python3.12']['sha256'],
                              'script_sha256': record(instance / 'readback_entry.py')['sha256'],
-                             'stdout': 'ordinary1141b readback: 31 contract cases and candidate namespace verified; acceptance owed\n'},
+                             'stdout': 'ordinary1152 readback: 31 contract cases and CWD witness verified; outer source association and acceptance owed\n'},
                 'manifest_sha256': pin,
                 'public_executables': {role: {'path': '/usr/bin/python3.12', **TOOLS['/usr/bin/python3.12']}
                                        for role in ('command', 'readback')}}
@@ -63,7 +59,7 @@ def prepare(candidate, area):
     return manifest, commands
 
 
-def namespace(m, commands, role):
+def namespace(m, commands, role, export):
     instance = str(Path(commands[role]['argv'][2]).parent)
     return ['/usr/bin/bwrap', '--unshare-net', '--die-with-parent', '--new-session',
             '--ro-bind', '/usr', '/usr', '--symlink', 'usr/bin', '/bin', '--symlink', 'usr/lib', '/lib',
@@ -71,7 +67,7 @@ def namespace(m, commands, role):
             '--clearenv', '--setenv', 'PATH', '/usr/bin:/bin', '--setenv', 'PYTHONDONTWRITEBYTECODE', '1',
             '--ro-bind', instance, instance,
             '--bind', str(Path(m['output']).parent), str(Path(m['output']).parent),
-            '--ro-bind', m['export'], m['export'], '--ro-bind', m['export'], m['candidate'],
+            '--ro-bind', str(export), str(export), '--ro-bind', str(export), m['candidate'],
             '--chdir', m['candidate'], '--', *commands[role]['argv']]
 
 

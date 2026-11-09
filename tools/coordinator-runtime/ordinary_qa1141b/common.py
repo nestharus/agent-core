@@ -68,7 +68,7 @@ def load(instance, pin):
     instance = plain(instance, True)
     require(record(instance / 'MANIFEST.json')['sha256'] == pin, 'manifest identity changed')
     m = load_json(instance / 'MANIFEST.json')
-    require(m['version'] == 1 and m['base'] == BASE and m['tree'] == TREE and m['parent'] == PARENT, 'candidate release identity changed')
+    require(m['version'] == 2 and m['component_release'] == {'base': BASE, 'tree': TREE, 'parent': PARENT}, 'component release identity changed')
     require(Path.cwd() == Path(m['candidate']), 'candidate CWD differs from manifest')
     require(m['candidate_files'] == CANDIDATE, 'candidate positive closure changed')
     for name, expected in CANDIDATE.items():

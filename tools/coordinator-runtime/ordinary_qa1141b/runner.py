@@ -19,9 +19,9 @@ def run(instance, pin):
     c = importlib.import_module('coordinator_runtime.contracts')
     require(Path(c.__file__) == Path.cwd() / 'tools/coordinator-runtime/coordinator_runtime/contracts.py', 'foreign candidate import')
     observations = observe(c, output)
-    # Prove both candidate aliases are read-only with a new file, never an existing body.
+    # Observe CWD protection only. The outer service owns retained export identity.
     protection = {}
-    for name, root in (('cwd', Path.cwd()), ('retained', Path(m['export']))):
+    for name, root in (('cwd', Path.cwd()),):
         try:
             exclusive(root / ('ordinary-qa-protection-' + m['run_id']), b'forbidden\n')
         except PermissionError:
