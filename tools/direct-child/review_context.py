@@ -203,6 +203,10 @@ class Context:
         if self.clock() >= self.created + self.lifetime:
             raise ReviewRefusal('original whole-context lifetime elapsed before process creation')
         current_authority()
+        # Synchronous permission/identity work can exhaust the original budget
+        # while the event loop's timeout is unable to resume.
+        if self.clock() >= self.created + self.lifetime:
+            raise ReviewRefusal('original whole-context lifetime elapsed during authorization')
 
     async def turn(self, directory, items, text, *, collector, profile,
                    current_authority, current_profiles, publish, maximum, capture_max,
@@ -396,10 +400,14 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
 
     async def feed():
         try:
-            # Process creation and task scheduling both await. Recheck on this
-            # task immediately before consequential delivery, with no await gap.
+            # Encoding and current permission/identity checks are synchronous:
+            # an asyncio timeout cannot preempt them. Check the fixed processing
+            # cutoff after both, on this task, before consequential delivery.
+            body = prompt.encode()
             (before_spawn if before_feed is None else before_feed)()
-            child.stdin.write(prompt.encode())
+            if time.monotonic() >= stop_at:
+                raise ReviewRefusal('original selected lifetime elapsed before input delivery')
+            child.stdin.write(body)
             await child.stdin.drain()
         except (BrokenPipeError, ConnectionResetError):
             evidence['errors'].append('input delivery interrupted')
