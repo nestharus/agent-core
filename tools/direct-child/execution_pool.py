@@ -72,8 +72,8 @@ def bounded_read(path, maximum):
 
 
 class Pool:
-    def __init__(self, routes=DEFAULT_ROUTES, *, reader=bounded_read, charge=lambda amount: None):
-        self.reader, self.charge = reader, charge
+    def __init__(self, routes=DEFAULT_ROUTES, *, reader=bounded_read, charge=lambda amount: None, before_write=lambda parent: None):
+        self.reader, self.charge, self.before_write = reader, charge, before_write
         self.routes = Path(routes)
         if not self.routes.is_absolute():
             raise PoolError('absolute public pool routes path required')
@@ -101,6 +101,7 @@ class Pool:
     def locked(self, blocking=True, expected_control=None):
         raw, _, path = self.read()
         self.assert_control(raw, expected_control)
+        self.before_write(path.parent)
         try:
             path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             # Stable control lock serializes first creation too. Retain the old

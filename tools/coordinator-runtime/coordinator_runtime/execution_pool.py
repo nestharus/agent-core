@@ -18,8 +18,8 @@ def public_pool_module():
 
 
 class ExecutionPool:
-    def __init__(self, config, runtime=None, *, pool=None, pool_module=None):
-        self.runtime = runtime
+    def __init__(self, config, runtime=None, *, pool=None, pool_module=None, expected_control=None):
+        self.runtime, self.expected_control = runtime, expected_control
         self.authorized = config['profiles']
         self.bind_seconds = config['deadlines']['bind']
         self.pool_module = public_pool_module() if pool_module is None else pool_module
@@ -28,7 +28,7 @@ class ExecutionPool:
     def control(self):
         from .configuration import selected
         transition = selected(self.runtime) if self.runtime is not None else None
-        return transition['basis']['release']['pool_control'] if transition else None
+        return transition['basis']['release']['pool_control'] if transition else self.expected_control
 
     def allocate(self):
         try:
