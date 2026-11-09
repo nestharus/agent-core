@@ -21,11 +21,12 @@ import tomllib
 
 HERE = Path(__file__).resolve().parent
 if __package__:
-    from . import profile_lease, execution_pool
+    from . import profile_lease, execution_pool, fast_tier
 else:
     sys.path.insert(0, str(HERE))
     import profile_lease
     import execution_pool
+    import fast_tier
 
 DEFAULT_CONFIG = execution_pool.DEFAULT_ROUTES
 CODEX_LAUNCHER = HERE.parent / "direct-codex-child" / "launch.sh"
@@ -448,6 +449,15 @@ def resolve_transport(config, args, record):
                       "native children")
     source = "explicit" if args.transport is not None else "default"
     wanted = args.transport or config.get("transport", {}).get("default", "direct")
+    if record.get('force_fast') and record['provider'] == 'codex' and wanted == 'native':
+        if args.transport == 'native':
+            raise Refusal('--transport native cannot express the temporary fast-tier policy; nothing started')
+        if args.native_deadline is not None:
+            raise Refusal('--native-deadline is incompatible with fast-tier policy direct selection; nothing started')
+        return {'transport': 'direct', 'transport_source': source,
+                'transport_rule': 'user-fast-tier-policy-direct', 'site_route': None,
+                'native_caller': None, 'native_deadline_s': None, 'native_children': None,
+                'transport_policy_reason': 'temporary user fast policy requires CLI config overrides; native caller exposes route only'}
     # The account store is part of the binding: the explicit profile, the
     # one-store Claude pool, or (Codex without --profile) the rotated pool
     # profile chosen after transport, which every Codex binding must map.
@@ -569,6 +579,7 @@ def codex_command(args, record, profile, config, route_json=None):
         command += ['--ephemeral']
     if getattr(args, 'log_max_bytes', None) is not None:
         command += ['--log-max-bytes', str(args.log_max_bytes)]
+    command += ['--expected-fast-policy', str(record['force_fast']).lower()]
     return command + (["--route-json", route_json] if route_json is not None else [])
 
 
@@ -1115,6 +1126,10 @@ def main(argv):
         config_path = (Path(args.config) if args.config else DEFAULT_CONFIG).resolve()
         config, digest = load_config(config_path)
         record = resolve(config, args)
+        try:
+            record.update(fast_tier.selection(record['provider']))
+        except ValueError as error:
+            raise Refusal(str(error)) from error
         record.update(config=str(config_path.resolve()), config_sha256=digest)
         check_paths(args)
         record.update(resolve_transport(config, args, record))

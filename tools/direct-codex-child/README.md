@@ -1,5 +1,7 @@
 # Direct Codex child launcher (temporary outage transport)
 
+Temporary fast-tier policy is enabled for new Codex launches. See [the shared switch and transport precedence](../direct-child/FAST-TIER.md); it supersedes Codex native defaults below while enabled. Requests do not attest the served tier.
+
 New contextual launches should normally use [`../direct-child/dispatch.py`](../direct-child/README.md). It resolves provider, model, effort, and profile from the seat and class, then delegates Codex routes to this launcher. This tool starts **one** child in the foreground while `agents` / `agent-runner` is down. It implements the [shared temporary dispatch rule](../../AGENTS.md#temporary-direct-codex-dispatch-during-agent-runner-outage). It does not select tasks, authorize effects, allocate worktrees, or replace review and delivery duties applicable to RFQ code.
 
 ## One command per child
@@ -7,7 +9,7 @@ New contextual launches should normally use [`../direct-child/dispatch.py`](../d
 Prepare a nonempty prompt file containing the child's task, authority, exact workspace, and a pointer to the applicable project and shared `AGENTS.md` files. The shared outage rule is inherited through those files; its full text does not need to be copied into the prompt.
 
 ```bash
-/home/nes/ai/tools/direct-codex-child/launch.sh \
+"${AI_TOOLS}/direct-codex-child/launch.sh" \
   --profile .codex5 \
   --cwd /absolute/path/to/exact/worktree \
   --prompt /absolute/path/to/child-prompt.md \
