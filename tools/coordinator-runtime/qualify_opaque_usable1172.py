@@ -13,10 +13,9 @@ import subprocess
 import sys
 import time
 
-ROOT = Path('/home/nes/rfq-runtime-qualification-20261109/opaqueusable1172')
+ROOT = None  # Exact NEW owned destination is supplied by this invocation.
 REPO = Path(__file__).parents[2]
-EXE = '/home/nes/.npm-global/bin/codex'
-PROFILE, COLLECTOR = '.codex2', 'Maker1172-original-collector'
+EXE = PROFILE = COLLECTOR = None
 ENTRY = Path('/home/nes/projects/code-review-workflows/trunk/risk-axis-reviewers/unified-reviewer.prompt.md')
 SOURCE = ['tools/direct-child/review_context.py',
           'tools/coordinator-runtime/coordinator_runtime/opaque_review.py',
@@ -27,6 +26,8 @@ SOURCE = ['tools/direct-child/review_context.py',
 sys.path.insert(0, str(REPO/'tools/coordinator-runtime'))
 sys.path.insert(0, str(REPO/'tools/coordinator-runtime/tests'))
 from coordinator_runtime.appserver import Originals, metadata
+from coordinator_runtime import opaque_review
+from coordinator_runtime.execution_pool import ExecutionPool
 from coordinator_runtime.method_closure import files, require_definitions
 from run_opaque_review1157 import account
 
@@ -39,7 +40,6 @@ def module(name, path):
 
 
 public = module('public1172', REPO/'tools/direct-child/review_context.py')
-pool_module = module('pool1172', REPO/'tools/direct-child/execution_pool.py')
 
 
 def digest(body):
@@ -57,14 +57,6 @@ def write(path, value):
 def event(value):
     with (ROOT/'operations1172.jsonl').open('a') as stream:
         stream.write(json.dumps(value)+'\n')
-
-
-def current_pool():
-    # Public cooperating controller only: no private profile/account queries.
-    value = pool_module.Pool('/home/nes/ai/tools/direct-child/routes.toml').preview()
-    if PROFILE not in value['enabled']:
-        raise public.ReviewRefusal('selected profile is outside current cooperating membership')
-    return value
 
 
 def env(directory):
@@ -143,7 +135,11 @@ def boundary_check(directory, expected, script, nonce, outside, target):
         and outside.read_text() == 'public denied marker1172' and not os.path.lexists(target))
     evidence = observed.get('audit_events',[])
     audited = evidence.count('open') >= 4 and 'socket.__new__' in evidence
-    return denied and integrity and audited and observed.get('allowed') == nonce, dict(
+    # Exact command and in-process audit output remain assertions. An actual
+    # applicable independent observer is still missing on this provider path.
+    return False, dict(
+        reason='independent applicable operation evidence unavailable; assertions only',
+        assertions_match=denied and integrity and audited and observed.get('allowed') == nonce,
         command_exact=True, source_unchanged=integrity, dynamic=observed,
         limit='one nonsecret case each; trusted public command-event transport and immutable interpreter/program; no universal protection proof')
 
@@ -160,9 +156,10 @@ def method_material():
     return result, pins
 
 
-async def actual():
+async def actual(*, pool, current_authority):
     account(ROOT)
-    selection = current_pool()  # Read-only cooperating admission BEFORE creating.
+    current_authority()
+    selection = pool.status()  # Snapshot only; creation uses qualification_turn admission.
     write(ROOT/'ONE-CONTEXT1172.json',dict(profile=PROFILE, collector=COLLECTOR,
         lifetime=7200, pool=selection, source=source(), kind='distinct DECISION1172 operation; not1167 replay'))
     area = ROOT/'actual1172'
@@ -177,10 +174,9 @@ async def actual():
     allowed = True
 
     def authority():
+        current_authority()
         if not allowed:
             raise public.ReviewRefusal('current qualification authority revoked')
-        if owner.state == 'new':
-            current_pool()
 
     def publish(value):
         ends.append(value)
@@ -191,9 +187,8 @@ async def actual():
         directory = area/stage
         event(dict(event='turn-registered',stage=stage,profile=PROFILE,collector=COLLECTOR,
             source=source(), prior_thread=owner.thread, lifetime_remaining=owner.created+7200-time.monotonic()))
-        code, receipt, answer = await owner.turn(directory, items, text,
-            collector=COLLECTOR, profile=PROFILE, current_authority=authority,
-            current_profiles=selection['enabled'], publish=publish,
+        code, receipt, answer = await opaque_review.qualification_turn(owner, pool, directory, items, text,
+            current_authority=authority, publish=publish,
             maximum=256*1024, capture_max=4*1024*1024, shutdown=15)
         if answer is not None:
             public.private_write(directory/'answer.txt',answer.encode())
@@ -308,15 +303,32 @@ def final_record():
 
 
 def main():
+    global ROOT, EXE, PROFILE, COLLECTOR
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('phase',choices=['preflight','actual','final'])
+    parser.add_argument('--root',type=Path,required=True)
+    parser.add_argument('--executable',required=True)
+    parser.add_argument('--profile',choices=sorted(public.PROFILES),required=True)
+    parser.add_argument('--collector',required=True)
+    parser.add_argument('--pool-routes',type=Path,required=True)
     args=parser.parse_args()
+    public.positive_directory(args.root)
+    ROOT, EXE, PROFILE, COLLECTOR = args.root, public.executable_path(args.executable), args.profile, args.collector
+    if not COLLECTOR:
+        parser.error('original collector required')
     if (ROOT/'FINAL-SOURCE-BOUND1172.json').exists():
         parser.error('final record exists; no rerun')
     if args.phase=='final':
         final_record()
     else:
-        asyncio.run(preflight() if args.phase=='preflight' else actual())
+        pool = ExecutionPool(dict(profiles=sorted(public.PROFILES), deadlines={'bind':10},
+            execution_pool_routes=str(args.pool_routes)))
+        authority=opaque_review.InvocationAuthority([REPO/name for name in SOURCE],PROFILE,EXE)
+        import signal
+        for signum in (signal.SIGINT,signal.SIGTERM,signal.SIGHUP):
+            signal.signal(signum,authority.revoke)
+        asyncio.run(preflight() if args.phase=='preflight' else actual(
+            pool=pool, current_authority=authority))
 
 
 if __name__=='__main__':

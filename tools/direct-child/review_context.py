@@ -5,6 +5,7 @@ current authority and an Originals-compatible collector. No account discovery,
 session-store reads, model resolution, platform deletion or native receipts.
 """
 import asyncio
+from contextlib import asynccontextmanager
 import hashlib
 import json
 import os
@@ -30,6 +31,12 @@ DISABLED = (
 
 class ReviewRefusal(ValueError):
     pass
+
+
+@asynccontextmanager
+async def existing_admission():
+    """Continuations retain their owner; they consume no new pool admission."""
+    yield
 
 
 def private_write(path, body):
@@ -179,9 +186,15 @@ class Context:
         if self.state == 'new' and self.profile not in current_profiles:
             raise ReviewRefusal('new context outside current launch membership')
 
+    def authorize_creation(self, current_authority):
+        """Preparation/admission waiting consumes the original lifetime."""
+        if self.clock() >= self.created + self.lifetime:
+            raise ReviewRefusal('original whole-context lifetime elapsed before process creation')
+        current_authority()
+
     async def turn(self, directory, items, text, *, collector, profile,
                    current_authority, current_profiles, publish, maximum, capture_max,
-                   shutdown=10, started=lambda: None):
+                   shutdown=10, started=lambda: None, admission=existing_admission):
         self.authorize(collector, profile, current_authority, current_profiles)
         if (not isinstance(text, str) or not text or len(text.encode()) > MAX_INPUT
                 or type(maximum) is not int or not 1 <= maximum <= MAX_INPUT
@@ -210,7 +223,8 @@ class Context:
         try:
             result = await execute(argv, env, prompt, directory, self.originals, publish,
                 min(self.lifetime, self.created + self.lifetime - self.clock()), shutdown,
-                maximum, capture_max, self.thread, started)
+                maximum, capture_max, self.thread, started, admission,
+                lambda: self.authorize_creation(current_authority))
         except BaseException:
             self.state = 'interrupted'
             raise
@@ -236,10 +250,9 @@ class Context:
 
 
 async def execute(argv, env, prompt, directory, originals, publish, deadline, shutdown,
-                  maximum, capture_max, expected_thread, started):
+                  maximum, capture_max, expected_thread, started,
+                  admission=existing_admission, before_spawn=lambda: None):
     """Own before feeding input; numeric END and pipe EOF are independent."""
-    child = await asyncio.create_subprocess_exec(*argv, env=env,
-        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     evidence = dict(errors=[], stdout_eof=False, stderr_eof=False, bytes={'stdout': 0, 'stderr': 0})
     observed = dict(thread=None, completed=0, failed=False, answer=None, diagnostics=[])
     captures = []
@@ -256,8 +269,6 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
         private_write(directory / ('original-' + str(observations) + '.json'),
                       json.dumps(dict(actual_END=entry['exit'], evidence=evidence)).encode())
         observations += 1
-
-    key = originals.own(child, 'opaque-cli-process', finish, publish)
 
     def stop(reason):
         evidence['errors'].append(reason)
@@ -344,7 +355,15 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
 
     timed_out = False
     code = None
+    key = None
+    # The shared pool fences creation and ownership registration only. The
+    # context busy flag and Originals retain custody across the entire tail.
     try:
+        async with admission():
+            before_spawn()
+            child = await asyncio.create_subprocess_exec(*argv, env=env,
+                stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            key = originals.own(child, 'opaque-cli-process', finish, publish)
         captures.extend([asyncio.create_task(capture(child.stdout, 'stdout')),
                          asyncio.create_task(capture(child.stderr, 'stderr'))])
         started()
@@ -356,7 +375,10 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
             timed_out = True
             stop('original selected lifetime exceeded')
     finally:
-        code = await originals.finish(key, shutdown)
+        if key is not None:
+            if len(captures) != 2:
+                evidence['errors'].append('capture setup incomplete; original retained')
+            code = await originals.finish(key, shutdown)
     complete = evidence['stdout_eof'] and evidence['stderr_eof'] and not evidence['errors']
     answered = (code == 0 and complete and observed['thread'] is not None
                 and observed['completed'] == 1 and not observed['failed'] and bool(observed['answer']))

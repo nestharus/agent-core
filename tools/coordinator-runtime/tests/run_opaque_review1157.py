@@ -67,6 +67,9 @@ def controls(final):
         'test_unscoped_directory_refuses_before_recursive_listing',
         'test_unscoped_exact_A_reaches_real_material_and_read_facade',
         'test_unscoped_relationship_B_refuses_before_material')]
+    tests += ['test_control_custody1171','test_operation_evidence1171',
+        'test_opaque_usable1172.Dependency','test_opaque_usable1172.Diagnostics',
+        'test_opaque_usable1172.BoundaryDiscrimination','test_review_composition1183']
     return tests
 
 
@@ -135,8 +138,9 @@ def mechanisms(root, label, final):
     return result
 
 
-async def actual(root, profile):
+async def actual(root, profile, *, executable, pool, current_authority):
     """One deliberately selected NEW owned opaque context, never a retry."""
+    current_authority()
     repo = root/'repo'
     sys.path[:0] = [str(repo/'tools/coordinator-runtime')]
     os.environ['COORDINATOR_TEST_BOARD_LIBRARY'] = str(root/'sdk')
@@ -152,20 +156,20 @@ async def actual(root, profile):
     nonce = secrets.token_hex(16)  # fixture bridge, not credential/control token
     module = opaque_review.launcher({'launcher_sha256': reviews.sha(opaque_review.launcher_path().read_bytes())})
     originals, ends = Originals(), []
-    owner = module.Context(area/'context', profile, 'Maker1157-original-collector', 7200, originals)
+    owner = module.Context(area/'context', profile, 'Maker1157-original-collector', 7200, originals, executable=executable)
     result = dict(profile=profile, whole_context_observation_limit_s=7200, provider_acceptance=False,
                   substantive_method_incorporation='UNQUALIFIED; requires examination of actual full returns',
                   actual_attributable_stage_return=False, native_owner_execution=False, turns=[])
 
     def authorized():
-        # Actual authority is DECISION1157, not fictional Board/provider rights.
+        # Invocation authority belongs to the current caller, never an old Decision.
+        current_authority()
         account(root)
 
     async def turn(name, items, text):
         authorized()
-        code, receipt, answer = await owner.turn(area/name, items, text,
-            collector='Maker1157-original-collector', profile=profile, current_authority=authorized,
-            current_profiles=['.codex', '.codex2', '.codex3', '.codex4', '.codex5'] if owner.thread is None else [],
+        code, receipt, answer = await opaque_review.qualification_turn(owner, pool, area/name, items, text,
+            current_authority=authorized,
             publish=ends.append, maximum=256*1024, capture_max=4*1024*1024, shutdown=15)
         result['turns'].append(dict(name=name, actual_END=code, answered=receipt['answered'],
             capture_complete=receipt['capture_complete'], errors=receipt['errors'],
@@ -211,8 +215,12 @@ async def actual(root, profile):
                 or (area/'boundary/material/0000.txt').read_text() != nonce):
             result['gap'] = 'joint nonsecret read/write/network enforcement not established by actual command; no further input'
             return result
-        result['boundary_actual_command'] = dict(allowed_read=True, denied_read=True, denied_write=True, denied_network=True,
-                                                 limits='one finite nonsecret case; not universal policy/zero provider IO')
+        # These predicates cannot distinguish omitted denied operations. Keep
+        # the command's claims as claims; do not admit further material on them.
+        result['boundary_command_assertions'] = observed
+        result['gap'] = ('command output and unchanged material do not establish attempted denied operations; '
+                         'independent applicable operation evidence required before further input')
+        return result
         entry = '/home/nes/projects/code-review-workflows/trunk/risk-axis-reviewers/unified-reviewer.prompt.md'
         method = reviews.method_files(entry, VERSION)
         items = [('fixture-history', b'No previous source review of this fixture. Boundary probe is qualification context only.\n')]
@@ -295,6 +303,8 @@ def main():
     parser.add_argument('--label', required=True)
     parser.add_argument('--final', action='store_true')
     parser.add_argument('--regression', action='store_true', help='development regression selection; never actual operation')
+    parser.add_argument('--executable', help='explicit absolute frontend for separately authorized actual operation')
+    parser.add_argument('--pool-routes', type=Path, help='selected public cooperating control for actual operation')
     parser.add_argument('--actual-profile', choices=['.codex', '.codex2', '.codex3', '.codex4', '.codex5'])
     args = parser.parse_args()
     root = args.root
@@ -305,6 +315,8 @@ def main():
         (root/'FINAL-QUALIFICATION-STARTED.json').open('x').write(json.dumps(dict(before=before, at=time.time())))
     elif (root/'FINAL-QUALIFICATION-STARTED.json').exists():
         parser.error('final qualification already selected; no rerun')
+    if args.actual_profile and (not args.executable or not args.pool_routes):
+        parser.error('actual operation requires explicit executable and public pool control')
     if args.actual_profile and not args.final:
         parser.error('actual operation only in the single frozen final qualification')
     result = mechanisms(root, args.label, args.final or args.regression)
@@ -316,7 +328,19 @@ def main():
     public_admitted = (result['actual_END'] == 0 or
                        result['failure_ids'] == [hot] and not result['stopped'])
     if args.actual_profile and public_admitted:
-        asyncio.run(actual(root, args.actual_profile))
+        sys.path.insert(0,str(root/'repo/tools/coordinator-runtime'))
+        from coordinator_runtime.execution_pool import ExecutionPool
+        pool = ExecutionPool(dict(profiles=sorted({'.codex', '.codex2', '.codex3', '.codex4', '.codex5'}),
+            deadlines={'bind': 10}, execution_pool_routes=str(args.pool_routes)))
+        from coordinator_runtime.opaque_review import InvocationAuthority, launcher_path
+        import signal
+        authority = InvocationAuthority([Path(__file__), launcher_path(),
+            launcher_path().parents[1]/'coordinator-runtime/coordinator_runtime/opaque_review.py'],
+            args.actual_profile,args.executable)
+        for signum in (signal.SIGINT,signal.SIGTERM,signal.SIGHUP):
+            signal.signal(signum,authority.revoke)
+        asyncio.run(actual(root, args.actual_profile, executable=args.executable, pool=pool,
+            current_authority=authority))
     return result['actual_END']
 
 

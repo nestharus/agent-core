@@ -72,3 +72,12 @@ All73 and every privacy/original/source/effect/consumer/outbox/recovery hold rem
 Provider platform storage is unmeasured. Local close/release is not provider-root,
 descendant/effect/processing closure. Actual whole processing+24h AND all holds
 governs retirement; no clock from END, report, push, ACK, DONE or cessation.
+
+
+Current composition1183 supersedes the historical invocation example for NEW
+qualifications: supply `--root`, `--executable`, `--profile`, `--collector` and
+`--pool-routes` explicitly. Both actual callers use creation admission and current
+invocation authority; preview is only a snapshot. Assertion-only command/audit
+reports return a protection evidence gap before substantive input. See
+[review-composition1183.md](review-composition1183.md). Historical actual1172
+END1 and its complete capture remain unchanged and unrefreshed.

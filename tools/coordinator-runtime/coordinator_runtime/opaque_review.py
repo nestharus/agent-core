@@ -138,8 +138,10 @@ async def call(native, runtime, attempt, policy, context, directory, text, openi
     runtime.admit_artifact_write(attempt, size + len(text.encode()) + 2 * maximum +
                                 8 * 1024 * 1024 + 1024 * len(items) + 65536, len(items) + 20)
     module.make_directory(directory.parent)
-    guard = runtime.execution_pool.admission(context['profile']) if opening else _existing()
-    async with guard:
+    # Context ownership spans the turn; pool admission spans process creation.
+    # Pass a factory so acquisition occurs after preparation, at the spawn.
+    admission = (lambda: runtime.execution_pool.admission(context['profile'])) if opening else _existing
+    with runtime.tx():
         runtime.authorize_launch(attempt)
         if opening:
             if owner is not None:
@@ -153,21 +155,20 @@ async def call(native, runtime, attempt, policy, context, directory, text, openi
                 or owner.collector != runtime.controller or owner.lifetime != policy['deadline']
                 or owner.executable != policy['executable']):
             raise Refusal('original public context/account/lifetime unavailable or changed')
-        with runtime.tx():
-            runtime.db.execute("UPDATE review_calls SET state='launch-intent' WHERE attempt=?", (attempt,))
+        runtime.db.execute("UPDATE review_calls SET state='launch-intent' WHERE attempt=?", (attempt,))
 
-        def started():
-            if runtime.attempt(attempt)['begin'] is None:
-                runtime.begin(attempt, {'process_handle': 'owned-asyncio-subprocess',
-                    'original_collector': runtime.controller, 'identity_scope': VERSION + '; not native-root END'})
+    def started():
+        if runtime.attempt(attempt)['begin'] is None:
+            runtime.begin(attempt, {'process_handle': 'owned-asyncio-subprocess',
+                'original_collector': runtime.controller, 'identity_scope': VERSION + '; not native-root END'})
 
-        code, receipt, answer = await owner.turn(directory, items, text,
+    code, receipt, answer = await owner.turn(directory, items, text,
             collector=runtime.controller, profile=context['profile'],
             current_authority=lambda: runtime.authorize_launch(attempt),
             current_profiles=[context['profile']] if opening else [],
             publish=lambda observation: runtime.record_original_end(attempt, observation),
             maximum=maximum, capture_max=4*1024*1024,
-            shutdown=runtime.config['deadlines']['shutdown'], started=started)
+            shutdown=runtime.config['deadlines']['shutdown'], started=started, admission=admission)
     receipt['run'] = receipt['thread']
     return code, receipt, answer
 
@@ -192,3 +193,48 @@ def proof(runtime, job, attempt, call, context, actual):
                 collector=call['collector'], attempt=attempt['id'], calls=actual,
                 material=json.loads(call['packet']), native_owner_execution=False,
                 provider_session='public CLI thread; no underlying model attestation')
+
+
+async def qualification_turn(owner, pool, directory, items, text, *, current_authority, **options):
+    """Selected qualification callers share creation admission, never rotation.
+
+    The invoking owner supplies genuine current authority and its selected public
+    pool adapter. A membership snapshot is insufficient: the factory runs at
+    process creation. Continuation keeps the original account and lifetime.
+    """
+    from .reviews import _existing
+    opening = owner.state == 'new'
+    return await owner.turn(directory, items, text,
+        collector=owner.collector, profile=owner.profile,
+        current_authority=current_authority,
+        current_profiles=[owner.profile] if opening else [],
+        admission=(lambda: pool.admission(owner.profile)) if opening else _existing,
+        **options)
+
+
+class InvocationAuthority:
+    """Revocable scope of an explicit qualification invocation, not service rights.
+
+    Creating this object does not grant permission. The invoking owner selects
+    the current positive material and dependency under its actual authority.
+    Do not reuse old Decisions or storage accounting as current authorization.
+    """
+    def __init__(self, source_paths, profile, executable, clock=None):
+        import time
+        from .reviews import sha
+        self.clock = clock or time.monotonic
+        self.created = self.clock()
+        self.active = True
+        self.profile, self.executable = profile, executable
+        self.sources = {Path(p): sha(Path(p).read_bytes()) for p in source_paths}
+
+    def revoke(self, *_):
+        self.active = False
+        raise KeyboardInterrupt('current invoking qualification authority revoked')
+
+    def __call__(self):
+        from .reviews import sha
+        if not self.active or self.clock() >= self.created + 7200:
+            raise Refusal('current invoking qualification authority revoked/elapsed')
+        if any(sha(p.read_bytes()) != expected for p, expected in self.sources.items()):
+            raise Refusal('selected qualification source changed; current authority unavailable')
