@@ -1,8 +1,11 @@
 # Invocation-owned protected question binding
 
 This caller contribution uses immutable runtime
-`44c969af1c4d3b57a6a0d93ab21d3c7b409fff94`, tree
-`fc540a7ebd6eceb3a914cd9d2a06789d77433b86`. It changes no runtime file.
+`82de20aa281af40f25e0186babde1db19bebd8e7`, tree
+`5e0858014e293727470a7334f11f10d9391826f6`. This jointly published runtime
+changes prompt delivery, bounded public-control acquisition and admitted pool
+construction. Earlier caller16d/runtime44c remain historical evidence. No
+installation or current global control is changed by this source contribution.
 `runtime-pins.json` contains 81 finite public implementation pins, including the
 seven actual direct-child modules (now including `fast_tier`). The coordinator
 modules are an import allowlist; only modules actually needed are loaded. The
@@ -22,16 +25,19 @@ assigned `actual-question` directory or issue a scope for genuine Work.
 The source-specific namespace uses the existing `review_composition.modules`
 loader to import the seven admitted byte strings together. The binding uses:
 
-- `dispatch.open_opaque_execution(routes, 'gpt-xhigh', profile, force_fast=force)`;
+- `dispatch.open_opaque_execution(routes, 'gpt-xhigh', profile, force_fast=force,
+  config_reader=question.control_read)`;
 - `appserver.Originals().scope()`;
-- `execution_pool.ExecutionPool(config).admission(profile)` and the supported
+- `execution_pool.ExecutionPool(config, pool=admitted_pool,
+  pool_module=admitted_module, expected_control=pool_control).admission(profile)` and the supported
   underlying `Pool.allocate(..., expected_control=...)`;
 - `SandboxProtection(root, executable, runtime_reads, capacity_check,
   probe_helper=...)`;
 - `ExecEndpoint(root, executable, originals, admission, authority, protection,
   capacity_check, publish, execution=execution)`;
 - `ContinuingReview(endpoint, 'gpt-xhigh', profile, collector, authority,
-  lifetime=7200, clock=clock, origin=origin)`;
+  lifetime=7200, clock=clock, origin=origin,
+  material_authority=question.authorize_material)`;
 - `public_program.identity` and `public_runtime.check_helper` for the actual
   complete program, common canonical helper and expressly trusted OS runtime.
 
@@ -52,6 +58,9 @@ The routes-declared public counter/lock parent may be under `.local`; only that
 exact currently authorized persistence parent receives a narrow path exception.
 It adds no private store access or model filesystem read root. Without that exact
 current authority the parent is refused before target metadata acquisition.
+Every lock/counter write phase rechecks the current parent rights and full
+allowance, including each busy-admission retry; static control is bound before
+those effects.
 
 ## Current owner scope
 
@@ -106,21 +115,46 @@ The driver checks actual current positive paths before source acquisition;
 rechecks the loaded runtime closure, published caller bytes, complete program,
 helper, runtime trust, shared-control contract and material rights at supported
 use boundaries; checks source bindings again after awaited creation admission;
-and binds the actual endpoint, profile, collector and original lifetime. Complete
+and checks again on the feed task immediately before stdin.write, after process
+creation and original registration. A refusal closes stdin without a prompt,
+then retains the same original through wait, capture and publication. It binds
+the actual endpoint, profile, collector and original lifetime. Complete
 program identity uses the existing two-pass reader. Explicit finite I/O is
-charged **before** each acquisition. A 32MiB evidence cap cannot admit the
+charged **before** each acquisition. Public routes are capped at 1MiB and
+existing counters at 4096 bytes; later pool/config reads use the same cumulative
+budget, including failed counter reads. Unbuffered control reads keep actual
+acquisition within the charged byte ceiling. Scope-file checking remains the
+external callback's separately bounded responsibility. A 32MiB evidence cap cannot admit the
 320575976-byte program. Program bodies are streamed, not retained as copies.
 
 Collection/publication can continue after processing expiry/revocation only on
 the actual current scope's explicit custody permission for those actions and
 the retained original binding. This does not authorize another analysis turn.
 
+The caller injects the exact Pool class compiled from the admitted direct-child
+bytes. Importing the coordinator adapter performs no second filesystem load.
+Ordinary runtime consumers retain the lazy filesystem fallback unless they
+explicitly inject their own admitted pool; this change makes no universal import
+closure claim.
+
+Material-channel chunk authorization retains current rights, lifetime, source,
+caller and public-control validation. Because immutable bytes move synchronously
+inside the host, chunks do not each rehash the complete executable/helper.
+Complete two-pass identities remain checked before the export, after export,
+after local qualification/admission and immediately before provider stdin feed.
+No identity cache or metadata-only substitute certifies later execution. The
+optional material_authority argument defaults to the original full authority
+callback for other consumers.
+
+All driver operands must have a single '/' anchor before any metadata. This
+narrows lexical spelling; it is no alias closure or generic filesystem theorem.
+
 ## Reproducible real-caller procedure (inert until Work supplies bindings)
 
 1. Genuine Work reads the final source/header and this build's limits, incorporates
-   any actual later Frame/Decide outcome, and keeps runtime44c selected. It admits
+   any actual later Frame/Decide outcome, and selects the newly published runtime pin above. It admits
    the new helper commit separately as caller code, with its exact `driver.py`
-   hash in `caller_pins`. It reads all nine current bounds and includes every
+   hash in `caller_pins`. It reads all eleven current bounds and includes every
    identified held scope/derivative before any acquisition, not a stale count.
 2. Work positively admits the exact question parent and public pool persistence
    parent, actual source/imports, public complete program, canonical helper and
@@ -168,7 +202,7 @@ the retained original binding. This does not authorize another analysis turn.
    processing, independent acceptance, rollout or retention release.
 
 Suggested finite real-run preparation: <=512KiB selected source/method/history
-snapshot (hard binding ceiling 2MiB/128 items); 128GiB total identity-read I/O
+snapshot (hard binding ceiling 2MiB/128 items); 128GiB total acquisition/identity-read I/O
 (an explicit ceiling, not disk allocation); 512MiB/8192 whole owned output with
 256MiB/4096 context envelope and 8MiB per process capture stream. Each identity
 check charges two full maxima, including the helper. More demands return a
@@ -186,8 +220,8 @@ From the admitted caller checkout, use an exact positively new fixture name:
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 python -B tools/invocation-question/test_driver.py \
-  --runtime /home/nes/rfq-runtime-qualification-20261109/runtime-fast-final-coalescence1254/repo \
-  --fixtures /home/nes/rfq-runtime-qualification-20261109/invocation-question-driver1258/NEW-OWNED-MOCK-NAME
+  --runtime /home/nes/rfq-runtime-qualification-20261109/invocation-current-use-repair1277/repo \
+  --fixtures /home/nes/rfq-runtime-qualification-20261109/invocation-current-use-repair1277/NEW-OWNED-MOCK-NAME
 ```
 
 Do not copy that placeholder into an already occupied path. Tests use the actual
@@ -195,7 +229,9 @@ builder's invoking identity, an explicitly synthetic own question, tiny owned
 program, owned pool/policy fixtures, mocked canonical-helper acceptance, mock
 listeners and authored provider events. They never set identity variables or use
 genuine Work scope. They run the actual runtime transport/parser/material/original
-and pool code with mock processes; no real provider, socket/listener or actual
+and pool code with mock provider processes. One negative check uses a real local
+stdlib process and actual pipes to observe zero delivered prompt bytes and
+retained END/EOF/publication. No real provider, socket/listener or actual
 qualification canary is run. Earlier generations and all failure fixtures stay
 retained. Test success proves bounded mechanism discrimination under these
 premises, not actual authority/protection/provider/semantic acceptance.

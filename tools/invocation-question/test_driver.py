@@ -1,6 +1,6 @@
-"""Owned MOCK mechanics only. No real provider, listener, canary or Work scope.
+"""Owned MOCK mechanics only. No real provider, listener, canary or Work scope. One check uses a real local stdlib process.
 
-Run with --fixtures POSITIVELY_NEW_BUILDER_DIRECTORY --runtime IMMUTABLE_44C.
+Run with --fixtures POSITIVELY_NEW_BUILDER_DIRECTORY --runtime PINNED_RUNTIME.
 No fixture cleanup is performed. Transport and helper acceptance are fiction;
 source loading, program dual-pass reading, pool operations, checks, snapshots,
 capture parsing, original finalization and exclusive publication are real code.
@@ -87,7 +87,7 @@ class MockProcess:
         self.stdout, self.stderr = asyncio.StreamReader(), asyncio.StreamReader()
         self.returncode = None
         self.done = asyncio.Event()
-        self.stdin = MockInput(lambda text: self.complete(receive(text))) if receive else None
+        self.stdin = MockInput(lambda text: self.complete(receive(text) if text else b'')) if receive else None
         if output is not None:
             self.complete(output)
 
@@ -535,10 +535,163 @@ class Mechanisms(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(h.q.profile, '.codex2')
         self.assertTrue((h.state / 'codex.counter').exists())
         h.scope['pool_write_parents'] = []
-        with patch.object(driver, 'directory') as opened:
+        with patch.object(driver, 'directory', wraps=driver.directory) as opened:
             with self.assertRaises(driver.Refusal):
                 driver.Question.pool_guard(h.q)  # isolate code under test from builder's extra wrapper
-            opened.assert_not_called()  # no target metadata without exact current scope
+            self.assertNotIn(h.state, [call.args[0] for call in opened.call_args_list])
+            # Reading the admitted public routes is permitted; target state is not.
+
+
+class CurrentUse(unittest.IsolatedAsyncioTestCase):
+    async def test_revocation_during_process_creation_never_feeds_but_collects(self):
+        h = Harness('revoke-during-creation')
+        h.create()
+        spawn = h.spawn
+        async def revoke(*argv, **kwargs):
+            child = await spawn(*argv, **kwargs)
+            if 'exec' in argv:
+                h.scope['revoked'] = True
+            return child
+        h.spawn = revoke
+        with self.assertRaises(driver.Refusal):
+            await h.run()
+        self.assertEqual(h.provider_calls, 1)
+        self.assertEqual(h.prompts, [])
+        self.assertEqual(h.q.originals.owned, {})
+        self.assertFalse(h.q.review.status['protection_qualified'])
+        self.assertEqual(h.q.answers, [])
+        self.assertTrue(all(p['persisted'] for p in h.q.publisher.attempts))
+
+    async def test_revocation_after_registration_before_feed_never_delivers(self):
+        h = Harness('revoke-after-registration')
+        h.create()
+        h.q.endpoint.started = lambda: h.scope.update(revoked=True)
+        with self.assertRaises(driver.Refusal):
+            await h.run()
+        self.assertEqual(h.provider_calls, 1)
+        self.assertEqual(h.prompts, [])
+        self.assertEqual(h.q.originals.owned, {})
+
+    async def test_pool_executes_the_admitted_byte_module_without_filesystem_loader(self):
+        h = Harness('admitted-pool')
+        with patch.object(h.q.runtime.pool_module, 'public_pool_module', side_effect=AssertionError('second loader')):
+            h.create()
+            self.assertIs(type(h.q.pool.pool), h.q.runtime.direct.execution_pool.Pool)
+            self.assertIs(h.q.pool.pool_module, h.q.runtime.direct.execution_pool)
+            result = await h.run()
+        self.assertEqual(len(result['answers']), 2)
+
+    async def test_material_chunk_rights_remain_current_without_rehashing_binaries(self):
+        h = Harness('material-authorization')
+        h.create()
+        owner = h.q.review.ownership
+        amount = h.q.io_remaining
+        with patch.object(h.q, 'identities', wraps=h.q.identities) as identity:
+            channel = h.q.runtime.direct.opaque_dialogue.MaterialChannel(
+                {'fixture': b'x' * 524288}, lambda: h.q.authorize_material(owner))
+            item = channel.manifest()[0]['item']
+            for offset in range(0, 524288, 12000):
+                channel.request(dict(op='read', item=item, offset=offset, limit=12000))
+            identity.assert_not_called()
+            h.scope['read_files'].remove(str(h.material))
+            h.q.materials = (driver.Material('fixture', str(h.material), 1, 'unused'),)
+            with self.assertRaises(driver.Refusal):
+                channel.request(dict(op='read', item=item, offset=0, limit=1))
+        self.assertLess(h.q.io_remaining, amount)  # source/control reads charged
+
+    async def test_current_identity_is_still_checked_after_material_export(self):
+        h = Harness('identity-before-feed')
+        h.create()
+        original = h.q.authorize_material
+        def mutate(owner):
+            original(owner)
+            put(h.program, b'changed executable bytes', replace=True)
+        # The dialogue owns the callback selected at construction.
+        h.q.review._dialogue._material_authority = mutate
+        with self.assertRaises(h.q.runtime.appserver.Refusal):
+            await h.run()
+        self.assertEqual(h.provider_calls, 0)
+        self.assertEqual(h.prompts, [])
+
+    async def test_routes_growth_refuses_before_body(self):
+        h = Harness('oversized-routes')
+        h.create()
+        put(h.routes, b'x' * (driver.MIB + 1), replace=True)
+        with self.assertRaises(h.q.runtime.direct.execution_pool.PoolError):
+            h.q.pool.pool.read()
+        # A growth after preflight is checked by the real public pool reader.
+        self.assertEqual(h.provider_calls, 0)
+
+    async def test_existing_counter_is_finite_and_never_reset(self):
+        h = Harness('oversized-counter')
+        h.create()
+        counter = h.state / 'codex.counter'
+        put(counter, b'7' * 4097, replace=True)
+        before = h.q.io_remaining
+        with self.assertRaises(h.q.runtime.direct.execution_pool.PoolError):
+            h.q.pool.pool.allocate(list(driver.PROFILES))
+        self.assertLessEqual(h.q.io_remaining, before - 4097)
+        self.assertEqual(counter.read_bytes(), b'7' * 4097)
+
+    async def test_pool_admission_rechecks_current_parent_rights_before_effects(self):
+        h = Harness('admission-parent-rights')
+        h.create()
+        counter = h.state / 'codex.counter'
+        before = counter.read_bytes()
+        h.scope['pool_write_parents'] = []
+        with self.assertRaises(driver.Refusal):
+            async with h.q.pool.admission(h.q.profile):
+                self.fail('lost placement authority admitted')
+        self.assertEqual(counter.read_bytes(), before)
+        self.assertEqual(h.provider_calls, 0)
+
+    async def test_pool_admission_rejects_changed_static_destination_before_creation(self):
+        h = Harness('admission-static-control')
+        h.create()
+        unissued = h.area / 'never-admitted-state'
+        put(h.routes, h.routes.read_bytes().replace(str(h.state).encode(), str(unissued).encode()), replace=True)
+        with self.assertRaises(h.q.runtime.appserver.Refusal):
+            async with h.q.pool.admission(h.q.profile):
+                self.fail('changed static control admitted')
+        self.assertFalse(unissued.exists())
+        self.assertEqual(h.provider_calls, 0)
+
+    async def test_dispatch_reads_use_the_same_cumulative_budget(self):
+        h = Harness('dispatch-budget')
+        h.create()
+        h.q.io_remaining = 1
+        with self.assertRaises(driver.Refusal):
+            h.q.runtime.direct.dispatch.open_opaque_execution(h.routes, 'gpt-xhigh', '.codex2',
+                force_fast=True, config_reader=h.q.control_read)
+        self.assertEqual(h.provider_calls, 0)
+
+    async def test_real_local_pipe_is_closed_without_prompt_on_current_use_refusal(self):
+        h = Harness('real-local-pipe')
+        out = fresh(h.area, 'actual-pipe')
+        book = h.q.runtime.appserver.Originals().scope()
+        rows = []
+        def denied():
+            self.assertEqual(len(book.owned), 1)  # registered before use check
+            raise driver.Refusal('actual current-use fixture refusal')
+        # Actual OS child and pipes; only an owned nonsecret stdlib fixture.
+        with self.assertRaises(driver.Refusal):
+            await h.q.runtime.direct.review_context.execute(
+                ['/usr/bin/python3', '-I', '-S', '-B', '-c',
+                 'import sys;print(len(sys.stdin.read()))'],
+                {'PATH': '/usr/bin:/bin'}, 'owned nonsecret withheld text', out,
+                book, rows.append, 10, 3, 65536, 65536, None, lambda: None,
+                capacity_check=guard, before_feed=denied)
+        self.assertEqual((out / 'stdout.jsonl').read_bytes(), b'0\n')
+        self.assertEqual((out / 'stderr.bin').read_bytes(), b'')
+        self.assertFalse(book.owned)
+        self.assertTrue(rows)
+        self.assertTrue(rows[-1]['evidence_complete'])
+
+    async def test_double_root_is_refused_before_directory_metadata(self):
+        with patch.object(driver, 'directory') as opened:
+            with self.assertRaises(driver.Refusal):
+                driver.read('//owned/fixture', 16)
+            opened.assert_not_called()
 
 
 if __name__ == '__main__':

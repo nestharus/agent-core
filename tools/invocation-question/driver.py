@@ -1,4 +1,4 @@
-"""Invocation-owned binding to immutable 44c; no executable provider CLI.
+"""Invocation-owned binding to admitted immutable runtime source; no executable provider CLI.
 
 The invoking owner supplies authenticated CURRENT scope, not a role grant or a
 UUID-as-proof. Importing this module creates no context, control or allocation.
@@ -20,9 +20,9 @@ import time
 from types import ModuleType
 from uuid import uuid4
 
-COMMIT = '44c969af1c4d3b57a6a0d93ab21d3c7b409fff94'
-TREE = 'fc540a7ebd6eceb3a914cd9d2a06789d77433b86'
-PINSET = '8096e565e441abfa4b893944a95f42822f2a381b1533490e4d2f170bc14c0bf0'
+COMMIT = '82de20aa281af40f25e0186babde1db19bebd8e7'
+TREE = '5e0858014e293727470a7334f11f10d9391826f6'
+PINSET = '549689839c32191eb51a7157ac40b2e2c6f2021700e6eed2b0cc3b02783b22aa'
 DIRECT = ('profile_lease', 'execution_pool', 'fast_tier', 'dispatch',
           'review_context', 'opaque_dialogue', 'continuing_review')
 PROFILES = ('.codex2', '.codex3', '.codex4', '.codex5')
@@ -52,7 +52,7 @@ def authenticate_invoker(owner):
 def positive(path, exclusions=(), *, public_pool_parent=False):
     """Lexical admission before any metadata; never seek excluded aliases."""
     path = Path(path)
-    if not path.is_absolute() or '..' in path.parts:
+    if not path.is_absolute() or path.anchor != '/' or '..' in path.parts:
         raise Refusal('absolute lexical operand required')
     if any(path == Path(p) or path.is_relative_to(Path(p)) for p in exclusions):
         raise Refusal('held operand excluded before acquisition')
@@ -78,16 +78,19 @@ def directory(path):
         raise
 
 
-def read(path, maximum, exclusions=()):
+def read(path, maximum, exclusions=(), *, charge=lambda amount: None):
     path = positive(path, exclusions)
     parent = directory(path.parent)
     try:
         fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
-        with os.fdopen(fd, 'rb') as stream:
+        with os.fdopen(fd, 'rb', buffering=0) as stream:
             before = os.fstat(stream.fileno())
             if not stat.S_ISREG(before.st_mode) or before.st_size > maximum:
                 raise Refusal('finite regular public input required')
-            body = stream.read(maximum + 1)
+            # Bound this acquisition to the admitted descriptor extent, not
+            # a growing file. Charge before reading, including failed reads.
+            charge(before.st_size + 1)
+            body = stream.read(before.st_size + 1)
             after = os.fstat(stream.fileno())
             current = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
             stable = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mode,
@@ -111,7 +114,7 @@ def scope_reader(path, owner, exclusions):
         parent = directory(path.parent)
         try:
             fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
-            with os.fdopen(fd, 'rb') as stream:
+            with os.fdopen(fd, 'rb', buffering=0) as stream:
                 info = os.fstat(stream.fileno())
                 if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
                         or info.st_mode & 0o077 or info.st_nlink != 1 or info.st_size > 65536):
@@ -216,13 +219,14 @@ class Publisher:
 
 
 class PinnedRuntime(importlib.abc.MetaPathFinder, importlib.abc.Loader):
-    """Use 44c's loader and APIs, admitting imports only from the finite pin set."""
-    def __init__(self, repo, pins, admit):
+    """Use admitted runtime bytes and APIs, admitting imports only from the finite pin set."""
+    def __init__(self, repo, pins, admit, reader=read):
         if (pins['commit'] != COMMIT or pins['tree'] != TREE
                 or digest(json.dumps(pins, sort_keys=True).encode()) != PINSET):
-            raise Refusal('runtime under test must remain immutable 44c')
+            raise Refusal('runtime must match the published immutable pin set')
         self.repo, self.pins, self.admit = Path(repo), dict(pins['files']), admit
-        self.name = '_invocation44c_' + digest(json.dumps(pins, sort_keys=True).encode()) + '_' + uuid4().hex
+        self.reader = reader
+        self.name = '_invocation_runtime_' + digest(json.dumps(pins, sort_keys=True).encode()) + '_' + uuid4().hex
         self.loaded = {}
 
     def body(self, relative):
@@ -230,7 +234,7 @@ class PinnedRuntime(importlib.abc.MetaPathFinder, importlib.abc.Loader):
             raise Refusal('source outside finite runtime pin selection')
         path = positive(self.repo / relative)
         self.admit('source', [str(path)])
-        body = read(path, 1024 * 1024)
+        body = self.reader(path, 1024 * 1024)
         if digest(body) != self.pins[relative]:
             raise Refusal('selected runtime source changed or unpinned import')
         self.loaded[relative] = digest(body)
@@ -275,8 +279,8 @@ class PinnedRuntime(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         paths, bodies = {}, {}
         for leaf in DIRECT:
             paths[leaf], bodies[leaf] = self.body('tools/direct-child/' + leaf + '.py')
-        # The existing pool adapter imports direct-child/execution_pool by an
-        # explicit file spec. Admit that actual dependency before that import.
+        # Adapter import is inert. Inject the Pool compiled from these exact
+        # admitted direct bytes at construction; never reopen via SourceFileLoader.
         self.pool_module = module('execution_pool')
         self.direct = self.composition.modules(paths, bodies)
         if self.direct.failed:
@@ -322,7 +326,7 @@ class Question:
         if not math.isfinite(self.origin):
             raise Refusal('finite original monotonic creation required')
         self.budget = Budget(self.home, exclusions)
-        self.runtime = PinnedRuntime(runtime, pins, self.check)
+        self.runtime = PinnedRuntime(runtime, pins, self.check, self.acquire)
         self.review = self.endpoint = self.originals = self.publisher = None
         self.started = False
         self.profile = None
@@ -377,20 +381,37 @@ class Question:
         self.check('collect')
         self.budget.check(parent)
 
+    def charge(self, amount):
+        if type(amount) is not int or not 0 <= amount <= self.io_remaining:
+            raise Refusal('finite cumulative acquisition I/O exhausted before read')
+        self.io_remaining -= amount
+
+    def acquire(self, path, maximum):
+        return read(path, maximum, self.exclusions, charge=self.charge)
+
+    def control_read(self, path, maximum):
+        self.check('control', [str(path)])
+        return self.acquire(path, maximum)
+
+    def fast_enabled(self):
+        # Preserve the shared parser/Boolean contract while charging its bounded
+        # public acquisition. It never changes the original request snapshot.
+        self.check('control', [self.fast_control['path']])
+        self.charge(17)
+        return self.runtime.direct.fast_tier.enabled(self.fast_control['path'])
+
     def identities(self):
         operands = [self.program['path'], self.helper['path'], *self.helper['runtime_directories']]
         self.check('dependencies', operands)
         charge = 2 * (self.program['max_bytes'] + self.helper['max_bytes'])
-        if charge > self.io_remaining:
-            raise Refusal('finite full-program I/O admission exhausted before acquisition')
-        self.io_remaining -= charge
+        self.charge(charge)
         actual = self.runtime.program.identity(self.program['path'], self.program['bytes'],
                                                self.program['max_bytes'], self.exclusions)
         if actual['sha256'] != self.program['sha256']:
             raise Refusal('actual selected complete program changed')
         self.runtime.public_runtime.check_helper(self.helper, self.exclusions)
 
-    def authorize(self, ownership):
+    def authorize(self, ownership, *, complete_identity=True):
         self.check('analysis', ownership=ownership)
         self.budget.check(self.home)
         for relative in self.runtime.loaded.copy():
@@ -399,11 +420,18 @@ class Question:
         for item in self.materials:
             self.check('material', [item.path])
         self.check('control', [self.pool_control['routes'], self.fast_control['path']])
-        raw = read(self.pool_control['routes'], MIB, self.exclusions)
+        raw = self.control_read(self.pool_control['routes'], MIB)
         self.pool.pool.assert_control(raw, self.pool_control)
         # A later global value is validated, never applied to an old context.
-        self.runtime.direct.fast_tier.enabled(self.fast_control['path'])
-        self.identities()
+        self.fast_enabled()
+        if complete_identity:
+            self.identities()
+
+    def authorize_material(self, ownership):
+        # Immutable bytes move synchronously within the host. Rights, source,
+        # controls and lifetime remain current per chunk; complete program/helper
+        # identity is checked around export and again immediately before feed.
+        self.authorize(ownership, complete_identity=False)
 
     def probe_helper(self):
         self.check('qualify')
@@ -428,13 +456,17 @@ class Question:
         self.runtime.load()
         self.identities()
         self.check('control', [self.pool_control['routes'], self.fast_control['path']])
+        public_pool = self.runtime.direct.execution_pool
         self.pool = self.runtime.pool_module.ExecutionPool(dict(profiles=list(PROFILES),
-            execution_pool_routes=self.pool_control['routes'], deadlines={'bind': 30}))
-        self.pool.pool.assert_control(read(self.pool_control['routes'], MIB, self.exclusions), self.pool_control)
+            execution_pool_routes=self.pool_control['routes'], deadlines={'bind': 30}),
+            pool=public_pool.Pool(self.pool_control['routes'], reader=self.control_read, charge=self.charge,
+                                  before_write=self.pool_parent_guard),
+            pool_module=public_pool, expected_control=self.pool_control)
+        self.pool.pool.assert_control(self.control_read(self.pool_control['routes'], MIB), self.pool_control)
         helper_hash = self.runtime.pins['tools/direct-child/fast_tier.py']
         if self.fast_control['helper_sha256'] != helper_hash:
             raise Refusal('actual global control/helper correspondence changed')
-        self.force_fast = self.runtime.direct.fast_tier.enabled(self.fast_control['path'])
+        self.force_fast = self.fast_enabled()
         self.check('allocate')
         # Pool mutations use the ACTUAL supported pool; their public state
         # parent is separately authorized/guarded before each allocation/admit.
@@ -443,7 +475,7 @@ class Question:
                                                    expected_control=self.pool_control)
         self.profile = self.reservation['profile']
         execution = self.runtime.direct.dispatch.open_opaque_execution(
-            self.pool_control['routes'], 'gpt-xhigh', self.profile, force_fast=self.force_fast)
+            self.pool_control['routes'], 'gpt-xhigh', self.profile, force_fast=self.force_fast, config_reader=self.control_read)
         self.originals = self.runtime.appserver.Originals().scope()
         self.publisher = Publisher(self.home, self.capacity, lambda: self.check('publish'))
         protection = self.runtime.direct.continuing_review.SandboxProtection(
@@ -456,14 +488,14 @@ class Question:
         self.endpoint.capture_max = 8 * MIB
         self.review = self.runtime.direct.continuing_review.ContinuingReview(
             self.endpoint, 'gpt-xhigh', self.profile, self.owner, self.authorize,
-            lifetime=7200, clock=self.clock, origin=self.origin)
+            lifetime=7200, clock=self.clock, origin=self.origin, material_authority=self.authorize_material)
         self.authorize(self.review.ownership)
         return self
 
     def check_caller(self):
         for path, expected in self.caller_pins.items():
             self.check('source', [path])
-            if digest(read(path, MIB, self.exclusions)) != expected:
+            if digest(self.acquire(path, MIB)) != expected:
                 raise Refusal('published caller source changed')
 
     def pool_guard(self):
@@ -472,7 +504,13 @@ class Question:
         # The supported public rotation control may live under .local. Only
         # its EXACT routes-declared, currently authorized counter/lock parent
         # receives this narrow exception; no private store/read root is added.
-        parent = positive(counter.parent, self.exclusions, public_pool_parent=True)
+        self.pool_parent_guard(counter.parent)
+
+    def pool_parent_guard(self, parent):
+        # Pool invokes this anew before each lock/counter write, including each
+        # retry after awaited busy admission; no earlier placement grant is reused.
+        scope = self.check('allocate')
+        parent = positive(parent, self.exclusions, public_pool_parent=True)
         if str(parent) not in scope.get('pool_write_parents', []):
             raise Refusal('actual public pool state destination not currently admitted')
         fd = directory(parent)
@@ -501,7 +539,7 @@ class Question:
         result = {}
         for item in self.materials:
             self.check('material', [item.path])
-            body = read(item.path, item.bytes, self.exclusions)
+            body = self.acquire(item.path, item.bytes)
             if len(body) != item.bytes or digest(body) != item.sha256 or item.label in result:
                 raise Refusal('selected source snapshot changed or label duplicated')
             body.decode('utf-8')
