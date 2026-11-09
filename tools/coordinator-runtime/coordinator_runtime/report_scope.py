@@ -149,6 +149,11 @@ def eligible(runtime, row, record):
 
 def conserved_inputs(runtime, row):
     """Whole envelopes for integration; no summary can erase original dissent."""
+    if runtime.processing and row['task'] == 'reviews-integrator':
+        record = runtime.processing.current()[1].get('service', {}).get('legacy_resources', {}).get('Reviews', {})
+        if 'service_report' in record:
+            from .service_report_scope import authenticate
+            return authenticate(runtime, row, record)
     events = source_events(runtime, row)
     return [dict(event=e['id'], sha256=digest(e), original=e['body'],
                  **({'report_custody': e['report_custody']} if 'report_custody' in e else {})) for e in events]
@@ -336,7 +341,7 @@ def integration_inputs(runtime, row):
     selected = runtime.processing.current()[1]
     record = selected.get('service', {}).get('legacy_resources', {}).get(row['role'], {})
     from .resource_scopes import qa_accounts, blocked
-    applies = (row['task'] == 'reviews-integrator' and ('reviews_report' in record or 'native_review_return' in record)
+    applies = (row['task'] == 'reviews-integrator' and ('reviews_report' in record or 'native_review_return' in record or 'service_report' in record)
                or row['task'] == 'qa-cleanup' and any(a.get('cleanup') and a['binding']['package'] == row['package']
                    for a in qa_accounts(record)))
     if not applies:
@@ -402,6 +407,14 @@ def bounded_members(runtime, row, rows):
             if not fits_return(runtime, incoming, transport=True):
                 raise Refusal('whole native report has no complete transport with selected new analysis headroom')
             return [row]  # Exact whole return; other current reports remain queued.
+    if 'service_report' in record:
+        from .resource_scopes import blocked
+        if blocked(runtime, row):
+            raise Refusal('current service report authority/resources changed')
+        incoming = conserved_inputs(runtime, row)
+        if not fits_return(runtime, incoming, transport=True):
+            raise Refusal('whole service report lacks full independent analysis headroom')
+        return [row]  # One whole authenticated report job; neighbors remain queued.
     if 'reviews_report' not in record:
         return rows
     chosen, reports = [], []

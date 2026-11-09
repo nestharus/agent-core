@@ -450,7 +450,12 @@ def _original_modes(runtime, job):
     task = scoped_task(job['task'], task, admission)
     native = task.get('execution') == 'owner'
     if native:
-        reads, writes, native_closed = _native_resources(runtime, job, task)
+        record = runtime.processing.current()[1].get('service', {}).get('legacy_resources', {}).get('Reviews', {}) if runtime.processing else {}
+        if 'service_report' in record and job['task'] == record['service_report']['source_task']:
+            from .service_report_scope import resources
+            reads, writes, native_closed = resources(runtime, job, task, record)
+        else:
+            reads, writes, native_closed = _native_resources(runtime, job, task)
     else:
         reads, writes = access_modes(task, runtime.config.get('artifact_exclusions', []), metadata=False)
     # The runtime creates fresh per-attempt writable staging; these original
@@ -482,7 +487,7 @@ def _original_modes(runtime, job):
 def validate(runtime, policy, selection=None):
     for role, record in policy.items():
         if (role not in runtime.config['roles'] or not isinstance(record, dict)
-                or set(record) - {'qa_operation', 'qa_operations', 'reviews_report', 'native_review_return', 'historical_sources', 'comparison_mode'} != {'original_hold', 'roots', 'unbounded', 'evidence'}
+                or set(record) - {'qa_operation', 'qa_operations', 'reviews_report', 'service_report', 'native_review_return', 'historical_sources', 'comparison_mode'} != {'original_hold', 'roots', 'unbounded', 'evidence'}
                 or type(record['unbounded']) is not bool or not isinstance(record['roots'], list)):
             raise Refusal('legacy resource account needs exact hold, roots, unbounded and evidence')
         if runtime.one('SELECT legacy_hold FROM enrollments WHERE role=?', (role,))['legacy_hold'] != record['original_hold']:
@@ -517,6 +522,9 @@ def validate(runtime, policy, selection=None):
         if 'reviews_report' in record:
             from .report_scope import validate as validate_report
             validate_report(runtime, role, record, selection)
+        if 'service_report' in record:
+            from .service_report_scope import validate as validate_service_report
+            validate_service_report(runtime, role, record, selection)
 
 
 def validate_historical_sources(runtime, record):
@@ -807,6 +815,12 @@ def _blocked(runtime, row, task=None):
             operation_held = preflight(runtime, row, record)
         except (Refusal, OSError, KeyError, TypeError, ValueError):
             return True
+    elif 'service_report' in record:
+        try:
+            from .service_report_scope import preflight
+            preflight(runtime, row, record)
+        except (Refusal, OSError, KeyError, TypeError, ValueError):
+            return True
     elif 'reviews_report' in record:
         try:
             from .report_scope import eligible
@@ -918,6 +932,9 @@ def _blocked(runtime, row, task=None):
         if 'native_review_return' in record:
             from .native_review_scope import _authenticate
             _authenticate(runtime, row, record)
+        if 'service_report' in record:
+            from .service_report_scope import authenticate
+            authenticate(runtime, row, record)
         return False
     except (Refusal, OSError, KeyError, TypeError, ValueError, sqlite3.Error):
         return True

@@ -17,6 +17,7 @@ from .custody import read_file
 from .resource_scopes import root
 
 VERSION = 'protected-continuing-v1'
+PROGRAM_VERSION = 'protected-continuing-v2'
 MODULES = ('profile_lease', 'execution_pool', 'dispatch', 'review_context',
            'opaque_dialogue', 'continuing_review')
 FIELDS = {'version', 'source_files', 'pool_control', 'runtime_reads',
@@ -25,7 +26,10 @@ FIELDS = {'version', 'source_files', 'pool_control', 'runtime_reads',
 
 def declaration(policy):
     value = policy.get('continuing')
-    if not isinstance(value, dict) or set(value) != FIELDS or value['version'] != VERSION:
+    if not isinstance(value, dict):
+        raise Refusal('selected protected continuing composition required before execution')
+    fields = FIELDS | {'executable_identity'} if value.get('version') == PROGRAM_VERSION else FIELDS
+    if set(value) != fields or value['version'] not in {VERSION, PROGRAM_VERSION}:
         raise Refusal('selected protected continuing composition required before execution')
     if (not isinstance(value['source_files'], dict)
             or set(value['source_files']) != {name+'.py' for name in MODULES}):
@@ -42,13 +46,19 @@ def declaration(policy):
     for expected in [*value['source_files'].values(), value['executable_sha256']]:
         if not isinstance(expected, str) or len(expected) != 64 or any(c not in '0123456789abcdef' for c in expected):
             raise Refusal('exact SHA256 dependency identity required')
+    if value['version'] == PROGRAM_VERSION:
+        program = value['executable_identity']
+        if (not isinstance(program, dict) or set(program) != {'bytes', 'max_bytes'}
+                or type(program['bytes']) is not int or type(program['max_bytes']) is not int
+                or not 0 < program['bytes'] <= program['max_bytes'] <= 1024**3):
+            raise Refusal('explicit finite complete executable identity allowance required')
     control = value['pool_control']
     if not isinstance(control, dict) or set(control) != {'routes', 'static_sha256'}:
         raise Refusal('public static pool control binding required')
     return value
 
 
-def admitted_path(runtime, attempt, value):
+def admitted_path(runtime, attempt, value, *, source_read=False):
     """Lexical exclusions and current typed rights precede target acquisition."""
     row = runtime.attempt(attempt)
     job = runtime.job(row['job'])
@@ -59,6 +69,8 @@ def admitted_path(runtime, attempt, value):
             'SELECT * FROM admissions WHERE package=?', (job.get('package'),)))
     exclusions = [*runtime.config.get('artifact_exclusions', []), *task.get('scope_exclusions', [])]
     path = root(value, exclusions, metadata=False)
+    if source_read and 'read-source' not in task['effect_authority']['operations']:
+        raise Refusal('continuing dependencies require current typed source-read rights')
     reads = task['effect_authority']['read_roots']
     if not any(path.is_relative_to(Path(p)) for p in reads):
         raise Refusal('continuing dependency outside current delegated read authority')
@@ -106,14 +118,23 @@ def dependencies(runtime, attempt, policy, package):
     value = declaration(policy)
     if getattr(package, 'failed', True):
         raise Refusal('original source namespace failed; no partial reuse')
-    executable = admitted_path(runtime, attempt, policy['executable'])
+    executable = admitted_path(runtime, attempt, policy['executable'],
+                               source_read=value['version'] == PROGRAM_VERSION)
     routes = admitted_path(runtime, attempt, value['pool_control']['routes'])
     if str(routes) != runtime.config.get('execution_pool_routes'):
         raise Refusal('execution and admission must share the selected public control')
     for path in value['runtime_reads']:
         admitted_path(runtime, attempt, path)
     from .reviews import sha
-    if sha(read_file(executable, 32*1024**2)[0]) != value['executable_sha256']:
+    if value['version'] == PROGRAM_VERSION:
+        from .public_program import identity
+        program = value['executable_identity']
+        observed = identity(executable, program['bytes'], program['max_bytes'],
+                            runtime.config.get('artifact_exclusions', []))
+        actual = observed['sha256']
+    else:
+        actual = sha(read_file(executable, 32*1024**2)[0])
+    if actual != value['executable_sha256']:
         raise Refusal('selected public executable changed')
     raw = read_file(routes, 256*1024)[0]
     pool = package.execution_pool.Pool(routes)

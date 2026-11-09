@@ -65,6 +65,16 @@ def report_delivery(runtime, job, outbox):
             or event.get('allowed_tasks') != routes or event.get('role') != outbox['recipient']
             or outbox['event'] != event['id'] or not collected_report(runtime, job, routes[0])):
         return []
+    if runtime.processing and routes == ['reviews-integrator']:
+        record = runtime.processing.current()[1].get('service', {}).get('legacy_resources', {}).get('Reviews', {})
+        if 'service_report' in record:
+            # Authenticate actual receipt/current receiving resources before
+            # admitting delivery; the source outbox remains owned on refusal.
+            from .resource_scopes import blocked
+            receiver = dict(event=event['id'], role='Reviews', phase='integrator',
+                            task=routes[0], package=None)
+            if blocked(runtime, receiver):
+                raise Refusal('current protected report receiver unavailable; original delivery remains owed')
     return routes
 
 
