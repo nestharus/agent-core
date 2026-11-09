@@ -247,10 +247,10 @@ async def existing_admission(profile=None):
     yield
 
 
-def _dialogue(endpoint, profile, collector, authority, *, lifetime=7200, clock=time.monotonic, origin=None):
+def _dialogue(endpoint, profile, collector, authority, *, lifetime=7200, clock=time.monotonic, origin=None, material_authority=None):
     """A new public continuation contract; ordinary dispatch remains fresh."""
     return Dialogue(endpoint,profile,collector,authority,existing_admission,
-                    lifetime=lifetime,answer_bytes=getattr(endpoint,"maximum",2*1024**2),clock=clock,origin=origin)
+                    lifetime=lifetime,answer_bytes=getattr(endpoint,"maximum",2*1024**2),clock=clock,origin=origin,material_authority=material_authority)
 
 
 def canary_command_matches(observed, expected):
@@ -314,11 +314,11 @@ class ContinuingReview:
     First qualification is a real nonsecret turn of the sole owned conversation.
     Failure closes that line; no second context, replay or automatic fallback.
     """
-    def __init__(self, endpoint, selector, profile, collector, authority, *, lifetime=7200, clock=time.monotonic, origin=None):
+    def __init__(self, endpoint, selector, profile, collector, authority, *, lifetime=7200, clock=time.monotonic, origin=None, material_authority=None):
         if selector!='gpt-xhigh':
             raise Refusal('this receiving contract accepts opaque gpt-xhigh only')
         self.endpoint,self.collector=endpoint,collector
-        self._dialogue=_dialogue(endpoint,profile,collector,authority,lifetime=lifetime,clock=clock,origin=origin)
+        self._dialogue=_dialogue(endpoint,profile,collector,authority,lifetime=lifetime,clock=clock,origin=origin,material_authority=material_authority)
         self.proof=None
         self.attempted=False
 

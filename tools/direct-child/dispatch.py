@@ -100,7 +100,7 @@ class OpaqueCodexExecution:
     identity/alias attestation and never exports binding fields to the consumer.
     This is not a fresh-dispatch result or a saved-session attach capability.
     """
-    def __init__(self, config_path, selector, profile, *, force_fast=None):
+    def __init__(self, config_path, selector, profile, *, force_fast=None, config_reader=None):
         if selector != 'gpt-xhigh':
             raise Refusal('continuing review requires its opaque consumer selector')
         from types import SimpleNamespace
@@ -108,7 +108,7 @@ class OpaqueCodexExecution:
             model=selector,provider=None,effort=None,profile=profile,
             override_reason='explicit continuing opaque review consumer selection')
         setattr(args,'class',None)
-        config,_=load_config(Path(config_path))
+        config,_=load_config(Path(config_path), reader=config_reader)
         self.__selection=resolve(config,args)
         if self.__selection['provider']!='codex':
             raise Refusal('selected public execution capability is incompatible with this original profile; no fallback')
@@ -141,16 +141,16 @@ class OpaqueCodexExecution:
         return result
 
 
-def open_opaque_execution(config_path, selector, profile, *, force_fast=None):
+def open_opaque_execution(config_path, selector, profile, *, force_fast=None, config_reader=None):
     """No task, context, allocation, private-profile inspection or replay here."""
-    return OpaqueCodexExecution(config_path,selector,profile,force_fast=force_fast)
+    return OpaqueCodexExecution(config_path,selector,profile,force_fast=force_fast,config_reader=config_reader)
 
 
 # ---------------------------------------------------------------- config
 
-def load_config(path):
+def load_config(path, *, reader=None):
     try:
-        raw = path.read_bytes()
+        raw = execution_pool.bounded_read(path, execution_pool.MAX_ROUTES) if reader is None else reader(path, execution_pool.MAX_ROUTES)
         config = tomllib.loads(raw.decode("utf-8"))
     except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
         raise Refusal(f"cannot read config {path}: {error}") from error

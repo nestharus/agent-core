@@ -14,11 +14,15 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import tempfile
 import tomllib
 
 PROFILES = {'.codex', '.codex2', '.codex3', '.codex4', '.codex5'}
 DEFAULT_ROUTES = Path.home() / 'ai/tools/direct-child/routes.toml'
+MAX_ROUTES = 1024 * 1024
+MAX_COUNTER = 4096
+
 MEMBERSHIP = rb'(?ms)(^\[providers\.codex\][^\[]*?^pool\s*=\s*)\[[^\]]*\]'
 
 
@@ -51,15 +55,32 @@ def counter_value(value):
         raise PoolError('rotation counter exceeds supported integer conversion; no reset/fallback') from exc
 
 
+def bounded_read(path, maximum):
+    """Finite regular public control, refusing links and growth before parse."""
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, 'rb') as stream:
+        before = os.fstat(stream.fileno())
+        if not stat.S_ISREG(before.st_mode) or before.st_size > maximum:
+            raise PoolError('public control exceeds finite regular-file bound')
+        raw = stream.read(maximum + 1)
+        after = os.fstat(stream.fileno())
+        current = os.stat(path, follow_symlinks=False)
+        identity = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mode, s.st_mtime_ns, s.st_ctime_ns)
+        if len(raw) > maximum or identity(before) != identity(after) or identity(after) != identity(current):
+            raise PoolError('public control changed or exceeded acquisition bound')
+        return raw
+
+
 class Pool:
-    def __init__(self, routes=DEFAULT_ROUTES):
+    def __init__(self, routes=DEFAULT_ROUTES, *, reader=bounded_read, charge=lambda amount: None):
+        self.reader, self.charge = reader, charge
         self.routes = Path(routes)
         if not self.routes.is_absolute():
             raise PoolError('absolute public pool routes path required')
 
     def read(self):
         try:
-            raw = self.routes.read_bytes()
+            raw = self.reader(self.routes, MAX_ROUTES)
             config = tomllib.loads(raw.decode())
             entry = config['providers']['codex']
             pool, manual = entry['pool'], entry['manual_profiles']
@@ -99,7 +120,7 @@ class Pool:
                     self.assert_control(raw, expected_control)
                     if current_path != path:
                         raise PoolError('rotation state path changed; explicit cutover required')
-                    value = handle.read().strip()
+                    value = self.read_counter(handle)
                     if not value:
                         if not created:
                             raise PoolError('empty existing rotation counter; unknown state, no reset/fallback')
@@ -109,6 +130,17 @@ class Pool:
                     yield handle, raw, pool, counter_value(value or '0')
         except (OSError, UnicodeError) as exc:
             raise PoolError('public execution pool lock/state unavailable: ' + str(exc)) from exc
+
+    def read_counter(self, handle):
+        # Precharge before body acquisition, including malformed/failed reads.
+        self.charge(MAX_COUNTER + 1)
+        info = os.fstat(handle.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_COUNTER:
+            raise PoolError('rotation counter exceeds finite regular-file bound')
+        value = os.read(handle.fileno(), MAX_COUNTER + 1).decode('ascii')
+        if len(value) > MAX_COUNTER:
+            raise PoolError('rotation counter grew beyond finite bound')
+        return value.strip()
 
     @staticmethod
     def lock(handle, blocking):
@@ -159,7 +191,7 @@ class Pool:
                     if current_path != path:
                         raise PoolError('rotation state path changed; explicit cutover required')
                     self.eligible(pool)
-                    value = handle.read().strip()
+                    value = self.read_counter(handle)
                     count = counter_value(value)
             except OSError as exc:
                 raise PoolError('public execution pool preview unavailable: ' + str(exc)) from exc

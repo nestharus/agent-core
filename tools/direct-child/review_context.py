@@ -271,7 +271,7 @@ class Context:
 
 async def execute(argv, env, prompt, directory, originals, publish, deadline, shutdown,
                   maximum, capture_max, expected_thread, started,
-                  admission=existing_admission, before_spawn=lambda: None, capacity_check=lambda parent: None):
+                  admission=existing_admission, before_spawn=lambda: None, capacity_check=lambda parent: None, before_feed=None):
     """Own before feeding input; numeric END and pipe EOF are independent."""
     evidence = dict(errors=[], stdout_eof=False, stderr_eof=False, bytes={'stdout': 0, 'stderr': 0})
     observed = dict(thread=None, completed=0, failed=False, answer=None, diagnostics=[])
@@ -396,6 +396,9 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
 
     async def feed():
         try:
+            # Process creation and task scheduling both await. Recheck on this
+            # task immediately before consequential delivery, with no await gap.
+            (before_spawn if before_feed is None else before_feed)()
             child.stdin.write(prompt.encode())
             await child.stdin.drain()
         except (BrokenPipeError, ConnectionResetError):

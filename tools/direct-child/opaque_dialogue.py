@@ -123,7 +123,7 @@ class Dialogue:
     A close receipt is retained as endpoint testimony, not fabricated process END.
     """
     def __init__(self, endpoint, profile, collector, authority, admission, *, lifetime=7200,
-                 clock=time.monotonic, answer_bytes=1024 * 1024, origin=None):
+                 clock=time.monotonic, answer_bytes=1024 * 1024, origin=None, material_authority=None):
         if profile not in {'.codex', '.codex2', '.codex3', '.codex4', '.codex5'}:
             raise Refusal('supported original account association required')
         if type(collector) is not str or not collector:
@@ -137,6 +137,7 @@ class Dialogue:
             raise Refusal('finite monotonic origin required')
         self._ownership = Ownership(str(uuid4()), 'gpt-xhigh', profile, collector, created, created + lifetime)
         self._endpoint, self._authority, self._admission, self._clock = endpoint, authority, admission, clock
+        self._material_authority = material_authority
         self._answer_bytes = answer_bytes
         self._state, self._handle, self._thread, self._turns = 'new', None, None, 0
         self._active, self._channels, self._close_receipt = False, [], None
@@ -153,11 +154,12 @@ class Dialogue:
         return dict(state=self._state, thread=self._thread, turns=self._turns,
                     active=self._active, close_receipt=self._close_receipt, creation=self._creation)
 
-    def _authorize(self):
+    def _authorize(self, *, material=False):
         now = self._clock()
         if not math.isfinite(now) or now < self._ownership.created or now >= self._ownership.expires:
             raise Refusal('original lifetime elapsed or clock origin changed')
-        self._authority(self._ownership)
+        authority = self._material_authority if material and self._material_authority is not None else self._authority
+        authority(self._ownership)
 
     async def _open(self):
         async with self._admission(self._ownership.profile):
@@ -209,7 +211,7 @@ class Dialogue:
             self._active = False
 
     def _channel(self, materials, text):
-        channel = MaterialChannel(materials, self._authorize)
+        channel = MaterialChannel(materials, lambda: self._authorize(material=True))
         size = sum(map(len, materials.values()))
         if (len(self._channels) >= 128 or self._material_bytes + size > 32 * 1024 * 1024
                 or self._input_bytes + len(text.encode()) > 32 * 1024 * 1024):
