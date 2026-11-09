@@ -142,7 +142,8 @@ def publish(store, board, job, attempt, run, task, fence):
         if metadata(os.fstat(fd)) != {k: before[k] for k in metadata(os.fstat(fd))}:
             raise Refusal('bounded log descriptor changed')
         fence()
-        store.budget(None, before['size']+len(entry)+4096)
+        store.artifact_copy_budget(attempt['id'], backup, before['size'],
+                                   journal_incoming=len(entry)+4096)
         # Exclusive opaque backup creation. A partial/unrecorded backup is held,
         # never replaced. No body/hash/custody.capture of this recovery source.
         backup_fd = os.open(backup, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)

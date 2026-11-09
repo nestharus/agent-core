@@ -319,7 +319,9 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         if (not root.is_absolute() or root.anchor == '//' or '..' in root.parts
                 or str(root) != selection['root']):
             raise Refusal('independent new plain artifact root required')
-        guard_path(self, str(root))  # lexical exclusions BEFORE metadata
+        from .resource_scopes import root as resource_root
+        resource_root(selection['root'], self.config.get('artifact_exclusions', []), metadata=False)
+        guard_path(self, str(root))  # lexical exclusions/origins BEFORE metadata
         if any(Path(p).is_relative_to(root) for p in self.config.get('artifact_exclusions', [])):
             raise Refusal('future arena contains an opaque namespace; no acquisition')
         if (not root.is_absolute() or '..' in root.parts or str(root) != selection['root'] or
@@ -398,18 +400,53 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                                     int(journal_incoming > 0) + (entries if destination == journal_device else 0))
         return result
 
-    def admit_artifact_write(self, attempt, incoming, entries):
+    def admit_artifact_write(self, attempt, incoming, entries, *, journal_incoming=0):
         row = self.one('SELECT a.id,a.selection FROM attempt_artifact_roots r '
                        'JOIN artifact_placement_admissions a ON a.id=r.admission WHERE r.attempt=?', (attempt,))
         if not row:
             return  # Legacy behavior and original home remain unchanged.
         spec = json.loads(row['selection'])
-        usage = next(p for p in self.placement_usage(incoming, admission=row['id'], entries=entries) if p['admission'] == row['id'])
-        if self.usage()['bytes']+incoming+capacity.PRESSURE_RESERVE >= self.config['limits']['max_bytes']:
+        usage = next(p for p in self.placement_usage(incoming, admission=row['id'], entries=entries, journal_incoming=journal_incoming) if p['admission'] == row['id'])
+        if self.usage()['bytes']+incoming+journal_incoming+capacity.PRESSURE_RESERVE >= self.config['limits']['max_bytes']:
             raise Backpressure('cumulative journal/artifact bytes held; conserve before admitting more')
         if usage['entries']+entries > spec['max_entries']:
             raise Backpressure('future artifact entry admission exhausted; no fallback')
         self.placement_headroom(Path(spec['root']), spec, incoming, entries)
+
+    def artifact_copy_budget(self, attempt, path, incoming, *, journal_incoming=1024, directory=False):
+        """Admit a cooperative copy at its frozen destination before mkdir/open.
+
+        Filesystem bytes and journal records have different allocation sites.
+        Count missing directory inodes as well as the new file, including a
+        directory-growth allowance. This is preflight, never a reservation.
+        """
+        from .custody import guard_path
+        path = Path(path)
+        root = self.artifact_root(attempt)
+        if (not path.is_absolute() or '..' in path.parts or not path.is_relative_to(root)
+                or type(incoming) is not int or incoming < 0
+                or type(journal_incoming) is not int or journal_incoming < 0):
+            raise Refusal('exact artifact copy destination and nonnegative sizes required')
+        guard_path(self, str(path))
+        if any(p.is_symlink() for p in (path, *path.parents)):
+            raise Refusal('artifact copy alias refused before allocation')
+        missing = 0
+        parent = path if directory else path.parent
+        while parent.is_relative_to(root) and not parent.exists():
+            guard_path(self, str(parent))
+            missing += 1
+            parent = parent.parent
+        entries = missing + int(not directory)
+        growth = incoming + 4096 * (missing + int(not directory))
+        # One transaction carries software/current authority and activation;
+        # the subsequent filesystem effect retains its original custody.
+        with (nullcontext() if self.db.in_transaction else self.tx()):
+            if self.one('SELECT attempt FROM attempt_artifact_roots WHERE attempt=?', (attempt,)):
+                self.budget(None, growth+journal_incoming, artifact_incoming=growth,
+                            artifact_attempt=attempt, artifact_entries=entries)
+            else:
+                # Legacy copies really grow the journal's own filesystem.
+                self.budget(None, growth+journal_incoming)
 
     def bind_artifact_root(self, attempt):
         row = self.one('SELECT * FROM artifact_placement_admissions ORDER BY rowid DESC LIMIT 1')
@@ -444,22 +481,36 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         counts['excluded_codex_store_scope'] = 'sessions subtree opaque/unmeasured; shared account stores not inventoried'
         return counts
 
-    def budget(self, kind, incoming=0, *, event=None, job=None):
+    def budget(self, kind, incoming=0, *, event=None, job=None, artifact_incoming=0, artifact_attempt=None, artifact_entries=0):
+        if (type(artifact_incoming) is not int or not 0 <= artifact_incoming <= incoming
+                or type(artifact_entries) is not int or artifact_entries < 0
+                or artifact_attempt is None and (artifact_incoming or artifact_entries)):
+            raise Refusal('artifact allocation needs nonnegative sizes and its exact destination')
+        if artifact_attempt is not None and not self.one(
+                'SELECT attempt FROM attempt_artifact_roots WHERE attempt=?', (artifact_attempt,)):
+            raise Refusal('incoming artifact destination is not admitted')
+        journal_incoming = incoming - artifact_incoming
         # File-copy/staging callers have no enclosing journal write. Authenticate
         # and commit only their budget/activation here; the later filesystem
         # effect retains its existing custody and is not journal-atomic.
         if kind is None and not event and not job and not self.db.in_transaction:
             with self.tx():
-                return self.budget(kind, incoming)
+                return self.budget(kind, incoming, artifact_incoming=artifact_incoming,
+                                   artifact_attempt=artifact_attempt, artifact_entries=artifact_entries)
         from .report_repair import software_budget
         activation = software_budget(self, kind, incoming)
         if activation:
             incoming += 1024  # Real writable activation custody, never a read/start.
+            journal_incoming += 1024
         if event or job:
             if not self.db.in_transaction:
                 raise Refusal('duty credit allocation requires the source write transaction')
             admitted.charge(self, kind, event=event, job=job)
-        self.placement_usage(journal_incoming=incoming)
+        if artifact_attempt is not None:
+            self.admit_artifact_write(artifact_attempt, artifact_incoming, artifact_entries,
+                                      journal_incoming=journal_incoming)
+        else:
+            self.placement_usage(journal_incoming=journal_incoming)
         usage, limits = self.usage(), self.config["limits"]
         if usage["bytes"] + incoming + capacity.PRESSURE_RESERVE >= limits["max_bytes"]:
             raise Backpressure("cumulative journal/artifact bytes held; conserve before admitting more")

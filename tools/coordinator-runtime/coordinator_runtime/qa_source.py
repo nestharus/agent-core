@@ -59,11 +59,15 @@ async def export(store, attempt, p, source):
     store.admit_artifact_write(attempt, total+len(files)*1024, len(files)+len(parents)+1)
     root = store.artifact_root(attempt) / 'qa-source'
     # Service-owned, retained, unique to this exact execution intent.
+    store.artifact_copy_budget(attempt, root, 0, directory=True)
     root.mkdir(parents=True, mode=0o700, exist_ok=False)
-    store.budget(None, total + len(files) * 1024)
+    # Blob bodies allocate at the arena; only tool/association records grow
+    # the journal. Actual blob files are admitted again immediately at open.
+    store.budget(None, len(files) * 1024)
     for item in files:
         guard_candidate(store, p['repository'], item['path'])
         target = root / item['path']
+        store.artifact_copy_budget(attempt, target, item['size'])
         target.parent.mkdir(parents=True, exist_ok=True)
         argv = [p['git'], '--no-optional-locks', '-c', 'gc.auto=0', '-c', 'maintenance.auto=false',
                 '-c', 'core.hooksPath=/dev/null', '-C', p['repository'], 'cat-file', 'blob', item['blob']]

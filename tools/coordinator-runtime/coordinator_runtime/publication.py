@@ -112,6 +112,7 @@ def prepare(store, attempt, before, policy=None):
     store.require_attempt_execution_open(attempt)
     local_integration.current_sources(store, store.job(store.one('SELECT job FROM attempts WHERE id=?', (attempt,))['job']))
     root=store.artifact_root(attempt)/'staged'
+    store.artifact_copy_budget(attempt, root, 0, directory=True)
     root.mkdir(mode=0o700)
     for index,(target,witness) in enumerate(before.items()):
         bounded_entry = policy and policy['kind'] == bounded_log.KIND and target == policy['bounded_log']['target']
@@ -120,7 +121,7 @@ def prepare(store, attempt, before, policy=None):
         path=root/(str(index)+'-'+Path(target).name)
         body=(b'' if bounded_entry else
               frozen_body(store, witness['sha256'], path=target)['body'] if witness['exists'] else b'')
-        store.budget(None,len(body)+1024)
+        store.artifact_copy_budget(attempt, path, len(body))
         fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600)
         with os.fdopen(fd,'wb') as stream:stream.write(body);stream.flush();os.fsync(stream.fileno())
         with store.tx():store.db.execute('INSERT INTO routine_stages VALUES(?,?,?)',(attempt,target,str(path)))
@@ -229,6 +230,7 @@ def locked_publish(store, board, job, attempt, run, task, service_stages=None):
         elif not before[target]['exists'] or observed!=before[target]:
             raise Refusal('exact regular canonical byte/inode preimage changed or missing')
     backups=store.artifact_root(attempt['id'])/'before'
+    store.artifact_copy_budget(attempt['id'], backups, 0, directory=True)
     backups.mkdir(mode=0o700,exist_ok=True)
     # Durable compressed BEFORE-only backups for the whole batch precede writes.
     for index,target in enumerate(order):
@@ -236,7 +238,7 @@ def locked_publish(store, board, job, attempt, run, task, service_stages=None):
         if row:continue  # Never rewrite/reclaim an existing recovery source.
         source=frozen_body(store, before[target]['sha256'], task, target)['body']
         path=backups/(str(index)+'-'+Path(target).name+'.before.gz')
-        store.budget(None,len(source)+65536)
+        store.artifact_copy_budget(attempt['id'], path, len(source)+65536, journal_incoming=len(source)+65536)
         fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600)
         with os.fdopen(fd,'wb') as stream:
             with gzip.GzipFile(fileobj=stream,mode='wb',mtime=0) as compressed:compressed.write(source)

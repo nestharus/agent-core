@@ -213,6 +213,7 @@ async def tool(store, attempt, label, argv, cwd, p, *, output_file=None, maximum
         if len(stdout) + len(stderr) > bound:
             raise Refusal('ordinary capture exceeded bound')
         if output_file is not None:
+            store.artifact_copy_budget(attempt, output_file, len(stdout))
             with Path(output_file).open('xb') as target:
                 target.write(stdout)
             record.update(stdout_file=str(output_file), stdout_sha256=hashlib.sha256(stdout).hexdigest(),

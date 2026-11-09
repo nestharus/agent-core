@@ -1069,3 +1069,152 @@ class Collection1114(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store.one('SELECT * FROM results WHERE attempt=?',(attempt,)),original)
         self.assertEqual(self.store.one('SELECT intake FROM enrollments WHERE role=?',('Work',))['intake'],0)
         self.evidence1118('lawful-current1133',retained_admission=admitted,historical_result=original)
+
+    def frozen_input1138(self, body):
+        import hashlib
+        sha=hashlib.sha256(body).hexdigest()
+        origin=str(self.area/'fictional-input.txt')
+        self.store.db.execute('INSERT INTO artifact_blobs VALUES(?,?)',(sha,body))
+        return [{'artifact_witnesses':[dict(path=origin,sha256=sha,custody='artifact_blobs')]}]
+
+    async def test_frozen_input_copy_refuses_destination_bytes_before_directory_or_file(self):
+        from coordinator_runtime import custody
+        from coordinator_runtime.contracts import Backpressure
+        self.placement1127(max_bytes=40000)
+        _,job,attempt=self.reservation();root=self.store.artifact_root(attempt);root.mkdir()
+        events=self.frozen_input1138(b'x'*50000)
+        with self.assertRaises(Backpressure):
+            custody.materialize(self.store,events,attempt,self.config['tasks'][job['task']])
+        self.assertFalse((root/'inputs').exists())
+        self.assertEqual(self.store.rows('SELECT * FROM artifacts'),[])
+        self.evidence1118('copy-bytes1138',root=str(root),retained_blob=True,created=False)
+
+    async def test_frozen_input_copy_refuses_destination_entries_before_directory_or_file(self):
+        from coordinator_runtime import custody
+        from coordinator_runtime.contracts import Backpressure
+        self.placement1127(max_entries=2)
+        _,job,attempt=self.reservation();root=self.store.artifact_root(attempt);root.mkdir()
+        with self.assertRaises(Backpressure):
+            custody.materialize(self.store,self.frozen_input1138(b'entry'),attempt,self.config['tasks'][job['task']])
+        self.assertFalse((root/'inputs').exists())
+        self.assertEqual(self.store.rows('SELECT * FROM artifacts'),[])
+
+    async def test_frozen_input_copy_fits_and_preserves_exact_custody_and_global_refusal(self):
+        from coordinator_runtime import custody
+        from coordinator_runtime.contracts import Backpressure
+        self.placement1127()
+        _,job,attempt=self.reservation();root=self.store.artifact_root(attempt);root.mkdir()
+        events=self.frozen_input1138(b'complete frozen input')
+        task=self.config['tasks'][job['task']]
+        copies=custody.materialize(self.store,events,attempt,task)
+        self.assertEqual(Path(copies[0]['frozen_path']).read_bytes(),b'complete frozen input')
+        self.assertEqual(custody.materialize(self.store,events,attempt,task),copies)
+        self.assertEqual(len(self.store.rows('SELECT * FROM artifacts')),1)
+        before=self.store.usage()['bytes'];prior=self.config['limits']['max_bytes']
+        self.config['limits']['max_bytes']=before+1024
+        try:
+            with self.assertRaises(Backpressure):
+                custody.materialize(self.store,self.frozen_input1138(b'new distinct body'),attempt,task)
+        finally:self.config['limits']['max_bytes']=prior
+        self.assertEqual(len(list((root/'inputs').iterdir())),1)
+        self.evidence1118('fitting-copy1138',copies=copies,global_refused=True)
+
+    async def test_oversize_result_refuses_destination_before_recovery_file(self):
+        from coordinator_runtime import custody
+        from coordinator_runtime.contracts import Backpressure
+        self.placement1127(max_bytes=40000)
+        _,_,attempt=self.reservation();root=self.store.artifact_root(attempt);root.mkdir()
+        with self.store.tx():
+            with self.assertRaises(Backpressure):custody.conserve_oversize_result(self.store,attempt,b'x'*50000)
+        self.assertFalse((root/'oversize-result.json').exists())
+        self.assertEqual(self.store.rows('SELECT * FROM artifact_custody'),[])
+
+    async def test_staged_preimage_refuses_destination_before_staging_directory(self):
+        from coordinator_runtime import publication
+        from coordinator_runtime.contracts import Backpressure
+        self.placement1127(max_entries=2)
+        _,_,attempt=self.reservation();root=self.store.artifact_root(attempt);root.mkdir()
+        target=str(self.area/'public-target.txt')
+        with patch('coordinator_runtime.publication.local_integration.current_sources'):
+            with self.assertRaises(Backpressure):publication.prepare(self.store,attempt,{target:{'exists':False}})
+        self.assertFalse((root/'staged').exists())
+        self.assertEqual(self.store.rows('SELECT * FROM routine_stages'),[])
+
+    async def test_intrinsic_profile_population_refuses_placement_before_any_metadata(self):
+        from coordinator_runtime.contracts import PROFILES
+        home=self.area/'fictional-home1138'
+        self.config['artifact_exclusions']=[]
+        selection=dict(root=str(self.area/'lawful'),authority='fictional right',expires=self.now+100,
+            max_attempts=4,max_entries=100,max_bytes=1024**2,min_free_bytes=1,min_free_inodes=1,
+            journal_min_free_bytes=1,journal_min_free_inodes=1)
+        observed=[]
+        def forbidden(*args,**kw):
+            observed.append('metadata-or-create');raise AssertionError('protected operand reached metadata')
+        with patch.object(Path,'home',return_value=home):
+            for profile in PROFILES:
+                for operand in (home/profile,home/profile/'child',home):
+                    with self.subTest(profile=profile,operand=str(operand)),patch.object(Path,'is_symlink',forbidden),\
+                         patch.object(Path,'exists',forbidden),patch.object(Path,'stat',forbidden),\
+                         patch.object(Path,'lstat',forbidden),patch.object(Path,'mkdir',forbidden),\
+                         patch('coordinator_runtime.store.os.statvfs',forbidden):
+                        with self.assertRaises(Refusal):
+                            self.store.select_artifact_placement(self.config['roles']['Work']['owner'],{**selection,'root':str(operand)})
+        self.assertEqual(observed,[])
+        positive=self.store.select_artifact_placement(self.config['roles']['Work']['owner'],selection)
+        self.assertEqual(positive['selection'],selection)
+        self.evidence1118('intrinsic-protection1138',profiles=list(PROFILES),metadata=observed,positive=positive)
+
+    async def test_QA_export_distinct_device_progress_and_shared_device_journal_refusal(self):
+        from coordinator_runtime import qa_source
+        from coordinator_runtime.contracts import Backpressure
+        from types import SimpleNamespace
+        import hashlib
+        self.placement1127(min_free_bytes=1,journal_min_free_bytes=1)
+        _,_,attempt=self.reservation();root=self.store.artifact_root(attempt);root.mkdir()
+        arena=root.parent;body=b'public fictional blob'*30000
+        blob=hashlib.sha1(b'blob '+str(len(body)).encode()+b'\0'+body).hexdigest()
+        listing='100644 blob '+blob+' '+str(len(body))+'\tpayload.txt\0'
+        p={'source_capture':{'max_bytes':1024**2,'max_files':10},'source_head':'fictional',
+           'git':'/usr/bin/git','repository':str(self.area/'fictional-repository')}
+        original_lstat=Path.lstat;original_vfs=os.statvfs;shared=False
+        def topology(path,*args,**kw):
+            info=original_lstat(path,*args,**kw)
+            if path==arena and not shared:
+                return SimpleNamespace(**{k:getattr(info,k) for k in dir(info) if k.startswith('st_') and k!='st_dev'},st_dev=info.st_dev+123)
+            return info
+        def headroom(path):
+            if Path(path)==self.store.home:
+                return SimpleNamespace(f_bavail=131072,f_frsize=1,f_favail=10000000)
+            return original_vfs(path)
+        async def blob_tool(store,owned,label,argv,cwd,policy,**kw):
+            Path(kw['output_file']).write_bytes(body)
+            return dict(exit=0,stdout_bytes=len(body),stdout_sha256=hashlib.sha256(body).hexdigest())
+        with patch.object(Path,'lstat',topology),patch('coordinator_runtime.store.os.statvfs',side_effect=headroom),\
+             patch('coordinator_runtime.ordinary.git',new=AsyncMock(return_value=listing)),\
+             patch('coordinator_runtime.ordinary.tool',side_effect=blob_tool):
+            association=await qa_source.export(self.store,attempt,p,{'head':'fictional','tree':'fictional-tree'})
+            self.assertEqual((Path(association['root'])/'payload.txt').read_bytes(),body)
+            # The same bulk genuinely consumes shared journal headroom.
+            shared=True
+            with self.assertRaises(Backpressure):self.store.admit_artifact_write(attempt,len(body),1)
+            # Distinct destination never waives actual journal growth.
+            shared=False
+            with self.assertRaises(Backpressure):self.store.budget(None,262144)
+        self.evidence1118('QA-site1138',association=association,shared_refused=True,journal_refused=True)
+
+    async def test_frozen_input_copy_preserves_actual_destination_physical_floor(self):
+        from coordinator_runtime import custody
+        from coordinator_runtime.contracts import Backpressure
+        from types import SimpleNamespace
+        self.placement1127(min_free_bytes=1,journal_min_free_bytes=1)
+        _,job,attempt=self.reservation();root=self.store.artifact_root(attempt);root.mkdir()
+        actual=os.statvfs
+        def vfs(path):
+            if Path(path)==root.parent:
+                return SimpleNamespace(f_bavail=8192,f_frsize=1,f_favail=10000000)
+            return actual(path)
+        with patch('coordinator_runtime.store.os.statvfs',side_effect=vfs):
+            with self.assertRaises(Backpressure):
+                custody.materialize(self.store,self.frozen_input1138(b'x'*16000),attempt,self.config['tasks'][job['task']])
+        self.assertFalse((root/'inputs').exists())
+        self.evidence1118('physical-floor1138',created=False,actual_destination_refused=True)

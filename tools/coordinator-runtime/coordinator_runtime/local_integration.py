@@ -1252,11 +1252,13 @@ def rebase(store, job, attempt, run, task):
     # Materialize new immutable service stages, preserving model postimages and
     # input custody. Publication validates both mapping and exact fresh preimages.
     root = store.artifact_root(attempt['id'])/'local-commit'
+    store.artifact_copy_budget(attempt['id'], root, 0, directory=True)
     root.mkdir(mode=0o700)
     service = {}
     for index, target in enumerate(order):
         path = root/str(index)
-        store.budget(None, len(rebased[target])+len(bodies[target])+4096)
+        store.artifact_copy_budget(attempt['id'], path, len(rebased[target]),
+                                   journal_incoming=len(rebased[target])+len(bodies[target])+4096)
         import os
         fd = os.open(path, os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, 'wb') as stream:

@@ -296,10 +296,10 @@ def materialize(store, events, attempt, task=None):
             if not row or hashlib.sha256(row['body']).hexdigest() != w['sha256']:
                 raise Refusal('required frozen artifact custody is unavailable')
             root = store.artifact_root(attempt)/'inputs'
-            root.mkdir(mode=0o700, exist_ok=True)
             path = root/w['sha256']
             if not path.exists():
-                store.budget(None,len(row['body']))
+                store.artifact_copy_budget(attempt, path, len(row['body']))
+                root.mkdir(mode=0o700, exist_ok=True)
                 fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
                 with os.fdopen(fd, 'wb') as output:
                     output.write(row['body']); output.flush(); os.fsync(output.fileno())
@@ -319,8 +319,8 @@ def conserve_oversize_result(store, attempt, body):
     leaves collection outstanding with the original collector, without cap credit.
     This does not bound the earlier encoding/acquisition memory cost.
     """
-    store.budget(None, len(body)*2+4096)
     root = store.artifact_root(attempt)
+    store.artifact_copy_budget(attempt, root/'oversize-result.json', len(body), journal_incoming=len(body)+4096)
     safe_path(str(root), [str(root)])
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     path = root/'oversize-result.json'
