@@ -11,7 +11,7 @@ import stat
 from contextlib import contextmanager, ExitStack
 
 from .contracts import Refusal, encode, digest
-from .custody import capture, read_file, safe_path, frozen_body, refuse_log
+from .custody import capture, read_file, safe_path, frozen_body, guard_frozen, refuse_log
 from .cleanup import open_parent
 from . import bounded_log, local_integration
 
@@ -108,14 +108,36 @@ def stages(store, attempt):
     return {r['target']:r['path'] for r in store.rows('SELECT target,path FROM routine_stages WHERE attempt=?',(attempt,))}
 
 
+def bounded_preimage(policy, target):
+    return bool(policy and policy['kind'] == bounded_log.KIND
+                and target == policy['bounded_log']['target'])
+
+
+def guard_preimages(store, before, policy):
+    for target, witness in before.items():
+        guard_preimage(store, target, witness, policy)
+
+
+def guard_preimage(store, target, witness, policy):
+    if bounded_preimage(policy, target):
+        return  # A bounded entry never acquires the whole target preimage.
+    refuse_log(target)
+    if witness['exists']:
+        guard_frozen(store, witness['sha256'], path=target)
+
+
 def prepare(store, attempt, before, policy=None):
     store.require_attempt_execution_open(attempt)
     local_integration.current_sources(store, store.job(store.one('SELECT job FROM attempts WHERE id=?', (attempt,))['job']))
+    # Reject every recorded preimage before destination allocation. A later
+    # excluded item must not leave earlier files or an empty staging directory.
+    # frozen_body repeats the guard at acquisition; this is no cached authority.
+    guard_preimages(store, before, policy)
     root=store.artifact_root(attempt)/'staged'
     store.artifact_copy_budget(attempt, root, 0, directory=True)
     root.mkdir(mode=0o700)
     for index,(target,witness) in enumerate(before.items()):
-        bounded_entry = policy and policy['kind'] == bounded_log.KIND and target == policy['bounded_log']['target']
+        bounded_entry = bounded_preimage(policy, target)
         if not bounded_entry:
             refuse_log(target)
         path=root/(str(index)+'-'+Path(target).name)

@@ -24,6 +24,7 @@ class Retained(unittest.TestCase):
         self.f.setUp()
         self.addCleanup(self.f.doCleanups)
         self.s = self.f.store
+        Path(self.f.path).write_bytes(self.f.body)
 
     def record(self, path, attempt='fiction-prior'):
         self.s.db.execute('INSERT INTO artifact_custody VALUES(?,?,?,?,?,?)',
@@ -73,8 +74,10 @@ class Retained(unittest.TestCase):
         self.s.db.execute('UPDATE processing_capabilities SET selection=? WHERE id=?',
                           (encode(self.f.selection), 'fictional-current-capability'))
         _, attempt = self.f.job('Work', 'wi')
-        self.no_body(lambda:publication.prepare(self.s, attempt,
-                     {self.f.path:{'exists':True, 'sha256':self.f.sha}}))
+        before = {self.f.path:{'exists':True, 'sha256':self.f.sha}}
+        self.s.db.execute('INSERT INTO routine_runs VALUES(?,?,?,?,?,NULL,?,NULL)',
+                          (attempt, 'wi', 'fiction-grant', '{}', encode(before), 'prepared'))
+        self.publication_refuses(attempt, before)
         self.assertFalse((self.s.home/'artifacts'/'fiction-input').exists())
         # The older snapshot representation must carry the same stage target.
         self.s.db.execute("DELETE FROM artifact_custody WHERE attempt='fiction-prior'")
@@ -82,6 +85,39 @@ class Retained(unittest.TestCase):
                           ('fiction-preimage', 'wi', 'fiction-grant', '{}',
                            encode({stage:{'exists':True, 'sha256':self.f.sha}}), 'prepared'))
         self.export_refuses()
+        self.publication_refuses(attempt, before)
+
+    def publication_refuses(self, attempt, before):
+        custody_before = self.s.rows('SELECT * FROM artifact_custody')
+        runs_before = self.s.rows('SELECT * FROM routine_runs')
+        root = self.s.artifact_root(attempt)/'staged'
+        original = Path(self.f.path).read_bytes()
+        inode = Path(self.f.path).stat().st_ino
+        with patch.object(publication, 'guard_frozen', wraps=custody.guard_frozen) as guard:
+            self.no_body(lambda:publication.prepare(self.s, attempt, before))
+        self.assertTrue(guard.called, 'publication must examine recorded preimages')
+        self.assertFalse(root.exists(), 'source refusal must leave no staging directory')
+        self.assertEqual(publication.stages(self.s, attempt), {})
+        self.assertEqual(self.s.rows('SELECT * FROM file_publications'), [])
+        self.assertEqual(self.s.rows('SELECT * FROM canonical_backups'), [])
+        self.assertEqual(self.s.rows('SELECT * FROM routine_runs'), runs_before)
+        self.assertEqual(self.s.rows('SELECT * FROM artifact_custody'), custody_before)
+        self.assertEqual(self.s.one('SELECT body FROM artifact_blobs')['body'], self.f.body)
+        self.assertEqual(Path(self.f.path).read_bytes(), original)
+        self.assertEqual(Path(self.f.path).stat().st_ino, inode)
+        self.assertFalse(self.s.db.in_transaction)
+
+    def test_later_excluded_preimage_leaves_no_partial_stage(self):
+        held = str(self.f.area/'fiction-excluded-target')
+        self.s.config['artifact_exclusions'] = [held]
+        from coordinator_runtime.contracts import digest
+        self.f.selection['basis']['configuration'] = digest(self.s.config)
+        self.s.db.execute('UPDATE processing_capabilities SET selection=? WHERE id=?',
+                          (encode(self.f.selection), 'fictional-current-capability'))
+        _, attempt = self.f.job('Work', 'wi')
+        before = {str(self.f.area/'fiction-new-target'):{'exists':False},
+                  held:{'exists':True, 'sha256':self.f.sha}}
+        self.publication_refuses(attempt, before)
 
     def test_transitive_stage_and_cycle_cannot_hide_current_log_or_exclusion(self):
         first, second = (str(self.f.area/name) for name in ('fiction-first', 'fiction-second'))
