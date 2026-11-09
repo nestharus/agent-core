@@ -129,6 +129,23 @@ def command(profile, workspace, material, thread=None):
     return argv
 
 
+def executable_path(value):
+    """Explicit public executable, without resolving aliases or private stores."""
+    if (not isinstance(value, str) or not value or '\x00' in value
+            or not Path(value).is_absolute() or '..' in Path(value).parts):
+        raise ReviewRefusal('explicit absolute public executable dependency required')
+    return value
+
+
+def diagnostic(record, item):
+    """Bounded attribution; arbitrary provider text remains in owned capture."""
+    message = item.get('message', record.get('message', record.get('error', '')))
+    body = str(message).encode('utf-8')
+    return dict(event=record['type'], item_type=item.get('type'),
+                message_bytes=len(body), message_sha256=hashlib.sha256(body).hexdigest(),
+                meaning='provider diagnostic; no tool/effect or absence inferred')
+
+
 class Context:
     """One account, collector, whole lifetime and explicit public thread.
 
@@ -136,11 +153,12 @@ class Context:
     owner; it neither archives nor deletes provider storage. A lost process or
     interrupted turn cannot become a fresh conversation by reopening this path.
     """
-    def __init__(self, root, profile, collector, lifetime, originals, clock=time.monotonic):
+    def __init__(self, root, profile, collector, lifetime, originals, clock=time.monotonic, *, executable):
         if profile not in PROFILES or not isinstance(collector, str) or not collector:
             raise ReviewRefusal('original profile/collector required')
         if type(lifetime) is not int or not 1 <= lifetime <= 7200:
             raise ReviewRefusal('bounded whole-context lifetime required')
+        self.executable = executable_path(executable)
         root = Path(root)
         positive_directory(root.parent)
         root.mkdir(mode=0o700)
@@ -176,9 +194,10 @@ class Context:
         prompt = (text + '\nSelected immutable material is at ' + str(directory / 'material') +
                   '/manifest.json. Read its history first, then complete current method, diff and source. '
                   'Only this snapshot is admitted. Read files in bounded sections and retain unread limits. '
-                  'No agents, external tools, tests, source writes, private stores or startup discovery.\n')
+                  'No agents, network access, tests, source writes, private stores or startup discovery. Use only admitted local read commands.\n')
         private_write(directory / 'prompt.txt', prompt.encode())
         argv = command(self.profile, self.workspace, directory / 'material', self.thread)
+        argv[0] = self.executable
         private_write(directory / 'launch.json', json.dumps(dict(argv=argv, profile=self.profile,
             collector=self.collector, expected_thread=self.thread, permissions='requested; qualify enforcement separately',
             model_reference='opaque literal; no resolution/attestation')).encode())
@@ -202,7 +221,7 @@ class Context:
         self.thread = receipt.get('thread') or self.thread
         self.state = 'live' if receipt['answered'] else 'interrupted'
         receipt.update(transport=VERSION, profile=self.profile, collector=self.collector,
-                       input=self.calls - 1, material=manifest,
+                       input=self.calls - 1, material=manifest, executable=self.executable,
                        root_end='not a native root', processing_completion=False)
         private_write(directory / 'receipt.json', json.dumps(receipt, ensure_ascii=False).encode())
         return code, receipt, answer
@@ -222,7 +241,7 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
     child = await asyncio.create_subprocess_exec(*argv, env=env,
         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     evidence = dict(errors=[], stdout_eof=False, stderr_eof=False, bytes={'stdout': 0, 'stderr': 0})
-    observed = dict(thread=None, completed=0, failed=False, answer=None)
+    observed = dict(thread=None, completed=0, failed=False, answer=None, diagnostics=[])
     captures = []
     observations = 0
     stop_at = time.monotonic() + deadline
@@ -270,9 +289,14 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
         if not isinstance(item, dict):
             stop('malformed item event; capture partial')
             return
+        if kind in {'error', 'turn.failed'} or item.get('type') == 'error':
+            if len(observed['diagnostics']) >= 64:
+                stop('diagnostic count exceeds selected bound; capture partial')
+                return
+            observed['diagnostics'].append(diagnostic(record, item))
         if kind.startswith('item.') and item.get('type') not in {
-                'agent_message', 'reasoning', 'command_execution', 'todo_list', 'plan'}:
-            stop('unexpected non-read-command tool activity; preserve original effects')
+                'agent_message', 'reasoning', 'command_execution', 'todo_list', 'plan', 'error'}:
+            stop('unexpected item activity; tool/effect semantics unclassified; preserve original effects')
             return
         if kind == 'item.completed' and item.get('type') == 'agent_message':
             answer = item.get('text')
@@ -338,5 +362,5 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
                 and observed['completed'] == 1 and not observed['failed'] and bool(observed['answer']))
     receipt = dict(actual_END=code, original=key, capture_complete=complete, answered=answered,
                    thread=observed['thread'], turn_completed=observed['completed'],
-                   turn_failed=observed['failed'], lifetime_exceeded=timed_out, **evidence)
+                   turn_failed=observed['failed'], diagnostics=observed['diagnostics'], lifetime_exceeded=timed_out, **evidence)
     return code, receipt, observed['answer']

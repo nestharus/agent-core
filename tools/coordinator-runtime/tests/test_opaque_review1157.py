@@ -90,7 +90,7 @@ class SharedOwnership(unittest.IsolatedAsyncioTestCase):
         self.module = public_module()
         self.home = Path(tempfile.mkdtemp(prefix='owned1157-', dir=os.environ['ONEOFF1077_FIXTURES']))
         self.originals = Originals()
-        self.context = self.module.Context(self.home/'context', '.codex4', 'fictional-collector', 30, self.originals)
+        self.context = self.module.Context(self.home/'context', '.codex4', 'fictional-collector', 30, self.originals, executable='/usr/bin/false')
         self.ends, self.argv = [], []
         self.actual_spawn = asyncio.create_subprocess_exec
         self.child_body = (
@@ -215,7 +215,7 @@ class SelectedController(unittest.TestCase):
     def public_case(self, semantic, close):
         store, runtime, job, packet, policy, acquired, unused = self.fixture.native_fixture()
         store.config['tasks']['reviews-proposer'].update(execution='owner', binding=dict(opaque_review.BINDING))
-        policy.update(transport=opaque_review.VERSION,
+        policy.update(transport=opaque_review.VERSION, executable='/usr/bin/false',
                       launcher_sha256=reviews.sha(opaque_review.launcher_path().read_bytes()))
         # Fictional method/source/authority seam, as in scoped29. This tests
         # controller routing, not public method incorporation or real provider.
@@ -292,7 +292,7 @@ class SelectedController(unittest.TestCase):
         head = subprocess.check_output(['git', '-C', str(area), 'rev-parse', 'HEAD']).decode().strip()
         packet.update(base=head, head=head)
         acquired.update(source={head+':fiction.txt':dict(bytes=len(body), sha256=reviews.sha(body))}, situation={'goals':'fixture custody'})
-        policy.update(transport=opaque_review.VERSION,
+        policy.update(transport=opaque_review.VERSION, executable='/usr/bin/false',
             launcher_sha256=reviews.sha(opaque_review.launcher_path().read_bytes()), method_closure='unified-definitions-v1')
         store.config['tasks']['reviews-proposer'].update(execution='owner', binding=dict(opaque_review.BINDING))
         transport = reviews.Native()
@@ -302,7 +302,7 @@ class SelectedController(unittest.TestCase):
         calls = []
 
         async def harmless(*argv, **kwargs):
-            self.assertEqual(argv[0], 'codex')
+            self.assertEqual(argv[0], '/usr/bin/false')
             self.assertEqual(argv[argv.index('--model')+1], 'gpt-xhigh')
             self.assertNotIn('--route', argv)
             self.assertNotIn('--root', argv)

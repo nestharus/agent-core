@@ -41,13 +41,17 @@ def binding(task):
 
 
 def validate(policy):
-    fields = {'transport', 'launcher_sha256', 'deadline', 'method', 'method_files', 'method_closure', 'components'}
+    fields = {'transport', 'launcher_sha256', 'executable', 'deadline', 'method', 'method_files', 'method_closure', 'components'}
     if set(policy) != fields or policy['transport'] != VERSION or type(policy['deadline']) is not int or not 1 <= policy['deadline'] <= 7200:
         raise Refusal('exact opaque CLI policy and whole-context deadline required')
     from .method_closure import VERSION as CLOSURE
     if policy['method_closure'] != CLOSURE:
         raise Refusal('opaque Reviews requires complete current unified definition closure')
-    launcher(policy)
+    module = launcher(policy)
+    try:
+        module.executable_path(policy['executable'])
+    except module.ReviewRefusal as exc:
+        raise Refusal(str(exc)) from exc
     for material in policy['components'].values():
         situation = material.get('situation')
         if not isinstance(situation, dict) or set(situation) != SITUATION:
@@ -141,11 +145,13 @@ async def call(native, runtime, attempt, policy, context, directory, text, openi
             if owner is not None:
                 raise Refusal('public context already created; no replay')
             owner = module.Context(context['handle'], context['profile'], runtime.controller,
-                                   policy['deadline'], native.originals, clock=runtime.clock)
+                                   policy['deadline'], native.originals, clock=runtime.clock,
+                                   executable=policy['executable'])
             owner.created = context['created']
             native.public_contexts[context['handle']] = owner
         if (owner is None or owner.thread != context['run'] or owner.profile != context['profile']
-                or owner.collector != runtime.controller or owner.lifetime != policy['deadline']):
+                or owner.collector != runtime.controller or owner.lifetime != policy['deadline']
+                or owner.executable != policy['executable']):
             raise Refusal('original public context/account/lifetime unavailable or changed')
         with runtime.tx():
             runtime.db.execute("UPDATE review_calls SET state='launch-intent' WHERE attempt=?", (attempt,))
