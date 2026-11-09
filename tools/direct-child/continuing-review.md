@@ -1,3 +1,5 @@
+Current selected coordinator source adds the explicitly bound shared live control and seven-module `protected-continuing-v4` closure described in `../coordinator-runtime/shared-fast-control.md`. Earlier source/composition accounts below retain their historical scope; the current dispatch requires v4 for protected source composition. This constructs a candidate and does not adopt it or migrate originals.
+
 # Protected continuing review
 
 `ContinuingReview` is an explicit public continuing contract. Ordinary

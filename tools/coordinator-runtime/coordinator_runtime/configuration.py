@@ -560,7 +560,7 @@ def select_protocol(runtime, original, value, choice):
 
 def apply_scope_options(original, value, options, *, runtime=None):
     """Explicit future narrowing and associated resource ceilings, never old policy edits."""
-    if not isinstance(options, dict) or set(options) - {'protocol_upgrade', 'public_runtime_reads', 'read_ceiling_extensions', 'read_roots', 'neutral_startup', 'exclusions', 'linked_repositories', 'capacity', 'cwd', 'local_integration', 'package_scoped_cleanup', 'package_scoped_proposals', 'repository_reads', 'task_text', 'operations', 'qa_branch_sequence'}:
+    if not isinstance(options, dict) or set(options) - {'live_fast_control', 'protocol_upgrade', 'public_runtime_reads', 'read_ceiling_extensions', 'read_roots', 'neutral_startup', 'exclusions', 'linked_repositories', 'capacity', 'cwd', 'local_integration', 'package_scoped_cleanup', 'package_scoped_proposals', 'repository_reads', 'task_text', 'operations', 'qa_branch_sequence'}:
         raise Refusal('unsupported prospective scope option')
     if 'protocol_upgrade' in options and set(options) != {'protocol_upgrade'}:
         raise Refusal('protocol upgrade must preserve all existing task rights and scope options')
@@ -597,6 +597,8 @@ def apply_scope_options(original, value, options, *, runtime=None):
     def safe(p):
         from .resource_scopes import root
         return root(p, value.get('artifact_exclusions', []))
+    from .live_fast import extend as extend_live_fast
+    extend_live_fast(runtime, original, value, options.get('live_fast_control'))
     read_ceiling_extensions(runtime, original, value, options.get('read_ceiling_extensions', {}))
     from .public_runtime import extend as extend_public_runtime
     extend_public_runtime(runtime, original, value, options.get('public_runtime_reads', {}))
@@ -782,7 +784,7 @@ def validate_changes(runtime, value, tasks):
         raise Refusal('unsupported current configuration delta; only coherent selectors and exact release scopes may change')
     if any(name not in tasks for name in additions):
         raise Refusal('every added scope needs an explicitly selected prospective task')
-    if options and (set(options.get('public_runtime_reads', {})) | set(options.get('read_ceiling_extensions', {})) | set(options.get('read_roots', {})) | set(options.get('neutral_startup', [])) | set(options.get('linked_repositories', {})) | set(options.get('cwd', {})) | set(options.get('package_scoped_cleanup', [])) | set(options.get('package_scoped_proposals', [])) | set(options.get('repository_reads', {}))) - set(tasks):
+    if options and (set((options.get('live_fast_control') or {}).get('bindings', {})) | set(options.get('public_runtime_reads', {})) | set(options.get('read_ceiling_extensions', {})) | set(options.get('read_roots', {})) | set(options.get('neutral_startup', [])) | set(options.get('linked_repositories', {})) | set(options.get('cwd', {})) | set(options.get('package_scoped_cleanup', [])) | set(options.get('package_scoped_proposals', [])) | set(options.get('repository_reads', {}))) - set(tasks):
         raise Refusal('every changed future scope/startup needs an explicitly selected task')
     if options and 'protocol_upgrade' in options:
         if (set(tasks) != set(value['tasks']) or additions

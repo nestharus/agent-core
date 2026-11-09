@@ -19,8 +19,18 @@ from .resource_scopes import root
 VERSION = 'protected-continuing-v1'
 PROGRAM_VERSION = 'protected-continuing-v2'
 RUNTIME_VERSION = 'protected-continuing-v3'
+FAST_VERSION = 'protected-continuing-v4'
+PROGRAM_VERSIONS = {PROGRAM_VERSION, RUNTIME_VERSION, FAST_VERSION}
+HELPER_VERSIONS = {RUNTIME_VERSION, FAST_VERSION}
 MODULES = ('profile_lease', 'execution_pool', 'dispatch', 'review_context',
            'opaque_dialogue', 'continuing_review')
+FAST_MODULES = ('profile_lease', 'execution_pool', 'fast_tier', 'dispatch', 'review_context',
+                'opaque_dialogue', 'continuing_review')
+
+def module_names(value):
+    return FAST_MODULES if value['version'] == FAST_VERSION else MODULES
+
+
 FIELDS = {'version', 'source_files', 'pool_control', 'runtime_reads',
           'executable_sha256', 'capture_max', 'allowance_bytes', 'allowance_entries'}
 
@@ -29,13 +39,15 @@ def declaration(policy):
     value = policy.get('continuing')
     if not isinstance(value, dict):
         raise Refusal('selected protected continuing composition required before execution')
-    fields = FIELDS | {'executable_identity'} if value.get('version') in {PROGRAM_VERSION, RUNTIME_VERSION} else FIELDS
-    if value.get('version') == RUNTIME_VERSION:
+    fields = FIELDS | {'executable_identity'} if value.get('version') in PROGRAM_VERSIONS else FIELDS
+    if value.get('version') in HELPER_VERSIONS:
         fields = fields | {'probe_helper'}
-    if set(value) != fields or value['version'] not in {VERSION, PROGRAM_VERSION, RUNTIME_VERSION}:
+    if value.get('version') == FAST_VERSION:
+        fields = fields | {'fast_tier'}
+    if set(value) != fields or value['version'] not in {VERSION, *PROGRAM_VERSIONS}:
         raise Refusal('selected protected continuing composition required before execution')
     if (not isinstance(value['source_files'], dict)
-            or set(value['source_files']) != {name+'.py' for name in MODULES}):
+            or set(value['source_files']) != {name+'.py' for name in module_names(value)}):
         raise Refusal('complete exact continuing source dependency pins required')
     if (not isinstance(value['runtime_reads'], list) or not value['runtime_reads']
             or len(value['runtime_reads']) > 256 or len(set(value['runtime_reads'])) != len(value['runtime_reads'])):
@@ -49,15 +61,22 @@ def declaration(policy):
     for expected in [*value['source_files'].values(), value['executable_sha256']]:
         if not isinstance(expected, str) or len(expected) != 64 or any(c not in '0123456789abcdef' for c in expected):
             raise Refusal('exact SHA256 dependency identity required')
-    if value['version'] in {PROGRAM_VERSION, RUNTIME_VERSION}:
+    if value['version'] in PROGRAM_VERSIONS:
         program = value['executable_identity']
         if (not isinstance(program, dict) or set(program) != {'bytes', 'max_bytes'}
                 or type(program['bytes']) is not int or type(program['max_bytes']) is not int
                 or not 0 < program['bytes'] <= program['max_bytes'] <= 1024**3):
             raise Refusal('explicit finite complete executable identity allowance required')
-    if value['version'] == RUNTIME_VERSION:
+    if value['version'] in HELPER_VERSIONS:
         from .public_runtime import helper_declaration
         helper_declaration(value['probe_helper'])
+    if value['version'] == FAST_VERSION:
+        from .live_fast import declaration as live_declaration
+        if not isinstance(value['fast_tier'], dict):
+            raise Refusal('explicit shared live fast control binding required')
+        live_declaration(value['fast_tier'], value['fast_tier'].get('tasks', []))
+        if value['fast_tier']['helper_sha256'] != value['source_files']['fast_tier.py']:
+            raise Refusal('fast helper identity must equal frozen source dependency')
     control = value['pool_control']
     if not isinstance(control, dict) or set(control) != {'routes', 'static_sha256'}:
         raise Refusal('public static pool control binding required')
@@ -87,13 +106,16 @@ def source_bodies(runtime, attempt, policy):
     value = declaration(policy)
     directory = Path(__file__).parents[2] / 'direct-child'
     # Validate every operand first, before any module is imported or measured.
-    paths = {name: admitted_path(runtime, attempt, str(directory/(name+'.py'))) for name in MODULES}
+    paths = {name: admitted_path(runtime, attempt, str(directory/(name+'.py')),
+        source_read=value['version'] == FAST_VERSION) for name in module_names(value)}
     from .reviews import sha
     bodies = {name: read_file(path, 256*1024)[0] for name, path in paths.items()}
     if any(sha(body) != value['source_files'][name+'.py'] for name, body in bodies.items()):
         raise Refusal('selected continuing source dependency changed; no substitute')
     if sha(bodies['review_context']) != policy['launcher_sha256']:
         raise Refusal('launcher and continuing source selection disagree')
+    if value['version'] != FAST_VERSION and b'fast_tier' in bodies['dispatch']:
+        raise Refusal('selected dispatch imports fast_tier; explicit v4 dependency closure required')
     return paths, bodies
 
 
@@ -106,7 +128,7 @@ def modules(paths, bodies):
     package.__path__ = []
     sys.modules[name] = package
     try:
-        for leaf in MODULES:
+        for leaf in (FAST_MODULES if 'fast_tier' in bodies else MODULES):
             module = ModuleType(name+'.'+leaf)
             module.__file__, module.__package__ = str(paths[leaf]), name
             sys.modules[module.__name__] = module
@@ -125,16 +147,16 @@ def dependencies(runtime, attempt, policy, package):
     if getattr(package, 'failed', True):
         raise Refusal('original source namespace failed; no partial reuse')
     executable = admitted_path(runtime, attempt, policy['executable'],
-                               source_read=value['version'] in {PROGRAM_VERSION, RUNTIME_VERSION})
+                               source_read=value['version'] in PROGRAM_VERSIONS)
     routes = admitted_path(runtime, attempt, value['pool_control']['routes'])
     if str(routes) != runtime.config.get('execution_pool_routes'):
         raise Refusal('execution and admission must share the selected public control')
     for path in value['runtime_reads']:
-        admitted_path(runtime, attempt, path, source_read=value['version'] == RUNTIME_VERSION)
-    if value['version'] == RUNTIME_VERSION:
+        admitted_path(runtime, attempt, path, source_read=value['version'] in HELPER_VERSIONS)
+    if value['version'] in HELPER_VERSIONS:
         probe_helper(runtime, attempt, policy)
     from .reviews import sha
-    if value['version'] in {PROGRAM_VERSION, RUNTIME_VERSION}:
+    if value['version'] in PROGRAM_VERSIONS:
         from .public_program import identity
         program = value['executable_identity']
         observed = identity(executable, program['bytes'], program['max_bytes'],
@@ -182,10 +204,14 @@ class SelectedOwner:
             raise Refusal('complete configured answer must fit selected capture allowance')
         self.root = Path(context['handle'])
         self.capacity(self.root.parent)
-        execution = package.dispatch.open_opaque_execution(routes, 'gpt-xhigh', context['profile'])
+        from .live_fast import snapshot
+        if value['version'] != FAST_VERSION or value['fast_tier'] != runtime.config.get('fast_tier'):
+            raise Refusal('one shared live control must match current caller and continuation')
+        _, force = snapshot(runtime, attempt, package)
+        execution = package.dispatch.open_opaque_execution(routes, 'gpt-xhigh', context['profile'], force_fast=force)
         protection = package.continuing_review.SandboxProtection(
             self.root, policy['executable'], value['runtime_reads'], self.capacity,
-            probe_helper=(lambda: self.current_probe_helper()) if value['version'] == RUNTIME_VERSION else None)
+            probe_helper=(lambda: self.current_probe_helper()) if value['version'] in HELPER_VERSIONS else None)
         self.endpoint = package.continuing_review.ExecEndpoint(
             self.root, policy['executable'], native.originals.scope(), runtime.execution_pool.admission,
             self.authorize, protection, self.capacity, None, execution=execution)
@@ -231,6 +257,10 @@ class SelectedOwner:
             raise Refusal('original continuing owner/current selection changed')
         paths, bodies = source_bodies(runtime, self.attempt, self.policy)
         dependencies(runtime, self.attempt, self.policy, self.package)
+        from .live_fast import declaration as live_declaration
+        control = live_declaration(runtime.config.get('fast_tier'), runtime.config['tasks'], runtime.config.get('artifact_exclusions', []))
+        if control != self.policy['continuing'].get('fast_tier') or self.task not in control['tasks']:
+            raise Refusal('original shared fast control authority changed; no migration')
 
     def bind(self, attempt):
         self.attempt = attempt

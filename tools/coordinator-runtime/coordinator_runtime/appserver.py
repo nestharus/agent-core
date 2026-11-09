@@ -20,6 +20,11 @@ from .contracts import (PROFILES, Refusal, canonical_uuid, encode, parse_json,
                         task_result, task_result_issues, task_result_instructions, report_only, digest, ident)
 from . import storage, readiness, observations
 
+def fast_policy(runtime, attempt):
+    from .live_fast import snapshot
+    return snapshot(runtime, attempt)
+
+
 RPC_METHODS = frozenset({'initialize', 'config/read', 'thread/start', 'thread/read',
                          'thread/unsubscribe', 'turn/start', 'turn/interrupt'})
 
@@ -637,7 +642,7 @@ class Peer:
             raise HandbackFailure('owned authoritative final is invalid JSON; content remains unknown') from exc
 
 
-def thread_request(spec,binding):
+def thread_request(spec,binding, force_fast=False):
     if spec.get('exact_session_after_exit'):
         raise Refusal('ephemeral thread cannot preserve exact-session continuation after owner exit')
     return {
@@ -646,6 +651,7 @@ def thread_request(spec,binding):
         'approvalPolicy':'never','sandbox':spec['sandbox'],'serviceName':'coordinator_runtime',
         'runtimeWorkspaceRoots':spec.get('effect_authority',{}).get('write_roots',[]) or [spec['cwd']],
         'config':{'model_reasoning_effort':binding['effort'],
+                  **({'service_tier':'fast', 'features.fast_mode':True} if force_fast else {}),
                   **({'project_doc_max_bytes':0} if scoped_startup(spec) else {})},
         'developerInstructions':'Execute personally. No AI/subagent/model launches, no background effects. '
             + ('Scoped startup: read only explicit supplied inputs/current method and context. '
@@ -703,7 +709,9 @@ class AppServer:
             owned_storage = storage.prepare(store, attempt)
             outcome['detail']['startup_stage'] = 'preflight'
             argv, preflight_result = await self.command(profile, storage.flags(owned_storage), spec['cwd'],
-                publish=lambda observation: store.record_original_end(attempt, observation))
+                publish=lambda observation: store.record_original_end(attempt, observation), runtime=store, attempt=attempt)
+            outcome['detail']['fast_tier'] = {key: preflight_result[key] for key in
+                ('force_fast', 'requested_service_tier', 'served_service_tier', 'fast_tier_support') if key in preflight_result}
             outcome['detail']['startup_stage'] = 'process-creation'
             store.authorize_launch(attempt)
             # Admission and BEGIN share the operator-update lock. It is released
@@ -726,6 +734,7 @@ class AppServer:
             outcome['detail']['protocol_progress'] = peer.progress
             outcome['detail']['startup_stage'] = 'protocol'
             peer.owned_storage = owned_storage
+            peer.force_fast = preflight_result.get("force_fast", False)
             if owned_storage or store.one('SELECT admission FROM attempt_artifact_roots WHERE attempt=?', (attempt,)):
                 watcher=asyncio.create_task(storage.guard(store,child,outcome))
             outcome["result"] = await self.session(peer, store, attempt, prompt, spec, binding, profile, schema, outcome)
@@ -853,13 +862,19 @@ class AppServer:
         except Exception as exc:
             outcome['detail']['storage_watcher_failure'] = type(exc).__name__
 
-    async def command(self, profile, storage_flags=(), cwd=None, *, publish=None):
+    async def command(self, profile, storage_flags=(), cwd=None, *, publish=None, runtime=None, attempt=None):
+        if runtime is None or attempt is None:
+            raise Refusal("current runtime/attempt required for live fast policy")
+        if self.config != runtime.config:
+            raise Refusal("caller and actual runtime configuration must agree")
+        policy, force = fast_policy(runtime, attempt)
+        tier = policy.selection(force=force)
         if self.fixture_command:
-            return self.fixture_command, {"fixture": True, "mcp": "fixture-only", "delegation_capability": "not-established"}
+            return self.fixture_command, {"fixture": True, "mcp": "fixture-only", "delegation_capability": "not-established", **tier}
         codex = self.config.get("codex", "codex")
         flags, facts = await preflight(codex, profile, self.config["protocol_cli_version"], storage_flags, cwd,
                                        originals=self.metadata_originals, publish=publish)
-        return [codex, *flags, "app-server", "--strict-config", "--listen", "stdio://"], facts
+        return [codex, *flags, *policy.flags(force), "app-server", "--strict-config", "--listen", "stdio://"], {**facts, **tier}
 
     async def session(self, peer, store, attempt, prompt, spec, binding, profile, schema, outcome):
         hello = await peer.rpc("initialize", {"clientInfo": {"name": "coordinator_runtime", "version": "1"},
@@ -874,7 +889,7 @@ class AppServer:
                 'scope':'capture controls only; account stores remain shared/unqualified'}
         store.authorize_launch(attempt)
         outcome['detail']['thread_start']='requested-uncertain'
-        created = await peer.rpc("thread/start", thread_request(spec,binding))
+        created = await peer.rpc("thread/start", thread_request(spec,binding, getattr(peer, "force_fast", False)))
         thread = created.get("thread", {})
         session = canonical_uuid(thread.get("id"))
         peer.thread = session

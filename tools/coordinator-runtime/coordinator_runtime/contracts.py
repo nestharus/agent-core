@@ -129,6 +129,9 @@ def validate_config(config, *, withdrawal_only=False):
     window_policy(config)
     from .custodian_service import policy as custodian_policy
     custodian_policy(config)
+    if 'fast_tier' in config:
+        from .live_fast import declaration
+        declaration(config['fast_tier'], config['tasks'], config.get('artifact_exclusions', []))
     if config.get("version") != 1:
         raise Refusal("configuration version 1 required")
     canonical_uuid(config["actor"])

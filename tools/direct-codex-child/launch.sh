@@ -27,10 +27,10 @@ EOF
 die() { printf 'direct-codex-child: %s\n' "$*" >&2; exit 2; }
 
 profile='' cwd='' prompt='' runs_dir='' child_id='' dry_run=false preflight_only=false
-model='' effort='' route_json='' ephemeral=false log_max_bytes='' execution_pool_routes=''
+model='' effort='' route_json='' ephemeral=false log_max_bytes='' expected_fast_policy='' execution_pool_routes=''
 while (($#)); do
   case "$1" in
-    --profile|--cwd|--prompt|--runs-dir|--id|--model|--effort|--route-json|--lease-wait|--log-max-bytes|--execution-pool-routes)
+    --profile|--cwd|--prompt|--runs-dir|--id|--model|--effort|--route-json|--lease-wait|--expected-fast-policy|--log-max-bytes|--execution-pool-routes)
       (($# >= 2)) || die "missing value for $1"
       case "$1" in
         --profile) [[ -z $profile ]] || die 'duplicate --profile'; profile=$2 ;;
@@ -43,6 +43,7 @@ while (($#)); do
         --route-json) [[ -z $route_json ]] || die 'duplicate --route-json'; route_json=$2 ;;
         --execution-pool-routes) [[ -z $execution_pool_routes ]] || die 'duplicate --execution-pool-routes'; execution_pool_routes=$2 ;;
         --log-max-bytes) [[ -z $log_max_bytes ]] || die 'duplicate --log-max-bytes'; log_max_bytes=$2 ;;
+        --expected-fast-policy) [[ -z $expected_fast_policy ]] || die 'duplicate --expected-fast-policy'; expected_fast_policy=$2 ;;
         --lease-wait) ;;  # retired with the profile lock; accepted and ignored
       esac
       shift 2 ;;
@@ -54,6 +55,17 @@ while (($#)); do
   esac
 done
 [[ $dry_run == false || $preflight_only == false ]] || die 'choose either --dry-run or --preflight-only'
+
+# Snapshot the one public policy before profile inspection or any launch effect.
+launcher_dir=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || die 'cannot locate launcher'
+force_fast=$(python3 "$launcher_dir/../direct-child/fast_tier.py" get) || die 'invalid fast-tier policy; child not started'
+[[ -z $expected_fast_policy || $expected_fast_policy == "$force_fast" ]] || die 'fast-tier policy changed since dispatch; child not started'
+fast_flags=()
+requested_service_tier=profile-default
+if [[ $force_fast == true ]]; then
+  fast_flags=(-c 'features.fast_mode=true' -c 'service_tier="fast"')
+  requested_service_tier=fast
+fi
 
 case "$profile" in .codex|.codex2|.codex3|.codex4|.codex5) ;; *) die 'profile must be .codex, .codex2, .codex3, .codex4, or .codex5' ;; esac
 [[ -n $model || -z $effort ]] && [[ -z $model || -n $effort ]] \
@@ -82,6 +94,8 @@ profile_home="$HOME/$profile"
 if [[ $dry_run == true ]]; then
   printf 'DRY RUN: profile=%s model=%s effort=%s cwd=%s prompt=%s runs-dir=%s id=%s\n' \
     "$profile" "$model" "$effort" "$cwd" "$prompt" "$runs_dir" "$child_id"
+  printf 'DRY RUN: force_fast=%s requested_service_tier=%s served_service_tier=unobserved\n' \
+    "$force_fast" "$requested_service_tier"
   printf 'DRY RUN: no artifacts created; Codex and MCP preflight not invoked\n'
   exit 0
 fi
@@ -229,6 +243,7 @@ git_branch=$(git -C "$cwd" branch --show-current 2>/dev/null || printf 'unavaila
   printf 'cwd=%s\ngit_branch=%s\ngit_head_at_start=%s\n' "$cwd" "$git_branch" "$git_head"
   printf 'prompt=%s\nlog=%s\nfinal=%s\n' "$prompt_snapshot" "$log_path" "$final_path"
   printf 'ephemeral=%s\nlog_max_bytes=%s\n' "$ephemeral" "${log_max_bytes:-unlimited}"
+  printf 'force_fast=%s\nrequested_service_tier=%s\nserved_service_tier=unobserved\n' "$force_fast" "$requested_service_tier"
   [[ -z $log_max_bytes ]] || printf 'log_capture_summary=%s\n' "$attempt/capture.json"
   printf 'delegation_capability=%s\n' "$delegation_status"
   [[ -z $delegation_note ]] || printf 'delegation_capability_note=%s\n' "$delegation_note"
@@ -254,7 +269,7 @@ run_child() {
       exec --profile "$profile" --receipt "$attempt/pool-admission.json" --)
   fi
   CODEX_HOME="$profile_home" "${admission[@]}" codex exec --dangerously-bypass-approvals-and-sandbox \
-    -m "$model" -c "model_reasoning_effort=\"$effort\"" "${mcp_flags[@]}" "${delegation_flags[@]}" \
+    -m "$model" -c "model_reasoning_effort=\"$effort\"" "${fast_flags[@]}" "${mcp_flags[@]}" "${delegation_flags[@]}" \
     "${session_flags[@]}" -C "$cwd" --color never -o "$final_path" -
 }
 if [[ -n $log_max_bytes ]]; then

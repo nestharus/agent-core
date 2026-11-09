@@ -1,5 +1,7 @@
 # Contextual direct dispatcher (temporary outage transport)
 
+Temporary fast-tier policy is enabled for new Codex launches. See [the shared switch and transport precedence](../direct-child/FAST-TIER.md); it supersedes Codex native defaults below while enabled. Requests do not attest the served tier.
+
 `dispatch.py` picks a route for **one** child from its run context, then runs a Codex or Claude session in the foreground, through the declared Linux native ACP v2 caller path for exactly mapped bindings (Sol 6.1 high and Luna 6 max on each Codex profile's registered account route, and Opus 5.5 medium or high on the original `claude5` store) by default, otherwise directly through the CLI ([Transport](#transport)). ROOT owns installation, site registration and live activation; the declaration establishes no qualified default. It implements the [shared temporary dispatch rule](../../AGENTS.md#temporary-direct-codex-dispatch-during-agent-runner-outage) while `agents` / `agent-runner` is down. The same seat can take a different model depending on its class and on the kind of work. [`routes.toml`](routes.toml) is the single place to change providers, models, efforts, seat mappings, class mappings, and profile pools.
 
 It does not decide seat authority or context boundaries, and it does not check that a class or kind claim is true. The caller asserts both and owns them. It does not select tasks, allocate worktrees, authorize effects, or replace the review and delivery lifecycle.
@@ -233,7 +235,7 @@ for reservation fairness, restart, counter/crash limits and compatibility cutove
 ## Example
 
 ```bash
-/home/nes/ai/tools/direct-child/dispatch.py \
+"${AI_TOOLS}/direct-child/dispatch.py" \
   --seat maker --class new-foundation --basis /abs/facts.md#launcher-gap --pass generative \
   --cwd /absolute/worktree --prompt /absolute/prompt.md \
   --runs-dir /absolute/runs --id maker-routing

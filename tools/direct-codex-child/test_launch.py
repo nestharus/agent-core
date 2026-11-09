@@ -438,7 +438,7 @@ class LauncherTest(unittest.TestCase):
                 state = self.state()
                 self.assertIn("delegation_capability=not-established\n", state)
                 self.assertIn(f"delegation_capability_note={note}\n", state)
-                passed = any(arg.startswith("features.") for arg in self.exec_args())
+                passed = any(arg.startswith("features.") and arg.endswith("=false") for arg in self.exec_args())
                 self.assertEqual(passed, flags_passed)
 
     def test_partial_or_duplicate_readback_does_not_claim_complete_metadata(self):
