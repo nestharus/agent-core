@@ -117,31 +117,61 @@ Numeric process END, evidence-finalizer completion, pipe EOF, publication, local
 close and whole processing retain their different meanings. This supplies no
 hard-crash successor, escaped-descendant theorem or automatic recovery loop.
 
+A local sandbox-control drain that ends with an admission, read or write failure
+can finalize unsuccessfully on the same original once numeric END, settled drain
+tasks, truthful evidence persistence and publication are available. Its receipt
+records each failed stream and actual EOF independently; complete capture and
+protection are not inferred from a completed finalizer. Required partial capture
+files remain retained. A failed evidence write leaves the original pending and
+uses a fresh exclusive receipt name on same-owner retry. Publication-only retry
+reuses completed evidence. Unknown END or unavailable persistence/publication
+still prevents discharge and local close. No capture replay, replacement context,
+lifetime renewal or whole-processing closure follows.
+
 ## Coordinator composition and receiving boundary
 
-The current coordinator source has a distinct `opaque-cli-v1` selection contract
-in `coordinator_runtime/opaque_review.py`. It pins the public Context launcher and
-constructs it without this endpoint's protection/execution dependencies. The
-Reviews executor separately associates an observed reviewer with its branch and
-keeps it different from the responsible Root and builders; it transports the
-whole proposal to the sole Reviews integrator. Sharing Context does not select
-this protected composition.
+The selected coordinator caller composes this continuing owner through
+`opaque_review.call -> review_composition.call -> ContinuingReview -> ExecEndpoint
+-> Context -> Originals -> Store.record_original_end`; see
+[protected continuing Reviews](../coordinator-runtime/protected-continuing-reviews.md).
+Its factory supplies the execution capability, actual SandboxProtection, scoped
+original collector, capacity checks and original-specific publisher. Store admits
+`owned-sandbox-control` as its own true numeric-original kind. Reviews keeps the
+observed reviewer distinct from the responsible Root and builders and sends the
+whole proposal to the sole integrator.
 
-The local-control publisher emits `owned-sandbox-control`. The existing Store
-numeric-original callback admits only `appserver-model`, `preflight-metadata`,
-`native-caller` and `opaque-cli-process`; choosing that callback directly is
-incompatible. Relabeling a control process does not supply compatibility.
-Likewise `native_review_scope._authenticate` requires
-`selected-ordinary-review` and explicitly refuses generic CLI proof. Changing
-that receiver or claiming native proof is not part of this contribution.
+This is source construction. Actual service selection, current admitted operands,
+live qualification and receiving acceptance remain separate. Generic proof is
+`selected-opaque-cli-review`, with `native_owner_execution=false`.
+`native_review_scope._authenticate` still requires `selected-ordinary-review` and
+refuses generic CLI proof; a truly selected native receiver needs real native
+proof. Neither a new Store kind nor a publication grants that proof.
+
+### Historical composition account
+
+The following earlier account described the coordinator before the selected
+continuing factory and Store control-kind admission. It is retained as transition
+history; its present-tense wording does not describe the current source above.
+The original wording and its changes remain in Git history.
+
+> The current coordinator source has a distinct `opaque-cli-v1` selection contract
+> in `coordinator_runtime/opaque_review.py`. It pins the public Context launcher and
+> constructs it without this endpoint's protection/execution dependencies. The
+> Reviews executor separately associates an observed reviewer with its branch and
+> keeps it different from the responsible Root and builders; it transports the
+> whole proposal to the sole Reviews integrator. Sharing Context does not select
+> this protected composition.
+>
+> The local-control publisher emits `owned-sandbox-control`. The existing Store
+> numeric-original callback admits only `appserver-model`, `preflight-metadata`,
+> `native-caller` and `opaque-cli-process`; choosing that callback directly is
+> incompatible. Relabeling a control process does not supply compatibility.
+> Likewise `native_review_scope._authenticate` requires
+> `selected-ordinary-review` and explicitly refuses generic CLI proof. Changing
+> that receiver or claiming native proof is not part of this contribution.
 
 A caller must establish the applicable selection, current task/source authority,
 admitted material, protection dependencies, publisher and receiving contract
 before claiming adoption. The generic endpoint cannot satisfy a selected native
 receiver's native-proof requirement. Source availability and focused local tests
 do not select a caller, install it or establish operating/receiving applicability.
-
-
-The coordinator now composes this owner through its selected public caller; see
-[protected continuing Reviews](../coordinator-runtime/protected-continuing-reviews.md).
-Source construction is distinct from actual service selection and live qualification.

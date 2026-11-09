@@ -73,9 +73,18 @@ They are not relabeled as CLI, model or native processes. Store retains its
 numeric-status, original-collector and immutable-observation guards. Every exec
 turn separately records its numeric END and stdout/stderr EOF/capture state.
 Persistence or publication failure retains the same capable in-memory finalizer.
-A normal retry reserves a new exclusive receipt name before writing and
-preserves failed or partial earlier bytes. It grants no crash succession, lost
-handle recovery or automatic task replay.
+For local controls and exec turns, evidence persistence happens before the
+original is released. A normal retry reserves a new exclusive receipt name before
+writing and preserves failed or partial earlier bytes. Publication-only retries
+reuse completed evidence. An ordinary local-control drain admission/read/write
+fault records incomplete capture instead of permanently re-awaiting the same
+completed failed task. Same-original unsuccessful finalization can then progress
+with actual numeric END, settled capture tasks, usable evidence storage and
+successful publication. Real EOF may be known or unknown independently of capture
+completeness; an unsuccessful control cannot qualify protection. Missing END or
+unfulfilled persistence/publication duties still retain the original and prevent
+local close. This grants no crash succession, lost handle recovery or automatic
+task replay.
 
 The proof includes qualification separately from substantive input indices:
 qualification is input 0, first architecture is input 1, remaining is input 2.

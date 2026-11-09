@@ -101,9 +101,36 @@ class SandboxProtection:
         evidence = dict(stdout_eof=False, stderr_eof=False, errors=[])
         captures = []
         child = None
+        results, receipt_attempts = [], []
+        capture_failures_recorded = False
         async def finish(entry):
-            await asyncio.wait_for(asyncio.gather(*captures), 3)
-            entry['evidence'] = dict(evidence)
+            nonlocal results, capture_failures_recorded
+            # A completed failed drain is evidence of incomplete capture, not an
+            # endlessly retryable capture operation. Keep real EOF facts intact.
+            results = await asyncio.wait_for(
+                asyncio.gather(*captures, return_exceptions=True), 3)
+            if not capture_failures_recorded:
+                for stream_name, result in zip(('stdout', 'stderr'), results):
+                    if isinstance(result, BaseException):
+                        evidence['errors'].append(
+                            stream_name+' capture failed: '+type(result).__name__)
+                capture_failures_recorded = True
+            evidence['capture_complete'] = bool(evidence['stdout_eof']
+                and evidence['stderr_eof'] and not evidence['errors'])
+            # Persist before discharging this original's evidence duty. Reserve
+            # each exclusive name first so partial failed writes survive retry.
+            suffix = '' if not receipt_attempts else '-'+str(len(receipt_attempts))
+            path = directory/(name+'.original'+suffix+'.json')
+            receipt_attempts.append(path.name)
+            receipt = dict(original=key, actual_END=entry['exit'],
+                evidence=dict(evidence),
+                stderr_bytes=len(results[1]) if isinstance(results[1], bytes) else None,
+                receipt_attempts=list(receipt_attempts),
+                collection_failures=list(entry['failures']))
+            entry['evidence'] = dict(evidence, receipt=path.name,
+                receipt_attempts=list(receipt_attempts), receipt_persisted=False)
+            private_write(path, json.dumps(receipt).encode(), self.capacity_check)
+            entry['evidence']['receipt_persisted'] = True
         # Register the actual handle before capture setup or input delivery.
         child = await asyncio.create_subprocess_exec(*argv,
             env={'PATH':'/usr/local/bin:/usr/bin:/bin','HOME':context.account_home,
@@ -134,10 +161,8 @@ class SandboxProtection:
             context.originals.owned[key]['exit'] = code
         finally:
             code = await context.originals.finish(key,3)
-        raw, error = [t.result() for t in captures]
-        private_write(directory/(name+'.original.json'),json.dumps(dict(original=key,
-            actual_END=code,evidence=evidence,stderr_bytes=len(error))).encode(),self.capacity_check)
-        if code != 0 or error or evidence['errors']:
+        raw, error = results
+        if code != 0 or error or not evidence['capture_complete']:
             raise Refusal('sandbox control original failed; preserved captures and numeric END')
         return json.loads(raw)
 
