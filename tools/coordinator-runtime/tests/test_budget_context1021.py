@@ -28,6 +28,10 @@ class Context1021(Future1008):
 
     def configure(self):
         super().configure()
+        if self._testMethodName == 'test_staging_real_byte_limit_keeps_prepared_debt_and_preimage':
+            # Select bounded pressure conditions before any source/current
+            # authority is established; all other context fixtures keep theirs.
+            self.config['limits']['max_bytes'] = 96*1024**2
         self.target = self.area/'fictional-role-record.json'
         self.target.write_bytes(b'{"original":true}\n')
         task = self.config['tasks']['work-proposer']
@@ -243,19 +247,43 @@ class Context1021(Future1008):
         self.assertFalse(self.store.db.in_transaction)
 
     def test_staging_real_byte_limit_keeps_prepared_debt_and_preimage(self):
+        # The finite future plan is still unselected. Bind it to this test's
+        # original bounded configuration before exercising production admission.
+        self.plan['pause_bytes']=self.config['limits']['max_bytes']-1
+        self.plan_file.write_text(encode(self.plan))
         job,attempt,task=self.running_routine()
-        original=self.target.read_bytes();budget=self.store.budget
-        def capacity_at_stage(kind,incoming=0,**kwargs):
-            if not self.store.db.in_transaction:
-                usage=self.store.usage()
-                with patch.object(self.store,'usage',return_value={**usage,'bytes':self.config['limits']['max_bytes']-capacity.PRESSURE_RESERVE}):
-                    return budget(kind,incoming,**kwargs)
-            return budget(kind,incoming,**kwargs)
-        with patch.object(self.store,'budget',side_effect=capacity_at_stage),self.assertRaises(Backpressure):
+        original=self.target.read_bytes();inode=self.target.stat().st_ino
+        prepare=publication.prepare;observed=[]
+        def pressure_at_staging(store, active, before, policy=None):
+            # The intended boundary is after prepared debt, before any staging
+            # allocation. Real retained bytes exercise production accounting;
+            # transaction placement is not part of this protection's oracle.
+            self.assertEqual(active,attempt)
+            self.assertEqual(store.one('SELECT state FROM routine_runs WHERE attempt=?',
+                                       (attempt,))['state'],'prepared')
+            self.assertEqual(publication.stages(store,attempt),{})
+            ceiling=self.config['limits']['max_bytes']-capacity.PRESSURE_RESERVE
+            missing=ceiling-store.usage()['bytes']
+            self.assertGreater(missing,0);self.assertLessEqual(missing,100000000)
+            pressure=store.home/'retained-staging-pressure.bin'
+            with pressure.open('xb') as stream:
+                block=b'bounded retained staging pressure\n'*2048
+                while missing:
+                    body=block[:missing]
+                    stream.write(body);missing-=len(body)
+            used=store.usage()['bytes']
+            self.assertGreaterEqual(used,ceiling)
+            observed.append(dict(bytes=used,ceiling=ceiling))
+            return prepare(store,active,before,policy)
+        with patch.object(publication,'prepare',side_effect=pressure_at_staging),self.assertRaisesRegex(
+                Backpressure,'cumulative journal/artifact bytes'):
             routine.prepare(self.store,self.boards['Work'],job,attempt,task)
+        self.assertEqual(len(observed),1)
         self.assertEqual(publication.stages(self.store,attempt),{})
+        self.assertFalse((self.store.artifact_root(attempt)/'staged').exists())
         self.assertEqual(self.store.one('SELECT state FROM routine_runs WHERE attempt=?',(attempt,))['state'],'prepared')
         self.assertEqual(self.target.read_bytes(),original)
+        self.assertEqual(self.target.stat().st_ino,inode)
         self.assertFalse(self.store.db.in_transaction)
 
     def test_backup_real_byte_limit_keeps_stages_original_and_debt(self):
