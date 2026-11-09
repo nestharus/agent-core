@@ -1,10 +1,11 @@
 # Invocation-owned protected question binding
 
 This caller contribution uses immutable runtime
-`82de20aa281af40f25e0186babde1db19bebd8e7`, tree
-`5e0858014e293727470a7334f11f10d9391826f6`. This jointly published runtime
-changes prompt delivery, bounded public-control acquisition and admitted pool
-construction. Earlier caller16d/runtime44c remain historical evidence. No
+`7ec63c8bbb24e5844f246b98af0624383166f793`, tree
+`adddb794c4f3a7fe8845e5b268a1f459b65edd67`. This runtime enforces the fixed
+processing cutoff after synchronous feed preparation and authorization. The
+caller refreshes current permission after complete identity work. Earlier
+caller3592/runtime82de and caller16d/runtime44c remain historical evidence. No
 installation or current global control is changed by this source contribution.
 `runtime-pins.json` contains 81 finite public implementation pins, including the
 seven actual direct-child modules (now including `fast_tier`). The coordinator
@@ -58,9 +59,10 @@ The routes-declared public counter/lock parent may be under `.local`; only that
 exact currently authorized persistence parent receives a narrow path exception.
 It adds no private store access or model filesystem read root. Without that exact
 current authority the parent is refused before target metadata acquisition.
-Every lock/counter write phase rechecks the current parent rights and full
-allowance, including each busy-admission retry; static control is bound before
-those effects.
+Each lock acquisition attempt rechecks current parent rights and full allowance,
+including busy-admission retries; static control is checked before effects and
+under the lock. Later counter mutations within the entered synchronous guard
+do not each invoke a separate parent callback.
 
 ## Current owner scope
 
@@ -127,6 +129,17 @@ acquisition within the charged byte ceiling. Scope-file checking remains the
 external callback's separately bounded responsibility. A 32MiB evidence cap cannot admit the
 320575976-byte program. Program bodies are streamed, not retained as copies.
 
+Complete identity work is retained. After source/control/program/helper checks,
+`authorize` reacquires current analysis permission; scope expiry and original
+lifetime are sampled after scope/binding validation. `Context` checks its fixed
+original cutoff again after that callback. The feed task encodes the prompt
+before the callback and checks its fixed processing deadline after both, before
+`stdin.write`, without an intervening await. Expiry or revocation observed there
+closes stdin without delivering the prompt while retaining the original for
+collection/publication. An event-loop timeout need not run first. These finite
+point checks do not make external changes atomic with delivery and cannot
+retract previously delivered input.
+
 Collection/publication can continue after processing expiry/revocation only on
 the actual current scope's explicit custody permission for those actions and
 the retained original binding. This does not authorize another analysis turn.
@@ -154,7 +167,7 @@ narrows lexical spelling; it is no alias closure or generic filesystem theorem.
 1. Genuine Work reads the final source/header and this build's limits, incorporates
    any actual later Frame/Decide outcome, and selects the newly published runtime pin above. It admits
    the new helper commit separately as caller code, with its exact `driver.py`
-   hash in `caller_pins`. It reads all eleven current bounds and includes every
+   hash in `caller_pins`. It reads all actual current bounds and includes every
    identified held scope/derivative before any acquisition, not a stale count.
 2. Work positively admits the exact question parent and public pool persistence
    parent, actual source/imports, public complete program, canonical helper and
@@ -229,9 +242,11 @@ builder's invoking identity, an explicitly synthetic own question, tiny owned
 program, owned pool/policy fixtures, mocked canonical-helper acceptance, mock
 listeners and authored provider events. They never set identity variables or use
 genuine Work scope. They run the actual runtime transport/parser/material/original
-and pool code with mock provider processes. One negative check uses a real local
-stdlib process and actual pipes to observe zero delivered prompt bytes and
-retained END/EOF/publication. No real provider, socket/listener or actual
+and pool code with mock provider processes. Real local stdlib processes and pipes check refused prompt delivery, including
+blocked authorization, encoding cost and expiry of a one-second original.
+Additional controls expire/revoke scope during complete owned-program identity
+work, include scope-validation cost, and preserve useful delayed valid delivery.
+They observe prompt byte counts and retained END/EOF/publication. No real provider, socket/listener or actual
 qualification canary is run. Earlier generations and all failure fixtures stay
 retained. Test success proves bounded mechanism discrimination under these
 premises, not actual authority/protection/provider/semantic acceptance.

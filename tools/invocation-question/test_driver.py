@@ -694,6 +694,144 @@ class CurrentUse(unittest.IsolatedAsyncioTestCase):
             opened.assert_not_called()
 
 
+class HardDeadline(unittest.IsolatedAsyncioTestCase):
+    """Delayed boundaries, including real local pipes; no provider protection claim."""
+    async def identity_boundary(self, mode):
+        h = Harness('identity-tail-' + mode)
+        h.create()
+        original = h.q.identities
+        completed = []
+        def identity():
+            original()  # Real complete two-pass owned program; helper remains MOCK.
+            if h.provider_calls == 1 and not completed:  # On the feed task, once.
+                if mode == 'expires':
+                    h.scope['expires_at'] = time.time() + .02
+                time.sleep(.06)  # Block the event loop beyond the actual scope expiry.
+                if mode == 'revoked':
+                    h.scope['revoked'] = True
+                completed.append(mode)
+        h.q.identities = identity
+        if mode == 'valid':
+            result = await h.run()
+            self.assertEqual(len(result['answers']), 2)
+            self.assertEqual(len(h.prompts), 3)
+        else:
+            with self.assertRaises(driver.Refusal):
+                await h.run()
+            self.assertEqual(h.prompts, [], 'later refusal cannot unsend a prompt')
+            self.assertFalse(h.q.review.status['protection_qualified'])
+            self.assertEqual(h.q.answers, [])
+        self.assertEqual(completed, [mode])
+        self.assertFalse(h.q.originals.owned)
+        self.assertTrue(all(p['persisted'] for p in h.q.publisher.attempts))
+        self.assertTrue(all(s.closed for s in h.listeners))
+        for p in h.q.home.glob('context/turn-0/original-*.json'):
+            receipt = json.loads(p.read_text())
+            self.assertIsInstance(receipt['actual_END'], int)
+            self.assertTrue(receipt['evidence']['stdout_eof'])
+            self.assertTrue(receipt['evidence']['stderr_eof'])
+
+    async def test_scope_expiry_during_complete_identity_withholds_and_collects(self):
+        await self.identity_boundary('expires')
+
+    async def test_revocation_during_complete_identity_withholds_and_collects(self):
+        await self.identity_boundary('revoked')
+
+    async def test_complete_delayed_identity_with_valid_scope_still_works(self):
+        await self.identity_boundary('valid')
+
+    async def test_permission_validation_cost_cannot_outlive_scope(self):
+        h = Harness('scope-validation-cost')
+        h.create()
+        describe = h.q.describe_binding
+        def delayed_description():
+            value = describe()
+            time.sleep(.06)
+            return value
+        h.scope['expires_at'] = time.time() + .02
+        with patch.object(h.q, 'describe_binding', side_effect=delayed_description):
+            with self.assertRaises(driver.Refusal):
+                h.q.check('analysis')
+            # Continuing original custody is independent of processing expiry.
+            self.assertTrue(h.q.check('collect')['custody_allowed'])
+            self.assertTrue(h.q.check('publish')['custody_allowed'])
+
+    async def pipe_boundary(self, mode):
+        h = Harness('real-deadline-' + mode)
+        out = fresh(h.area, 'actual-pipe')
+        book = h.q.runtime.appserver.Originals().scope()
+        rows, phases = [], []
+        class DelayedText(str):
+            def encode(self, *args, **kwargs):
+                if mode == 'encoding':
+                    phases.append('encoding')
+                    time.sleep(.25)
+                return super().encode(*args, **kwargs)
+        def current():
+            self.assertEqual(len(book.owned), 1)
+            phases.append('authority')
+            time.sleep(.25 if mode == 'authority' else .01)
+        async def run():
+            return await h.q.runtime.direct.review_context.execute(
+                ['/usr/bin/python3', '-I', '-S', '-B', '-c',
+                 'import sys,json;print(json.dumps(dict(type="turn.completed", byte_count=len(sys.stdin.buffer.read()))))'],
+                {'PATH': '/usr/bin:/bin'}, DelayedText('owned nonsecret text'), out,
+                book, rows.append, 3 if mode == 'valid' else .15, 3,
+                65536, 65536, None, lambda: None,
+                capacity_check=guard, before_feed=current)
+        if mode == 'valid':
+            await run()
+            self.assertEqual(json.loads((out / 'stdout.jsonl').read_bytes())['byte_count'], 20)
+        else:
+            with self.assertRaises(h.q.runtime.direct.review_context.ReviewRefusal):
+                await run()
+            self.assertEqual(json.loads((out / 'stdout.jsonl').read_bytes())['byte_count'], 0)
+        self.assertIn('authority', phases)
+        if mode == 'encoding':
+            self.assertEqual(phases, ['encoding', 'authority'])
+        self.assertFalse(book.owned)
+        self.assertIsInstance(rows[-1]['exit'], int)
+        self.assertTrue(rows[-1]['evidence']['stdout_eof'])
+        self.assertTrue(rows[-1]['evidence']['stderr_eof'])
+
+    async def test_execute_expiry_during_blocked_authority_real_pipe(self):
+        await self.pipe_boundary('authority')
+
+    async def test_execute_expiry_during_encoding_real_pipe(self):
+        await self.pipe_boundary('encoding')
+
+    async def test_execute_delayed_valid_feed_real_pipe(self):
+        await self.pipe_boundary('valid')
+
+    async def test_context_original_deadline_survives_blocked_authority(self):
+        h = Harness('real-context-deadline')
+        module = h.q.runtime.direct.review_context
+        book = h.q.runtime.appserver.Originals().scope()
+        rows, checks = [], []
+        context = module.Context(h.area / 'short-context', '.codex2', h.owner,
+            1, book, executable='/usr/bin/python3', capacity_check=guard)
+        def current():
+            if book.owned:
+                checks.append('feed')
+                time.sleep(1.1)  # Real fixed original expires before callback returns.
+        argv = ['/usr/bin/python3', '-I', '-S', '-B', '-c',
+                'import sys,json;print(json.dumps(dict(type="turn.completed", byte_count=len(sys.stdin.buffer.read()))))']
+        out = h.area / 'actual-turn'
+        with patch.object(module, 'command', return_value=argv):
+            with self.assertRaises(module.ReviewRefusal):
+                await context.turn(out, [('nonsecret fixture', b'owned text')],
+                    'owned nonsecret instruction', collector=h.owner, profile='.codex2',
+                    current_authority=current, current_profiles=['.codex2'],
+                    publish=rows.append, maximum=65536, capture_max=65536, shutdown=3)
+        self.assertEqual(checks, ['feed'])
+        self.assertEqual(json.loads((out / 'stdout.jsonl').read_bytes())['byte_count'], 0)
+        self.assertEqual(context.state, 'interrupted')
+        self.assertFalse(book.owned)
+        self.assertTrue(rows[-1]['evidence']['stdout_eof'])
+        self.assertTrue(rows[-1]['evidence']['stderr_eof'])
+        self.assertTrue(context.close(h.owner)['caller_processes_collected'])
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--fixtures', type=Path, required=True)

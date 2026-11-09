@@ -20,9 +20,9 @@ import time
 from types import ModuleType
 from uuid import uuid4
 
-COMMIT = '82de20aa281af40f25e0186babde1db19bebd8e7'
-TREE = '5e0858014e293727470a7334f11f10d9391826f6'
-PINSET = '549689839c32191eb51a7157ac40b2e2c6f2021700e6eed2b0cc3b02783b22aa'
+COMMIT = '7ec63c8bbb24e5844f246b98af0624383166f793'
+TREE = 'adddb794c4f3a7fe8845e5b268a1f459b65edd67'
+PINSET = '6a29e29e0c370b66b12f786aeee41f5b8a80bb999506f1adce8a0c7afb5005ee'
 DIRECT = ('profile_lease', 'execution_pool', 'fast_tier', 'dispatch',
           'review_context', 'opaque_dialogue', 'continuing_review')
 PROFILES = ('.codex2', '.codex3', '.codex4', '.codex5')
@@ -347,7 +347,6 @@ class Question:
         authenticate_invoker(self.owner)
         self.authenticate()  # Real owner-sensitive checker; None is conventional.
         scope = self.current(action)
-        now = time.time()
         if (scope['owner'] != self.owner or action not in scope['operations']
                 or str(self.home) not in scope['write_roots']):
             raise Refusal('actual current owner/action/custody scope mismatch')
@@ -359,9 +358,6 @@ class Question:
                 or scope['materials'] != [asdict(m) for m in self.materials]):
             raise Refusal('current question or exact selected material authority changed')
         custody = action in {'collect', 'publish'} and scope.get('custody_allowed') is True
-        if not custody and (scope['revoked'] or not now < scope['expires_at']
-                            or not 0 <= self.clock() - self.origin < 7200):
-            raise Refusal('current processing authority or whole lifetime unavailable')
         for p in paths:
             path = positive(p, self.exclusions)
             if str(path) not in scope['read_files'] and str(path) not in scope['runtime_directories']:
@@ -375,6 +371,12 @@ class Question:
                 if (context.collector != self.owner or context.profile != self.profile
                         or context.created != self.origin or context.lifetime != 7200):
                     raise Refusal('actual endpoint association changed')
+        # Include the cost of the complete scope/binding validation itself.
+        # Continuing original custody has its own explicit permission and does
+        # not extend processing authority or the fixed original lifetime.
+        if not custody and (scope['revoked'] or not time.time() < scope['expires_at']
+                            or not 0 <= self.clock() - self.origin < 7200):
+            raise Refusal('current processing authority or whole lifetime unavailable')
         return scope
 
     def capacity(self, parent):
@@ -426,6 +428,10 @@ class Question:
         self.fast_enabled()
         if complete_identity:
             self.identities()
+        # Complete source/control/program/helper work consumes time and can
+        # overlap revocation. Reacquire current permission after that work;
+        # check() samples expiry at its own tail. Never cache binary identity.
+        self.check('analysis', ownership=ownership)
 
     def authorize_material(self, ownership):
         # Immutable bytes move synchronously within the host. Rights, source,
