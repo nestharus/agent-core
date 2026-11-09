@@ -17,7 +17,7 @@ def enabled(path=None):
     path = POLICY if path is None else Path(path)
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-        with os.fdopen(fd, 'rb') as stream:
+        with os.fdopen(fd, 'rb', buffering=0) as stream:
             if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
                 raise ValueError('fast-tier policy must be a regular file')
             raw = stream.read(17)

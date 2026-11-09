@@ -58,7 +58,7 @@ def counter_value(value):
 def bounded_read(path, maximum):
     """Finite regular public control, refusing links and growth before parse."""
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-    with os.fdopen(fd, 'rb') as stream:
+    with os.fdopen(fd, 'rb', buffering=0) as stream:
         before = os.fstat(stream.fileno())
         if not stat.S_ISREG(before.st_mode) or before.st_size > maximum:
             raise PoolError('public control exceeds finite regular-file bound')

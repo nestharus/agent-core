@@ -152,7 +152,7 @@ def load_config(path, *, reader=None):
     try:
         raw = execution_pool.bounded_read(path, execution_pool.MAX_ROUTES) if reader is None else reader(path, execution_pool.MAX_ROUTES)
         config = tomllib.loads(raw.decode("utf-8"))
-    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError, execution_pool.PoolError) as error:
         raise Refusal(f"cannot read config {path}: {error}") from error
     validate_config(config)
     return config, hashlib.sha256(raw).hexdigest()
