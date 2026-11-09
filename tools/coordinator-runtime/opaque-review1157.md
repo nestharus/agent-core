@@ -7,8 +7,10 @@ effort), read-only/no-network task rights, a pinned shared launcher, complete
 It is an explicit selection, never fallback from a refused native route.
 No installed selection, service, account or registry changes follow from this source.
 
-The policy has exactly `transport`, `launcher_sha256`, `deadline`, `method`,
-`method_files`, `method_closure`, and `components`. Component material retains
+The policy has exactly `transport`, `launcher_sha256`, `executable`, `deadline`,
+`method`, `method_files`, `method_closure`, and `components`. `executable` is the
+explicit absolute public CLI dependency retained by the original Context; policy
+selection does not establish effective provider protection. Component material retains
 the existing repository/origin/paths/history/authority and optional
 prior_histories/relationship_paths, and adds `situation` with nonempty `actors`,
 `environment`, `goals`, `conflicts`, and `constraints`. These are authentic
