@@ -49,14 +49,15 @@ def authenticate_invoker(owner):
         raise Refusal('actual invoking caller differs from scoped owner')
 
 
-def positive(path, exclusions=()):
+def positive(path, exclusions=(), *, public_pool_parent=False):
     """Lexical admission before any metadata; never seek excluded aliases."""
     path = Path(path)
     if not path.is_absolute() or '..' in path.parts:
         raise Refusal('absolute lexical operand required')
     if any(path == Path(p) or path.is_relative_to(Path(p)) for p in exclusions):
         raise Refusal('held operand excluded before acquisition')
-    if (set(path.parts) & {'.ssh', '.aws', '.config', '.local'}
+    private = {'.ssh', '.aws', '.config'} | (set() if public_pool_parent else {'.local'})
+    if (set(path.parts) & private
             or any(p.startswith(('.codex', '.claude')) for p in path.parts)):
         raise Refusal('private namespace excluded before acquisition')
     return path
@@ -468,7 +469,10 @@ class Question:
     def pool_guard(self):
         scope = self.check('allocate', [self.pool_control['routes']])
         _, _, counter = self.pool.pool.read()
-        parent = positive(counter.parent, self.exclusions)
+        # The supported public rotation control may live under .local. Only
+        # its EXACT routes-declared, currently authorized counter/lock parent
+        # receives this narrow exception; no private store/read root is added.
+        parent = positive(counter.parent, self.exclusions, public_pool_parent=True)
         if str(parent) not in scope.get('pool_write_parents', []):
             raise Refusal('actual public pool state destination not currently admitted')
         fd = directory(parent)

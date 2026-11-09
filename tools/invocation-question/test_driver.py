@@ -111,11 +111,16 @@ class MockProcess:
 
 
 class Harness:
-    def __init__(self, case):
+    def __init__(self, case, local_state=False):
         global SEQUENCE
         SEQUENCE += 1
         self.area = fresh(ROOT, '%02d-%s' % (SEQUENCE, case))
-        self.state = fresh(self.area, 'pool-state')
+        if local_state:
+            local = fresh(self.area, '.local')
+            state = fresh(local, 'state')
+            self.state = fresh(state, 'public-pool')
+        else:
+            self.state = fresh(self.area, 'pool-state')
         self.routes = self.area / 'routes.toml'
         raw = (RUNTIME / 'tools/direct-child/routes.toml').read_bytes()
         raw = re.sub(rb'(?m)^state_dir\s*=.*$', ('state_dir = ' + json.dumps(str(self.state))).encode(), raw)
@@ -521,6 +526,19 @@ class Mechanisms(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(h.q.review.status['protection_qualified'])
         self.assertEqual(h.provider_calls, 1)
         self.assertEqual(h.q.answers, [])
+
+    async def test_exact_public_pool_parent_under_local_is_narrowly_admitted(self):
+        h = Harness('public-pool-parent', local_state=True)
+        with self.assertRaises(driver.Refusal):
+            driver.positive(h.state)  # ordinary private-path admission stays denied
+        h.create()
+        self.assertEqual(h.q.profile, '.codex2')
+        self.assertTrue((h.state / 'codex.counter').exists())
+        h.scope['pool_write_parents'] = []
+        with patch.object(driver, 'directory') as opened:
+            with self.assertRaises(driver.Refusal):
+                driver.Question.pool_guard(h.q)  # isolate code under test from builder's extra wrapper
+            opened.assert_not_called()  # no target metadata without exact current scope
 
 
 if __name__ == '__main__':

@@ -48,6 +48,10 @@ public counter/lock destination. The existing asynchronous ExecutionPool guard
 covers process creation and Originals registration. Continuing turns use the
 original account without a NEW admission. The original creation time includes
 preparation, qualification and all waits; it is never renewed.
+The routes-declared public counter/lock parent may be under `.local`; only that
+exact currently authorized persistence parent receives a narrow path exception.
+It adds no private store access or model filesystem read root. Without that exact
+current authority the parent is refused before target metadata acquisition.
 
 ## Current owner scope
 
@@ -125,9 +129,10 @@ the retained original binding. This does not authorize another analysis turn.
    fit, original/capture/proof/failure/publication/consumer duties and explicit
    scope. No old capture, screen pointer, private profile or account query fills
    a missing operand. Missing necessary history remains a partial question.
-3. In Work's own continuing invocation, load the published driver using admitted
-   host source and isolated Python (`-I -S -B`); do not launch it as a child with
-   Work's identity in the environment. Load the immutable manifest and supply
+3. Through Work's own authenticated tool invocation, load the published driver
+   using admitted host source and isolated Python (`-I -S -B`). Naturally inherit
+   the actual invoking association; never set or override an identity to make a
+   new agent or foreign launcher appear as Work. Load the immutable manifest and supply
    the admitted constructor arguments. Keep the `Question` object and its
    in-memory original owner for the entire operation. Do not create a fake
    callback or claim a separate shell is the same genuine owner without the
