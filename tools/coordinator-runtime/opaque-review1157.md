@@ -52,7 +52,46 @@ is explicit. The native-scope adapter refuses this proof as native-root evidence
 Actual service/native-source acceptance, consumer processing and rollout remain
 separate obligations.
 
-## Owned qualification
+## Responsive admission and operation evidence (1171)
+
+The runtime passes an async admission **factory** into `Context.turn`. After
+positive material preparation, the shared Context enters it, rechecks current
+authority and the unchanged original lifetime, creates the subprocess and
+registers it with Originals, then releases admission. No SQLite transaction or
+pool lock spans reviewer input, waiting, capture or publication. Context.busy
+and the original collector retain whole-turn custody. An admission-exit failure
+after registration still finalizes that exact original. Publication failure
+retains the same numeric-END owner for collection; it permits no new turn.
+
+The optional keyword preserves existing direct Context callers; omitted admission
+uses an empty context manager. A cooperating allocator must supply its real
+admission factory for an opening turn. Continuations use the empty manager and
+the original account/thread/collector, independent of future pool membership.
+They still require current authority and the original whole lifetime. Nothing
+here updates shared membership, installs source or renews an existing policy.
+
+`tests/operation_evidence1171.py` supplies a bounded Linux x86_64 mechanism
+experiment, independently observing syscall entry/exit and allowed-read bytes
+with ptrace. Nested bwrap fixtures use one random nonsecret allowed file, an
+outside sentinel, and an owned loopback listener in an outer isolated network.
+The protected case observes actual read bytes, ENOENT on outside open, EROFS on
+write-capable open, and ECONNREFUSED on connect across network isolation. The
+weakened neighbor actually reads outside, writes, and connects successfully.
+The omission neighbor reads only the allowed file. All worker modes emit the
+same denial constants; only independently observed operations qualify.
+
+These are the actual fixture conditions, not a universal adversarial/kernel
+theorem or qualification of Codex permission profiles, native execution,
+provider behavior, model reasoning or service acceptance. Kernel, ptrace,
+bwrap and the interpreter are trusted. Another composition needs applicable
+independent evidence; fixture success cannot be transferred to it.
+
+The changed hot-membership mechanism now uses a NEW explicitly owned journal
+attempt with NULL native identity. It verifies real numeric END publication,
+retained incomplete native receipts, and reached close assertions without
+rewriting any original row. It does not establish the hidden old failure cause.
+
+## Historical qualification driver and its current limit
 
 The driver requires a NEW root containing this checkout as `repo`, a newly
 exported public SDK with declared synthetic retention as `sdk`, and writable
@@ -68,18 +107,23 @@ python -B tools/coordinator-runtime/tests/run_opaque_review1157.py \
   --root /absolute/new-owned-root --label final --final --actual-profile .codex4
 ```
 
-The exclusive final marker prevents rerun. Actual qualification uses one new
+The exclusive final marker prevents rerun. This driver would use one new
 owned account/context, at most7200 seconds of selected observation, with only
 nonsecret fixtures. It first requires actual command-completion evidence for
 allowed material read and denied nonsecret outside-read/write/network cases;
-a model-written receipt alone is insufficient. Only then does it supply the
-complete current method and tiny source fixture, request architecture first,
-and continue the remaining families. Malformed/unavailable capabilities return
+a model-written receipt alone is insufficient. Its original nonce/error-value
+oracle also accepts omitted denied operations. It now retains those values as
+command assertions and returns an explicit unqualified gap **before** admitting
+further review material. It cannot supply actual protection or substantive
+review qualification until separately composed with applicable independent
+operation evidence. The 1171 mechanism fixture is not that composition.
+Malformed/unavailable capabilities return
 partial facts without replay. The observation limit is not a review-depth or
 product completion SLO.
 
-The already observed hot-membership fixture publication error remains unqualified
-and selected. It is not pooled into a pass or silently repaired. It does not alone
+The historically observed hot-membership fixture publication error remains
+unqualified in its original generation. Fresh changed controls have their own
+conditions and outcomes; they do not retrospectively repair it. It does not alone
 require all-history green before the separately owned nonsecret public-CLI
 qualification; every other selected control must succeed. All earlier scoped29,
 inherited3, two harness failures, prior410/failed418 and unknowns retain their

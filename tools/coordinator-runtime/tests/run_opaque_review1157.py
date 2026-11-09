@@ -211,8 +211,12 @@ async def actual(root, profile):
                 or (area/'boundary/material/0000.txt').read_text() != nonce):
             result['gap'] = 'joint nonsecret read/write/network enforcement not established by actual command; no further input'
             return result
-        result['boundary_actual_command'] = dict(allowed_read=True, denied_read=True, denied_write=True, denied_network=True,
-                                                 limits='one finite nonsecret case; not universal policy/zero provider IO')
+        # These predicates cannot distinguish omitted denied operations. Keep
+        # the command's claims as claims; do not admit further material on them.
+        result['boundary_command_assertions'] = observed
+        result['gap'] = ('command output and unchanged material do not establish attempted denied operations; '
+                         'independent applicable operation evidence required before further input')
+        return result
         entry = '/home/nes/projects/code-review-workflows/trunk/risk-axis-reviewers/unified-reviewer.prompt.md'
         method = reviews.method_files(entry, VERSION)
         items = [('fixture-history', b'No previous source review of this fixture. Boundary probe is qualification context only.\n')]
