@@ -117,12 +117,14 @@ repository/ref/incarnation tuples use the existing branch ID. Different physical
 aliases still require honest shared footprint declarations; no path census or
 external ref CAS is implemented. `qa-execute` has five package
 slots; one package cannot duplicate or execute and consolidate simultaneously.
-`qa-consolidate` has its own single slot and requires successful reconciled
-execution for that package. Definitely unstarted cancelled executions remain
-recorded with END null and are excluded from the executed set. Cancellation
-alone cannot qualify consolidation. A later actual success can qualify the same
-package; any executed failure, unknown END, or unreconciled execution still holds
-consolidation. Owners must declare the complete real footprint;
+`qa-consolidate` has its own single slot and requires at least one collected,
+reconciled execution for that package. Definitely unstarted cancelled executions
+remain recorded with END null and are excluded from the executed set; cancellation
+alone cannot qualify consolidation. Reconciled failures retain their numeric END,
+evidence and effects and can be truthfully consolidated, including alongside a
+later success. Unknown or unreconciled execution and unsettled effects still hold
+consolidation. Consolidation and later success do not imply independent positive QA
+acceptance. Owners must declare the complete real footprint;
 undeclared physical conflicts cannot be inferred from arbitrary payloads.
 
 For actual adoption, Work creates/classifies an event, assigning responsibility

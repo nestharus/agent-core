@@ -342,8 +342,8 @@ class Runtime:
             if phase == 'qa-consolidate':
                 executions = [a for a in s['attempts'].values() if a['package'] == package and a['phase'] == 'qa-execute']
                 executed = [a for a in executions if a['state'] != 'cancelled']
-                require(executed and all(a['reconciled'] and a['end'] == 0 for a in executed),
-                        'successful collected QA execution required before consolidation; failures/unknowns retained')
+                require(executed and all(a['reconciled'] and a['state'] == 'collected' and type(a['end']) is int for a in executed),
+                        'collected and reconciled QA execution required before consolidation; unknowns retained')
         if phase == 'known' and s['actors'][actor]['role'] == 'Branch':
             require(branch in s['branches'] and s['branches'][branch]['owner'] == actor, 'current branch/role binding required')
             require(resources.get('branch:' + branch) == 'write', 'branch writer must declare branch resource')

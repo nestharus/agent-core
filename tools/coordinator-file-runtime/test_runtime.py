@@ -543,7 +543,7 @@ class Trial(unittest.TestCase):
         before = _pool.Pool(self.routes).status()['turn']
         call(self.rt, 'cancel', 'qa', attempt='cancelled', collector=cancelled['collector'], evidence='definitely never created')
         self.assertEqual(_pool.Pool(self.routes).status()['turn'], before)
-        with self.assertRaisesRegex(Held, 'successful collected'):
+        with self.assertRaisesRegex(Held, 'collected and reconciled'):
             reserve('too-early', 'qa-consolidate')
         success = reserve('later')
         self.collect('later', success['collector'], 'qa')
@@ -556,10 +556,38 @@ class Trial(unittest.TestCase):
         later = reserve('another-success')
         self.collect('another-success', later['collector'], 'qa')
         call(self.rt, 'reconcile', 'qa', attempt='another-success', collector=later['collector'], evidence='later success does not erase failure')
-        with self.assertRaisesRegex(Held, 'failures/unknowns'):
-            reserve('failure-still-matters', 'qa-consolidate')
+        result = reserve('failure-still-matters', 'qa-consolidate')
+        self.assertTrue(result['collector'])
         self.assertIsNone(self.raw()['attempts']['cancelled']['end'])
         self.assertEqual(self.raw()['attempts']['real-failure']['end'], 7)
+
+    def test_qa_failure_only_and_unknown_effect_consolidation(self):
+        self.classify('qa-failure', 'qa')
+        call(self.rt, 'package', package='failure-package', event='qa-failure', scope='failure report', basis='synthetic')
+        def reserve(attempt, phase='qa-execute'):
+            return call(self.rt, 'reserve', 'qa', attempt=attempt, event='qa-failure', phase=phase,
+                        package='failure-package', resources={}, basis={})
+        failed = reserve('failed-only')
+        started = call(self.rt, 'start', 'qa', attempt='failed-only', collector=failed['collector'],
+                       substrate='fixture', evidence='actual synthetic execution')
+        call(self.rt, 'effect', 'qa', effect='unknown-effect', attempt='failed-only', collector=failed['collector'],
+             kind='delivery', intent='synthetic effect')
+        with self.assertRaisesRegex(Held, 'unknowns'):
+            reserve('unknown-consolidation', 'qa-consolidate')
+        call(self.rt, 'collect', 'qa', attempt='failed-only', collector=failed['collector'],
+             launch_id=started['launch_id'], end=7, result={'failure': True}, evidence='numeric failure')
+        with self.assertRaisesRegex(Held, 'uncertain effect'):
+            call(self.rt, 'reconcile', 'qa', attempt='failed-only', collector=failed['collector'], evidence='not yet')
+        with self.assertRaisesRegex(Held, 'unknowns'):
+            reserve('unreconciled-consolidation', 'qa-consolidate')
+        call(self.rt, 'observe_effect', 'qa', effect='unknown-effect', outcome='not-applied', evidence='actual observation')
+        call(self.rt, 'reconcile', 'qa', attempt='failed-only', collector=failed['collector'], evidence='failure reconciled')
+        result = reserve('failure-report', 'qa-consolidate')
+        self.assertTrue(result['collector'])
+        state = self.raw()
+        self.assertEqual(state['attempts']['failed-only']['end'], 7)
+        self.assertEqual(state['attempts']['failed-only']['reconciliation'], 'failure reconciled')
+        self.assertEqual(state['effects']['unknown-effect']['outcome'], 'not-applied')
 
     def test_c04_revocation_at_creation_and_ambiguous_popen_remain_distinct(self):
         from coordinator import fixture
