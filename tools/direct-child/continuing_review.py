@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import time
 import shlex
+import stat
 if __package__:
     from .opaque_dialogue import Dialogue, Reply, Refusal
     from .review_context import Context, command, private_write
@@ -55,7 +56,7 @@ class SandboxProtection:
     before callers deliver substantive material. These controls alone establish
     the local sandbox backend only, not complete provider tool routing.
     """
-    def __init__(self, root, executable, runtime_reads, capacity_check, *, probe_helper=None):
+    def __init__(self, root, executable, runtime_reads, capacity_check, *, probe_helper=None, admit_read=None):
         self.root, self.executable = Path(root), executable
         if not runtime_reads or any(not Path(p).is_absolute() for p in runtime_reads):
             raise Refusal('explicit public runtime read dependencies required')
@@ -65,21 +66,34 @@ class SandboxProtection:
         self.capacity_check = capacity_check
         self.proofs = []
         self.probe_helper = probe_helper
+        self.admit_read = admit_read
 
     def filesystem(self, material, workspace):
         # The backend re-executes this exact program inside its filesystem
         # view. Host identity alone does not put that pathname in the view.
-        reads = dict.fromkeys((*self.runtime_reads, self.executable), 'read')
+        operands = (*self.runtime_reads, self.executable)
+        if self.admit_read:
+            for operand in operands:
+                self.admit_read(operand)
+        reads = dict.fromkeys(operands, 'read')
         if '/usr/lib64' in reads:
-            # Preserve the kernel's loader spelling on this explicitly checked
-            # usr-merged Linux runtime. This aliases the SAME already admitted
-            # directory, not /lib, /usr or the executable's parent/HOME.
+            # Identity/shape does not confer rights. Require the caller's actual
+            # current positive/exclusion mediation before EACH acquisition and
+            # before adding the alias to the policy. Legacy callers without a
+            # mediator cannot introduce this additional operand.
+            if self.admit_read is None:
+                raise Refusal('runtime loader alias requires explicit read mediation')
             alias = Path('/lib64')
+            self.admit_read(str(alias))
             info = alias.lstat()
-            if (not alias.is_symlink() or info.st_uid != 0
-                    or os.readlink(alias) != 'usr/lib64'):
+            if not stat.S_ISLNK(info.st_mode) or info.st_uid != 0:
                 raise Refusal('declared runtime loader alias changed')
-            reads['/lib64'] = 'read'
+            self.admit_read(str(alias))
+            if os.readlink(alias) != 'usr/lib64':
+                raise Refusal('declared runtime loader alias changed')
+            self.admit_read('/usr/lib64')
+            self.admit_read(str(alias))
+            reads[str(alias)] = 'read'
         return {':root': 'deny', ':minimal': 'read', **reads,
                 str(material): 'read', str(workspace): 'read'}
 
@@ -158,12 +172,17 @@ class SandboxProtection:
                 receipt_attempts=list(receipt_attempts), receipt_persisted=False)
             private_write(path, json.dumps(receipt).encode(), self.capacity_check)
             entry['evidence']['receipt_persisted'] = True
-        # Register the actual handle before capture setup or input delivery.
+        # Prepare ordinary argv/environment before the final acting checks.
+        env = {'PATH':'/usr/local/bin:/usr/bin:/bin','HOME':context.account_home,
+               'CODEX_HOME':str(Path(context.account_home)/context.profile)}
         if self.probe_helper:
-            self.probe_helper()  # Recheck after any earlier awaited control.
-        child = await asyncio.create_subprocess_exec(*argv,
-            env={'PATH':'/usr/local/bin:/usr/bin:/bin','HOME':context.account_home,
-                 'CODEX_HOME':str(Path(context.account_home)/context.profile)},
+            self.probe_helper()  # Complete identity, then current permission.
+        # Costly synchronous preparation can exhaust the fixed original even
+        # when an event-loop timeout has not resumed. Refuse before creation;
+        # a post-spawn timeout cannot authorize the earlier effect.
+        if context.clock() >= context.created + context.lifetime:
+            raise Refusal('local control original processing cutoff elapsed before creation')
+        child = await asyncio.create_subprocess_exec(*argv, env=env,
             stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE)
         key = context.originals.own(child, 'owned-sandbox-control', finish, publish)
