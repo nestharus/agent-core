@@ -1,8 +1,8 @@
 # Invocation-owned protected question binding
 
 This caller contribution uses immutable runtime
-`1532722e46ec2db51badd46672533e6ddd0ff84f`, tree
-`7c61a40d8c4692d563d896534874435127aed884`. The sandbox filesystem gives the exact selected executable a read rule for backend
+`c5d5d6a1c1965df531b34159515fd5f9bedb7af7`, tree
+`b5b3bf1dd812693442c85028289e003edeceaf0e`. The sandbox filesystem gives the exact selected executable a read rule for backend
 self-reexecution. For the named /usr/lib64 runtime, it checks the root-owned
 /lib64 -> usr/lib64 alias and preserves that loader spelling as a read rule.
 Each alias metadata/readlink acquisition and policy admission requires current
@@ -16,7 +16,9 @@ Provider creation and feed retain the concrete filesystem policy serialized in
 that turn's argv. After preparation, full identities and any NEW admission await,
 the caller rechecks every concrete external read rule against current positive
 rights and exclusions. Generated material/workspace roots require current
-ownership of the exact question home and remain exclusion mediated; the snapshot
+ownership of the exact question home. Every concrete read rule is conservatively
+treated as a potentially recursive grant: equality, containment and an enclosing
+grant over a held proper descendant all refuse without target metadata; the snapshot
 also retains current rights to its selected source material. A withdrawn right
 withholds creation, or closes stdin without input if an original already exists.
 That same original still owes numeric END, pipe EOF, capture and receipts. The
@@ -60,10 +62,11 @@ loader to import the seven admitted byte strings together. The binding uses:
   pool_module=admitted_module, expected_control=pool_control).admission(profile)` and the supported
   underlying `Pool.allocate(..., expected_control=...)`;
 - `SandboxProtection(root, executable, runtime_reads, capacity_check,
-  probe_helper=..., admit_read=question.admit_runtime_read)`;
+  probe_helper=..., admit_read=question.admit_runtime_read,
+  before_io=question.before_io, policy_authority=question.authorize_policy)`;
 - `ExecEndpoint(root, executable, originals, admission, authority, protection,
   capacity_check, publish, execution=execution,
-  policy_authority=question.authorize_policy)`;
+  policy_authority=question.authorize_policy, before_io=question.before_io)`;
 - `ContinuingReview(endpoint, 'gpt-xhigh', profile, collector, authority,
   lifetime=7200, clock=clock, origin=origin,
   material_authority=question.authorize_material)`;
@@ -90,7 +93,11 @@ current authority the parent is refused before target metadata acquisition.
 Each lock acquisition attempt rechecks current parent rights and full allowance,
 including busy-admission retries; static control is checked before effects and
 under the lock. Later counter mutations within the entered synchronous guard
-do not each invoke a separate parent callback.
+retain the original parent callback. The selected caller also supplies
+`before_access` for exact counter/lock open, read and write checks, including after
+under-lock routes rereads. A held descendant of the admitted public pool parent
+refuses this selected allocation/admission before target metadata; continuing
+original turns still require no NEW allocation. No account-store read is added.
 
 ## Current owner scope
 
@@ -138,7 +145,9 @@ global grant is invented.
 file-backed current callback. It opens the caller-owned regular file through
 no-follow parents, requires private mode and a single link, and rereads up to
 64KiB on every check. Work alone later creates/maintains that nonsecret current
-scope file outside the not-yet-created question home. It is mutable current
+scope file outside the not-yet-created question home. For refreshed holds, supply
+an actual current exclusion getter as `exclusions`; it is sampled again before
+each scope-file acquisition. A constructor tuple alone cannot receive later holds. It is mutable current
 authority data, not model material or a builder-issued grant. A callback may
 instead consult an already supported actual current authority source.
 
@@ -168,6 +177,22 @@ closes stdin without delivering the prompt while retaining the original for
 collection/publication. An event-loop timeout need not run first. These finite
 point checks do not make external changes atomic with delivery and cannot
 retract previously delivered input.
+
+Generated acquisition and write callbacks check current custody authority and
+exclusions for the exact target after parent-capacity callbacks and before access.
+They cover directory setup/export, canaries and attempted writes, capture open/read/
+append, original and turn receipts, proof read/persistence and publication. Local
+control policy/operands are revalidated after complete helper identity. A held
+workspace does not block safe capture/receiving elsewhere, and a newly held unrelated
+path does not prevent valid continuation. If a capture or receipt itself becomes
+held, no access is made to repair it: the SAME original still reaches numeric END
+and retains truthful missing EOF/evidence/publication debt. No replacement owner,
+recovered held data or zero-usage inference follows.
+
+The directory rule is a conservative contract, not a live backend exposure claim.
+It prevents admitting an enclosing concrete read capability when any current hold
+intersects it. Symbolic minimal runtime and already delivered bytes retain their
+existing trusted-backend and non-atomic-revocation limits.
 
 Collection/publication can continue after processing expiry/revocation only on
 the actual current scope's explicit custody permission for those actions and
@@ -250,8 +275,15 @@ snapshot (hard binding ceiling 2MiB/128 items); 128GiB total acquisition/identit
 check charges two full maxima, including the helper. More demands return a
 precise limit before the affected acquisition; no allowance silently grows.
 Before each write/use phase the real owned parent must admit the whole question
-allowance and leave 100GiB plus 1M available OS inodes. Retained own footprint
-and a next-write margin are checked, separately from fresh filesystem headroom.
+allowance and leave 100GiB plus 1M available OS inodes. The positively new home uses cumulative pre-effect reservations for every selected
+create, directory, append and attempted local-control write, separately from fresh
+filesystem headroom. Failed/partial writes remain charged, with no reclaim at END,
+exclusion or publication. Custody does not enumerate/stat retained descendants to
+price new writes. Held actual usage remains unmeasured; reservations are neither
+actual historical totals nor caps on unknown external/platform effects. The finite
+512MiB/8192 whole and 256MiB/4096 context limits still apply to admitted new effects.
+Only the selected fully mediated writer can use this ledger; an external writer
+or an unmediated consumer is outside that finite accounting premise.
 The public pool counter/lock destination needs its own lawful current placement
 and full-allowance check. These are point observations, not reservations or a
 private/provider/prior/concurrent census.

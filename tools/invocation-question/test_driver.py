@@ -617,8 +617,8 @@ class Mechanisms(unittest.IsolatedAsyncioTestCase):
         h = Harness('proof-persistence')
         h.create()
         original = h.q.runtime.direct.continuing_review.private_write
-        def fail_proof(path, body, capacity):
-            original(path, body, capacity)
+        def fail_proof(path, body, capacity, **kwargs):
+            original(path, body, capacity, **kwargs)
             if path.name == 'acting-proof.json':
                 raise OSError('MOCK proof durability failure after physical write')
         with patch.object(h.q.runtime.direct.continuing_review, 'private_write', side_effect=fail_proof):
@@ -904,6 +904,296 @@ class PreparedReadPolicy(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(h.prompts, [])
         self.assertFalse(h.q.originals.owned)
         self.assertTrue(all(row['persisted'] for row in h.q.publisher.attempts))
+        self.assertTrue(all(server.closed for server in h.listeners))
+
+
+class CurrentExclusionCustody(unittest.IsolatedAsyncioTestCase):
+    """Current handling and directory-grant contracts; owned nonsecret mocks.
+
+    No backend exposure is assumed. A policy admitting an ancestor is itself
+    inadmissible under the selected safe contract, irrespective of backend detail.
+    """
+    async def test_retained_budget_never_censuses_a_newly_held_workspace(self):
+        h = Harness('current-budget-no-census')
+        h.create()
+        h.q.before_io(h.q.home / 'context', 'mkdir')
+        h.q.budget.reserve(h.q.home / 'context/workspace/retained', 'create', 8193)
+        retained = (h.q.budget.bytes, h.q.budget.entries)
+        h.q.exclusions += (str(h.q.home / 'context/workspace'),)
+        # Even enumeration of the enclosing owned home is unnecessary here.
+        with patch.object(driver.os, 'listdir', side_effect=AssertionError('custody census')):
+            h.q.capacity(h.q.home)
+            h.q.publisher({'synthetic': 'denial remains receivable'})
+        self.assertGreaterEqual(h.q.budget.bytes, retained[0])
+        self.assertGreaterEqual(h.q.budget.entries, retained[1])
+        self.assertIn('UNMEASURED', h.q.budget.last['actual_held_usage'])
+        self.assertTrue(h.q.publisher.attempts[-1]['persisted'])
+
+    async def test_preparation_denial_does_not_reacquire_held_metadata(self):
+        h = Harness('current-denial-no-held-metadata')
+        h.create()
+        actual = h.q.endpoint.policy_authority
+        held = h.q.home / 'context/workspace'
+        changed = []
+        def policy(*args):
+            if not changed:
+                h.q.exclusions += (str(held),)
+                changed.append(True)
+            return actual(*args)
+        h.q.endpoint.policy_authority = policy
+        directory = driver.directory
+        def admitted(path):
+            if Path(path) == held or Path(path).is_relative_to(held):
+                raise AssertionError('held directory metadata acquired')
+            return directory(path)
+        with patch.object(driver, 'directory', side_effect=admitted), \
+             patch.object(driver.os, 'listdir', side_effect=AssertionError('denial census')):
+            with self.assertRaises(driver.Refusal):
+                await h.run()
+        self.assertEqual(h.provider_calls, 0)
+        self.assertEqual(h.prompts, [])
+        self.assertFalse(h.q.originals.owned)
+        self.assertTrue(all(row['persisted'] for row in h.q.publisher.attempts))
+        self.assertTrue(all(server.closed for server in h.listeners))
+
+    async def descendant_boundary(self, root, turn, boundary):
+        h = Harness('descendant-%s-%s-%s' % (root, turn, boundary))
+        h.create()
+        actual = h.q.endpoint.policy_authority
+        changed = []
+        def policy(filesystem, material, workspace):
+            ready = (h.provider_calls == turn - (boundary == 'creation')
+                     and h.q.endpoint.context.calls == turn - 1)
+            if ready and not changed:
+                held = (Path(material) if root == 'material' else Path(workspace)) / 'held-owned-descendant'
+                h.q.exclusions += (str(held),)
+                changed.append(str(held))
+            return actual(filesystem, material, workspace)
+        h.q.endpoint.policy_authority = policy
+        with patch.object(driver.os, 'listdir', side_effect=AssertionError('held census')):
+            with self.assertRaises(driver.Refusal):
+                await h.run()
+        self.assertEqual(len(changed), 1)
+        self.assertEqual(h.provider_calls, turn - (boundary == 'creation'))
+        self.assertEqual(len(h.prompts), turn - 1)
+        self.assertEqual(len(h.q.answers), max(0, turn - 2))
+        self.assertFalse(h.q.originals.owned)
+        self.assertTrue(all(row['persisted'] for row in h.q.publisher.attempts))
+        self.assertTrue(all(server.closed for server in h.listeners))
+        if boundary == 'feed':
+            receipt = json.loads((h.q.home / ('context/turn-%d/original-0.json' % (turn - 1))).read_text())
+            self.assertEqual(receipt['actual_END'], 0)
+            self.assertTrue(receipt['evidence']['stdout_eof'])
+            self.assertTrue(receipt['evidence']['stderr_eof'])
+
+    async def test_proper_descendant_hold_withholds_initial_creation_and_feed(self):
+        for root in ('material', 'workspace'):
+            for boundary in ('creation', 'feed'):
+                with self.subTest(root=root, boundary=boundary):
+                    await self.descendant_boundary(root, 1, boundary)
+
+    async def test_proper_descendant_hold_withholds_substantive_continuation(self):
+        for turn in (2, 3):
+            for root in ('material', 'workspace'):
+                for boundary in ('creation', 'feed'):
+                    with self.subTest(turn=turn, root=root, boundary=boundary):
+                        await self.descendant_boundary(root, turn, boundary)
+
+    async def test_unrelated_new_hold_keeps_both_answers_and_same_original(self):
+        h = Harness('unrelated-current-hold')
+        h.create()
+        h.q.exclusions += (str(h.q.home / 'unrelated-retained-output'),)
+        with patch.object(driver.os, 'listdir', side_effect=AssertionError('unnecessary census')):
+            result = await h.run()
+        self.assertEqual(len(result['answers']), 2)
+        self.assertEqual(h.provider_calls, 3)
+        self.assertEqual(len(h.prompts), 3)
+        self.assertTrue(all('resume' in argv for argv in h.commands[1:]))
+        self.assertEqual(result['status']['state'], 'closed')
+        self.assertTrue(all(row['persisted'] for row in h.q.publisher.attempts))
+        self.assertFalse(h.q.originals.owned)
+
+    async def test_hold_during_capacity_refuses_exact_receipt_before_open(self):
+        h = Harness('capacity-refresh-exact-file')
+        h.create()
+        module = h.q.runtime.direct.review_context
+        path = h.q.home / 'new-receipt.json'
+        def refresh(parent):
+            h.q.exclusions += (str(path),)
+            h.q.capacity(parent)
+        with patch.object(module.os, 'open', wraps=module.os.open) as opened:
+            with self.assertRaises(driver.Refusal):
+                module.private_write(path, b'owned', refresh, before_io=h.q.before_io)
+            self.assertFalse(any(c.args[0] == path for c in opened.call_args_list))
+        self.assertFalse(path.exists())  # Own nonsecret oracle, not an actual hold inquiry.
+
+    async def test_proof_read_is_refused_before_open_after_listener_finalization(self):
+        h = Harness('held-proof-input')
+        h.create()
+        path = h.q.home / 'context/turn-0/stdout.jsonl'
+        spawn = h.spawn
+        async def intercepted(*args, **kwargs):
+            child = await spawn(*args, **kwargs)
+            if 'exec' in args:
+                finish = child.complete
+                def complete(output):
+                    finish(output)
+                    # All data/EOF are mocked; intervene after its capture has
+                    # completed via the Originals publication callback below.
+                child.complete = complete
+            return child
+        h.spawn = intercepted
+        publisher = h.q.publisher
+        def publish(observation):
+            publisher(observation)
+            if observation.get('kind') == 'opaque-cli-process':
+                h.q.exclusions += (str(path),)
+        h.q.endpoint.publish = publish
+        # Context.execute receives this exact publisher and refreshes after its
+        # registered original has finished, before qualification's proof read.
+        with patch.object(Path, 'read_text', autospec=True, side_effect=lambda p, *a, **k:
+                (_ for _ in ()).throw(AssertionError('held proof opened')) if p == path
+                else Path.read_bytes(p).decode()):
+            with self.assertRaises(driver.Refusal):
+                await h.run()
+        self.assertFalse(h.q.review.status['protection_qualified'])
+        self.assertEqual(h.provider_calls, 1)
+        self.assertFalse(h.q.originals.owned)
+
+    async def test_capture_hold_keeps_numeric_end_and_pending_evidence(self):
+        h = Harness('held-capture-pending')
+        h.create()
+        held = h.q.home / 'context/turn-0/stdout.jsonl'
+        h.q.endpoint.started = lambda: setattr(h.q, 'exclusions', h.q.exclusions + (str(held),))
+        module = h.q.runtime.direct.review_context
+        real_open = Path.open
+        def admitted(path, *args, **kwargs):
+            if path == held:
+                raise AssertionError('held capture opened')
+            return real_open(path, *args, **kwargs)
+        with patch.object(Path, 'open', admitted):
+            with self.assertRaises(Exception):
+                await h.run()
+        self.assertEqual(h.provider_calls, 1)
+        self.assertEqual(h.prompts, [])
+        self.assertEqual(len(h.q.originals.pending), 1)
+        entry = next(iter(h.q.originals.pending.values()))
+        self.assertEqual(entry['exit'], 0)
+        self.assertFalse(entry['evidence_done'])
+        self.assertFalse(entry['evidence']['stdout_eof'])
+        self.assertTrue(entry['evidence']['stderr_eof'])
+        self.assertTrue(entry['evidence']['custody_blocked'])
+        self.assertTrue(all(row['persisted'] for row in h.q.publisher.attempts))
+
+    async def test_budget_is_cumulative_and_failed_exclusive_write_stays_charged(self):
+        h = Harness('reservation-retention')
+        h.create()
+        p = h.q.home / 'collision.json'
+        module = h.q.runtime.direct.review_context
+        module.private_write(p, b'first', h.q.capacity, before_io=h.q.before_io)
+        before = (h.q.budget.bytes, h.q.budget.entries)
+        with self.assertRaises(FileExistsError):
+            module.private_write(p, b'second', h.q.capacity, before_io=h.q.before_io)
+        self.assertGreater(h.q.budget.bytes, before[0])
+        self.assertGreater(h.q.budget.entries, before[1])
+        h.q.exclusions += (str(p),)
+        retained = h.q.budget.bytes
+        h.q.capacity(h.q.home)
+        self.assertEqual(h.q.budget.bytes, retained)
+        with self.assertRaises(driver.Refusal):
+            h.q.budget.reserve(h.q.home / 'cannot-fit', 'create', 512 * driver.MIB)
+        self.assertEqual(h.q.budget.bytes, retained)
+
+    async def test_scope_reader_rechecks_current_exclusions_before_metadata(self):
+        h = Harness('current-scope-exclusions')
+        path = h.area / 'own-scope.json'
+        put(path, b'{"synthetic": true}')
+        held = []
+        current = driver.scope_reader(path, h.owner, lambda: tuple(held))
+        self.assertEqual(current('collect'), {'synthetic': True})
+        held.append(str(path))
+        with patch.object(driver, 'directory', side_effect=AssertionError('held authority metadata')):
+            with self.assertRaises(driver.Refusal):
+                current('collect')
+
+
+    async def test_publication_hold_preserves_attempt_and_allows_next_safe_name(self):
+        h = Harness('held-publication-name')
+        h.create()
+        target = h.q.home / 'publication-0000.json'
+        original = h.q.publisher.capacity
+        refreshed = []
+        def capacity(parent):
+            if not refreshed:
+                h.q.exclusions += (str(target),)
+                refreshed.append(True)
+            original(parent)
+        h.q.publisher.capacity = capacity
+        with self.assertRaises(driver.Refusal):
+            h.q.publisher({'synthetic': 'blocked exact receiving name'})
+        self.assertFalse(h.q.publisher.attempts[0]['persisted'])
+        h.q.publisher({'synthetic': 'new lawful receiving name'})
+        self.assertTrue(h.q.publisher.attempts[1]['persisted'])
+        self.assertFalse(target.exists())  # Nonsecret synthetic test oracle only.
+
+    async def test_public_counter_hold_is_checked_after_under_lock_routes_read(self):
+        h = Harness('current-counter-read')
+        h.create()
+        pool = h.q.pool.pool
+        read_counter = pool.read_counter
+        held = h.state / 'codex.counter'
+        reached = []
+        def current(handle):
+            h.q.exclusions += (str(held),)
+            reached.append(True)
+            # A current hold arrives after the descriptor was lawfully opened.
+            with patch.object(driver.os, 'fstat', side_effect=AssertionError('held counter metadata')):
+                return read_counter(handle)
+        with patch.object(pool, 'read_counter', side_effect=current):
+            with self.assertRaises(driver.Refusal):
+                pool.allocate(list(driver.PROFILES), blocking=False,
+                              expected_control=h.q.pool_control)
+        self.assertEqual(reached, [True])
+        self.assertEqual(h.provider_calls, 0)
+
+    async def test_external_directory_descendant_refresh_is_checked_at_policy_tail(self):
+        h = Harness('external-descendant-at-tail')
+        h.create()
+        current = h.q.current
+        changed = []
+        def refresh(action):
+            scope = current(action)
+            if action == 'analysis' and not changed:
+                h.q.exclusions += ('/usr/lib/python3.12/owned-synthetic-hold',)
+                changed.append(True)
+            return scope
+        h.q.current = refresh
+        material, workspace = h.q.home / 'context/material', h.q.home / 'context/workspace'
+        filesystem = {':root': 'deny', ':minimal': 'read', str(material): 'read',
+                      str(workspace): 'read', '/usr/lib/python3.12': 'read'}
+        with patch.object(driver, 'directory', side_effect=AssertionError('policy metadata')):
+            with self.assertRaises(driver.Refusal):
+                h.q.authorize_policy(filesystem, material, workspace)
+        self.assertEqual(changed, [True])
+
+    async def test_local_control_hold_after_helper_identity_withholds_creation(self):
+        h = Harness('local-owned-read-refresh')
+        h.create()
+        protection = h.q.endpoint.protection
+        helper = protection.probe_helper
+        changed = []
+        def complete():
+            value = helper()
+            if not changed:
+                h.q.exclusions += (str(h.q.home / 'context/turn-0/protection/outside.txt'),)
+                changed.append(True)
+            return value
+        protection.probe_helper = complete
+        with self.assertRaises(driver.Refusal):
+            await h.run()
+        self.assertEqual(changed, [True])
+        self.assertEqual(h.provider_calls, 0)
+        self.assertFalse(h.q.originals.owned)
         self.assertTrue(all(server.closed for server in h.listeners))
 
 

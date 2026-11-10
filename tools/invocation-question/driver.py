@@ -20,9 +20,9 @@ import time
 from types import ModuleType
 from uuid import uuid4
 
-COMMIT = '1532722e46ec2db51badd46672533e6ddd0ff84f'
-TREE = '7c61a40d8c4692d563d896534874435127aed884'
-PINSET = '0defbb6bdb423e948c0e3b15c59e6e763697c5e0877538595c21d13843e9b85a'
+COMMIT = 'c5d5d6a1c1965df531b34159515fd5f9bedb7af7'
+TREE = 'b5b3bf1dd812693442c85028289e003edeceaf0e'
+PINSET = '0f3df7d6002de8ba2b44b4e6b4ad41490af87b40cea528808e960f5310625d34'
 DIRECT = ('profile_lease', 'execution_pool', 'fast_tier', 'dispatch',
           'review_context', 'opaque_dialogue', 'continuing_review')
 PROFILES = ('.codex2', '.codex3', '.codex4', '.codex5')
@@ -108,9 +108,11 @@ def scope_reader(path, owner, exclusions):
     No file is created here. The genuine caller alone supplies/maintains it;
     its existence does not issue permission. Every check rereads current bytes.
     """
-    path = positive(path, exclusions)
+    selected = exclusions if callable(exclusions) else lambda: tuple(exclusions)
+    path = positive(path, selected())
     def current(action):
         authenticate_invoker(owner)
+        positive(path, selected())
         parent = directory(path.parent)
         try:
             fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
@@ -130,38 +132,42 @@ def scope_reader(path, owner, exclusions):
     return current
 
 
-def footprint(path, exclusions):
-    """Only the positively NEW owned question tree; no old/global census."""
-    size, entries = 0, 1
-    fd = directory(positive(path, exclusions))
-    try:
-        for name in os.listdir(fd):
-            child = positive(Path(path) / name, exclusions)
-            info = os.stat(name, dir_fd=fd, follow_symlinks=False)
-            if stat.S_ISDIR(info.st_mode):
-                amount, count = footprint(child, exclusions)
-                size += amount
-                entries += count
-            elif stat.S_ISREG(info.st_mode) and info.st_nlink == 1:
-                size += info.st_size
-                entries += 1
-            else:
-                raise Refusal('unknown/linked member in owned custody')
-            if entries > 8192 or size > 512 * MIB:
-                raise Refusal('whole owned footprint exceeds finite question bound')
-        return size, entries
-    finally:
-        os.close(fd)
-
-
 class Budget:
+    """Cumulative pre-effect reservations for a positively NEW owned home.
+
+    No custody census: later holds cannot make a skipped tree free or require
+    acquiring its metadata to price a new write. Failed reservations stay charged.
+    This accounts this writer's bounded effects, not unknown external/platform use.
+    """
     def __init__(self, home, exclusions):
-        self.home, self.exclusions = positive(home, exclusions), tuple(exclusions)
-        self.created = False
-        self.last = None
+        self.exclusions = exclusions if callable(exclusions) else lambda: tuple(exclusions)
+        self.home = positive(home, self.exclusions())
+        self.created, self.last = False, None
+        self.bytes = self.entries = self.context_bytes = self.context_entries = 0
+
+    def reserve(self, path, operation, amount=0):
+        path = positive(path, self.exclusions())
+        if not path.is_relative_to(self.home):
+            raise Refusal('reservation outside positively new owned home')
+        if type(amount) is not int or amount < 0:
+            raise Refusal('finite nonnegative write reservation required')
+        entry = int(operation in {'mkdir', 'create'})
+        size = 4096 if operation == 'mkdir' else ((amount + 4095) // 4096) * 4096
+        inside = path.is_relative_to(self.home / 'context')
+        if (self.bytes + size > 512 * MIB or self.entries + entry > 8192
+                or inside and (self.context_bytes + size > 256 * MIB
+                               or self.context_entries + entry > 4096)):
+            raise Refusal('cumulative retained and next-write reservations do not fit')
+        # Retain even failed/partial exclusive creates or writes. Never reclaim
+        # from END, exclusion, a skipped measurement or a failed persistence.
+        self.bytes += size
+        self.entries += entry
+        if inside:
+            self.context_bytes += size
+            self.context_entries += entry
 
     def check(self, parent):
-        parent = positive(parent, self.exclusions)
+        parent = positive(parent, self.exclusions())
         if not (parent.is_relative_to(self.home)
                 or not self.created and parent == self.home.parent):
             raise Refusal('write outside positively owned question')
@@ -173,28 +179,21 @@ class Budget:
         if (status.f_bavail * status.f_frsize - 512 * MIB < 100 * 1024**3
                 or status.f_favail - 8192 < 1000000):
             raise Refusal('whole question allowance would breach OS headroom')
-        if self.created:
-            size, entries = footprint(self.home, self.exclusions)
-            # Largest bound on a single next runtime write, plus entry margin.
-            if size + 32 * MIB > 512 * MIB or entries + 16 > 8192:
-                raise Refusal('retained and next-write demand does not fit whole allowance')
-            context = self.home / 'context'
-            try:
-                amount, count = footprint(context, self.exclusions)
-            except FileNotFoundError:
-                amount, count = 0, 0
-            if amount + 32 * MIB > 256 * MIB or count + 16 > 4096:
-                raise Refusal('context preparation/capture envelope exhausted')
         self.last = dict(available_bytes=status.f_bavail * status.f_frsize,
-                         available_entries=status.f_favail, charge_bytes=512 * MIB,
-                         charge_entries=8192, prior_concurrent='UNKNOWN; not reservation/quota/census')
+            available_entries=status.f_favail, charge_bytes=512 * MIB,
+            charge_entries=8192, accounting='cumulative pre-effect reservations; no census',
+            reserved_bytes=self.bytes, reserved_entries=self.entries,
+            context_reserved_bytes=self.context_bytes, context_reserved_entries=self.context_entries,
+            actual_held_usage='UNMEASURED; reservations retained, never zero or actual cap',
+            prior_concurrent='UNKNOWN; not reservation/quota/census')
 
 
 class Publisher:
     """Durable exclusive receiving; failed names stay reserved and conserved."""
-    def __init__(self, home, capacity, custody):
+    def __init__(self, home, capacity, custody, before_io=lambda path, operation, amount=0: None):
         self.home, self.capacity, self.custody = Path(home), capacity, custody
         self.attempts = []
+        self.before_io = before_io
 
     def __call__(self, observation):
         self.custody()
@@ -204,10 +203,12 @@ class Publisher:
         name = 'publication-%04d.json' % len(self.attempts)
         self.attempts.append(dict(file=name, persisted=False, bytes=len(body), sha256=digest(body)))
         self.capacity(self.home)
+        self.before_io(self.home / name, 'create', len(body))
         parent = directory(self.home)
         try:
             fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=parent)
             with os.fdopen(fd, 'wb') as stream:
+                self.before_io(self.home / name, 'access')
                 stream.write(body)
                 stream.flush()
                 os.fsync(stream.fileno())
@@ -325,7 +326,7 @@ class Question:
         self.clock, self.origin = clock, clock()
         if not math.isfinite(self.origin):
             raise Refusal('finite original monotonic creation required')
-        self.budget = Budget(self.home, exclusions)
+        self.budget = Budget(self.home, lambda: self.exclusions)
         self.runtime = PinnedRuntime(runtime, pins, self.check, self.acquire)
         self.review = self.endpoint = self.originals = self.publisher = None
         self.started = False
@@ -382,6 +383,20 @@ class Question:
     def capacity(self, parent):
         self.check('collect')
         self.budget.check(parent)
+
+    def before_io(self, path, operation, amount=0):
+        """Current custody/exclusions before exact generated IO, including metadata.
+
+        Continuing custody is separate from processing permission. It never
+        overrides a hold, and reserves only this new writer's bounded effects.
+        """
+        self.check('collect')
+        path = positive(path, self.exclusions)
+        if not path.is_relative_to(self.home):
+            raise Refusal('generated acquisition outside owned question')
+        self.budget.check(self.home if path == self.home and self.budget.created else path.parent)
+        if operation in {'mkdir', 'create', 'append'}:
+            self.budget.reserve(path, operation, amount)
 
     def charge(self, amount):
         if type(amount) is not int or not 0 <= amount <= self.io_remaining:
@@ -442,7 +457,7 @@ class Question:
     def admit_runtime_read(self, path):
         self.check('dependencies', [path])
 
-    def authorize_policy(self, filesystem, material, workspace):
+    def authorize_policy(self, filesystem, material, workspace, *, controls=()):
         """Current rights for the exact prepared provider policy, never a rebuild.
 
         Named external rules need current positive read rights. The two generated
@@ -453,11 +468,18 @@ class Question:
         if (not isinstance(filesystem, dict) or filesystem.get(':root') != 'deny'
                 or filesystem.get(':minimal') != 'read'):
             raise Refusal('prepared provider read policy unavailable or changed')
+        def grant(path):
+            path = positive(path, self.exclusions)
+            # Treat EVERY concrete rule as potentially recursive. This safe
+            # contract needs no guessed backend directory semantics or stat.
+            if any(Path(p).is_relative_to(path) for p in self.exclusions):
+                raise Refusal('enclosing read grant intersects a current hold')
+            return path
         owned = {str(material), str(workspace)}
         if len(owned) != 2 or not owned <= filesystem.keys():
             raise Refusal('exact generated material/workspace read policy required')
         for path in owned:
-            if not positive(path, self.exclusions).is_relative_to(self.home / 'context'):
+            if not grant(path).is_relative_to(self.home / 'context'):
                 raise Refusal('prepared generated read outside owned question context')
         external = []
         for path, access in filesystem.items():
@@ -465,7 +487,7 @@ class Question:
                 continue
             if access != 'read':
                 raise Refusal('prepared provider policy exceeds read authority')
-            positive(path, self.exclusions)
+            grant(path)
             if path not in owned:
                 external.append(path)
         # One current scope validates all concrete external reads together, after
@@ -473,9 +495,21 @@ class Question:
         # current exclusions, processing permission and original lifetime.
         self.check('dependencies', external)
         self.check('analysis', [*external, *(item.path for item in self.materials)])
+        if controls:
+            self.check('qualify')
         # Current scope validation may itself refresh the owner's exclusions.
-        for path in owned:
+        for path in filesystem:
+            if path not in {':root', ':minimal'}:
+                grant(path)
+        # Withholding provider input also conserves the already registered
+        # original's capture duties. These are exact paths of THIS prepared
+        # turn, not a rebuilt filesystem policy or a directory inventory.
+        for path in (Path(material).parent / 'stdout.jsonl',
+                     Path(material).parent / 'stderr.bin'):
             positive(path, self.exclusions)
+        for path in controls:
+            if not positive(path, self.exclusions).is_relative_to(self.home / 'context'):
+                raise Refusal('local control operand outside owned context')
 
     def probe_helper(self):
         self.check('qualify')
@@ -493,6 +527,7 @@ class Question:
         self.check_caller()
         parent = directory(self.home.parent)
         try:
+            self.before_io(self.home, 'mkdir')
             os.mkdir(self.home.name, 0o700, dir_fd=parent)  # exclusive, no adoption
             os.fsync(parent)
         finally:
@@ -505,7 +540,7 @@ class Question:
         self.pool = self.runtime.pool_module.ExecutionPool(dict(profiles=list(PROFILES),
             execution_pool_routes=self.pool_control['routes'], deadlines={'bind': 30}),
             pool=public_pool.Pool(self.pool_control['routes'], reader=self.control_read, charge=self.charge,
-                                  before_write=self.pool_parent_guard),
+                                  before_write=self.pool_parent_guard, before_access=self.pool_access),
             pool_module=public_pool, expected_control=self.pool_control)
         self.pool.pool.assert_control(self.control_read(self.pool_control['routes'], MIB), self.pool_control)
         helper_hash = self.runtime.pins['tools/direct-child/fast_tier.py']
@@ -522,14 +557,15 @@ class Question:
         execution = self.runtime.direct.dispatch.open_opaque_execution(
             self.pool_control['routes'], 'gpt-xhigh', self.profile, force_fast=self.force_fast, config_reader=self.control_read)
         self.originals = self.runtime.appserver.Originals().scope()
-        self.publisher = Publisher(self.home, self.capacity, lambda: self.check('publish'))
+        self.publisher = Publisher(self.home, self.capacity, lambda: self.check('publish'), self.before_io)
         protection = self.runtime.direct.continuing_review.SandboxProtection(
             self.home / 'context', self.program['path'], self.runtime_reads,
-            self.capacity, probe_helper=self.probe_helper, admit_read=self.admit_runtime_read)
+            self.capacity, probe_helper=self.probe_helper, admit_read=self.admit_runtime_read,
+            before_io=self.before_io, policy_authority=self.authorize_policy)
         self.endpoint = self.runtime.direct.continuing_review.ExecEndpoint(
             self.home / 'context', self.program['path'], self.originals, self.admission,
             self.authorize, protection, self.capacity, self.publisher, execution=execution,
-            policy_authority=self.authorize_policy)
+            policy_authority=self.authorize_policy, before_io=self.before_io)
         self.endpoint.clock = self.clock
         self.endpoint.capture_max = 8 * MIB
         self.review = self.runtime.direct.continuing_review.ContinuingReview(
@@ -552,11 +588,22 @@ class Question:
         # receives this narrow exception; no private store/read root is added.
         self.pool_parent_guard(counter.parent)
 
+    def pool_access(self, path, operation):
+        """Only the selected public rotation counter/lock, never account data."""
+        path = Path(path)
+        if path.name not in {'codex.counter', 'codex.pool.lock'}:
+            raise Refusal('public pool operand outside selected counter/lock')
+        self.pool_parent_guard(path.parent)
+        # Parent checking can refresh current scope: check this exact target last.
+        positive(path, self.exclusions, public_pool_parent=True)
+
     def pool_parent_guard(self, parent):
         # Pool invokes this anew before each lock/counter write, including each
         # retry after awaited busy admission; no earlier placement grant is reused.
         scope = self.check('allocate')
         parent = positive(parent, self.exclusions, public_pool_parent=True)
+        if any(Path(p).is_relative_to(parent) for p in self.exclusions):
+            raise Refusal('public pool parent intersects current hold')
         if str(parent) not in scope.get('pool_write_parents', []):
             raise Refusal('actual public pool state destination not currently admitted')
         fd = directory(parent)
