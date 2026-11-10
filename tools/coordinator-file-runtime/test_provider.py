@@ -298,6 +298,36 @@ class ProviderTrial(unittest.TestCase):
                 self.assertFalse(a['provider_report']['final_complete'])
                 self.assertEqual(a['result'],{'provider_incomplete':True})
 
+    def test_owner_integrates_independently_validated_delta_with_incomplete_result(self):
+        request = self.prepare(mode='multiple')
+        self.run_entry(request)
+        before = self.raw()['attempts']['a']
+        self.assertEqual([p.returncode for p in self.adapter.originals], [0, 0, 0])
+        self.assertEqual(before['end'], 0)
+        self.assertFalse(before['provider_report']['final_complete'])
+        self.assertEqual(before['result'], {'provider_incomplete': True})
+
+        # The owner checks current material, full basis and admitted footprint
+        # against independent fixture evidence, then records that provenance.
+        state = self.raw()
+        delta = {'point:task': {'value': 'independently verified'}}
+        self.assertEqual(state['versions'].get('point:task', 0), 0)
+        self.assertEqual(before['basis'], {'point:task': 0})
+        self.assertEqual(before['resources'], {'point:task': 'write'})
+        call(self.rt, 'send', packet='validation', event='task', recipient='branch',
+             payload={'basis': before['basis'], 'footprint': before['resources'],
+                      'evidence': 'independent fixture material verification'})
+        outcome = call(self.rt, 'integrate', attempt='a', collector=request['collector'], writes=delta)
+        self.assertEqual(outcome, {'versions': {'point:task': 1}, 'external_effects': False})
+        after = self.raw()['attempts']['a']
+        self.assertEqual(after['result'], before['result'])
+        self.assertEqual(after['provider_report'], before['provider_report'])
+        self.assertEqual(after['end'], 0)
+        self.assertEqual(after['delta'], delta)
+        self.assertFalse(self.raw()['events']['task']['finished'])
+        packet = call(self.rt, 'inbox', 'branch')['packets'][0]
+        self.assertEqual(packet['payload']['evidence'], 'independent fixture material verification')
+
     def test_cli_provider_command_with_fixed_public_process_and_sql_blocker(self):
         r=self.prepare()
         directory=Path(__file__).resolve().parent
@@ -327,4 +357,6 @@ runpy.run_path(sys.argv[0],run_name='__main__')
 
 
 if __name__ == '__main__':
-    unittest.main()
+    fixtures.check_capacity(fixtures.ARTIFACTS.parent, 8 * 1024**2, 2048)
+    fixtures.ARTIFACTS.mkdir(mode=0o700, parents=True, exist_ok=False)
+    unittest.main(verbosity=2)

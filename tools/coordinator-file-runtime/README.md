@@ -105,7 +105,7 @@ opaque and are never followed to source, provider, private history or old stores
 | `branch` | Branch: `branch,repository,ref,incarnation,root,basis`. Immutable prospective association; a new incarnation needs a new ID. These are owner-supplied bindings, not Git mutations or independent verification of Root acceptance. |
 | `review` | Reviews: `review,component,branch,opaque_contract,context,history`, optional `predecessor`. Preserves separate component/run/history references and calls; successor is explicitly a **new** encounter. Does not resolve opaque selectors or manufacture a resumable session. |
 | `package` | Work: `package,event,scope,basis`; admits a classified known event owned by QA. QA reserves this exact event/package. |
-| `integrate` | `attempt,collector,writes`. Successful collected proposal, still-owned attempt, complete current version basis and admitted write footprint required. Commits only coordinator deltas/generations; unrelated resources remain unchanged. External canonical files/Git refs are **not** mutated or certified current by this operation. |
+| `integrate` | `attempt,collector,writes`. Collected numeric-zero attempt, still-owned attempt, complete current version basis and admitted write footprint required. Commits only coordinator deltas/generations; unrelated resources remain unchanged. External canonical files/Git refs are **not** mutated or certified current by this operation. |
 | `effect`, `observe_effect` | Intent: `effect,attempt,collector,kind,intent` while launching; kinds `publication,push,delivery`. Original owner later records `effect,outcome,evidence`, outcome `applied` or `not-applied`. Unknown remains intent and prevents reconciliation. These commands do not perform external effects. |
 | `reconcile` | `attempt,collector,evidence`, optionally `builder`. Requires collected numeric END and every effect settled. Branch builder additionally supplies exact `commit,remote_readback,pushed,signed,effects_reconciled`, matching 40-hex commit/readback and true flags. This retains evidence; the runtime does not independently verify Git signatures or network operations. |
 | `send` | Responsibility owner: `packet,event,recipient,payload`, optional `correction_of`. Exact addressed adopted recipient; immutable identity/content. Send using the owning event, or have Work admit a separately addressed event. Correction creates another downstream duty and retains the original. |
@@ -184,6 +184,16 @@ correction duty rather than overwriting old evidence. These records remain
 cooperative assertions. Real owners and external holders must supply actual
 actions and authority separately. Results are bounded to 4 KiB and addressed
 packets to 8 KiB; larger original evidence stays with its actual custodian.
+Integration is an explicit decision by the authenticated cooperative owner. The
+owner must independently validate the delta against current material, its full
+basis and write footprint, and retain the actual validation and provenance. If
+current proof is missing, hold or return partial evidence rather than integrate
+from an incomplete marker. An incomplete Model result remains incomplete: numeric
+END 0 alone is not Model success, a recovered proposal, or QA acceptance. The
+mechanical integration gates do not verify the owner's semantic assertions, and
+integration does not itself establish an external publication or QA acceptance.
+Useful independently verified evidence need not be discarded or blindly replayed.
+
 Intake payloads and integration deltas are each bounded to 4 KiB of encoded JSON.
 Each event retains at most twelve hold assertions, including repeats. Additional
 history is refused before mutation: keep that assertion with its actual holder
