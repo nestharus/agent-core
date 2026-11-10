@@ -261,6 +261,38 @@ class Harness:
                                 driver.digest(self.material.read_bytes()))])
 
 
+
+class NamespacePolicy(unittest.TestCase):
+    def test_exact_entry_and_runtime_alias_without_ancestor_or_write_grant(self):
+        h = Harness('namespace-policy')
+        policy = h.q.runtime.direct.continuing_review.SandboxProtection(
+            h.area, str(h.program), h.q.runtime_reads, guard).filesystem(
+                h.area / 'material', h.area / 'workspace')
+        self.assertEqual(policy[str(h.program)], 'read')
+        self.assertNotIn(str(h.program.parent), policy)
+        self.assertEqual(policy['/lib64'], 'read')
+        self.assertEqual(policy[':root'], 'deny')
+        self.assertTrue(all(value in {'deny', 'read'} for value in policy.values()))
+        for path in ('/home', '/usr', '/lib', str(h.area / 'outside')):
+            self.assertNotIn(path, policy)
+
+    def test_changed_loader_alias_refuses_before_execution(self):
+        h = Harness('namespace-alias-change')
+        module = h.q.runtime.direct.continuing_review
+        protection = module.SandboxProtection(h.area, str(h.program), h.q.runtime_reads, guard)
+        with patch.object(module.os, 'readlink', return_value='different-runtime'):
+            with self.assertRaises(module.Refusal):
+                protection.filesystem(h.area / 'material', h.area / 'workspace')
+
+    def test_alias_is_not_granted_for_undeclared_runtime(self):
+        h = Harness('namespace-no-alias')
+        module = h.q.runtime.direct.continuing_review
+        policy = module.SandboxProtection(h.area, str(h.program),
+            ['/usr/bin/python3.12'], guard).filesystem(h.area / 'material', h.area / 'workspace')
+        self.assertNotIn('/lib64', policy)
+        with self.assertRaises(module.Refusal):
+            module.SandboxProtection(h.area, 'codex', ['/usr/bin/python3.12'], guard)
+
 class Mechanisms(unittest.IsolatedAsyncioTestCase):
     async def test_same_original_and_hot_policy_new_vs_continuing(self):
         h = Harness('same')

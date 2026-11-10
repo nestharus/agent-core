@@ -1,8 +1,16 @@
 # Invocation-owned protected question binding
 
 This caller contribution uses immutable runtime
-`7ec63c8bbb24e5844f246b98af0624383166f793`, tree
-`adddb794c4f3a7fe8845e5b268a1f459b65edd67`. This runtime enforces the fixed
+`7e7d0b7a7c3014806270e23887244c6d7a4ffbd8`, tree
+`7636f90cad91352a38255d41114773332e845289`. The sandbox filesystem gives the exact selected executable a read rule for backend
+self-reexecution. For the named /usr/lib64 runtime, it checks the root-owned
+/lib64 -> usr/lib64 alias and preserves that loader spelling as a read rule.
+It adds no executable-parent or HOME grant, and retains root deny, read-only
+material/workspace and network denial. Full program/helper identity checks and
+current scope/deadline checks remain required. Local qualification is separate
+from any later provider proof or admission.
+
+This runtime enforces the fixed
 processing cutoff after synchronous feed preparation and authorization. The
 caller refreshes current permission after complete identity work. Earlier
 caller3592/runtime82de and caller16d/runtime44c remain historical evidence. No
