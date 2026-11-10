@@ -464,6 +464,15 @@ fixed unittest procedure records actual case IDs/statuses, discovery/setup
 errors, missing/duplicate cases, skipped/expected-failure results and incomplete
 collection. A count alone never supplies completeness.
 
+Within each of those five workers, each fixed test module gets fresh test-module
+globals, its own fixture directory and the original outer SQL import blocker.
+Provider tests import fresh runtime fixtures; they cannot inherit an earlier
+runtime negative control's accumulator or mutate the earlier runtime suite's
+actor fixture. The module's original SQL checks and test oracles remain intact.
+This uses no additional test workers and accepts every valid five-partition
+selection, including one pairing the intentional SQL control and provider's
+empty-accumulator assertion.
+
 A separate `qa-consolidate` attempt then owns one new Python process. It consumes
 exactly five current partition record digests with the same candidate, grant,
 job, original attempt and retained root, checks discovery/actual case accounting
@@ -472,7 +481,14 @@ while truthfully reporting failed tests. The outer receiver adds both actual
 process collections, full partition records, manifests, grant and input facts
 to `outputs/runner.json`; its exact complete `storage.digest` is delivered to the
 designated actual acceptor through `send`. Delivery carries the current bindings
-and original root. No program here issues a semantic acceptance decision. Only
+and original root. Overall `outcome`, `failures` and `unknowns` include both actual
+stage collections as well as the corresponding case/input results. Success
+requires complete collected controller and separate consolidator numeric END 0
+and complete successful cases with current input bindings. A flushed success
+result followed by a nonzero END remains preserved beside that END and yields
+failure in the stage, runner, returned summary and delivered packet. Missing or
+incomplete collection stays held/unknown; it cannot supply success.
+No program here issues a semantic acceptance decision. Only
 the genuine acceptor can judge the corresponding successful current run and
 receipt its own pickup, processing and settlement.
 
@@ -508,8 +524,9 @@ or budget-epoch rollover exists.
 Run the complete local software suite with a new admitted root:
 
 ```bash
+mkdir -m 700 /absolute/new/coordination/software-qa12-tests
 PYTHONDONTWRITEBYTECODE=1 \
-COORDINATOR_TEST_ARTIFACTS=/absolute/new/coordination/software-qa08-tests \
+COORDINATOR_TEST_ARTIFACTS=/absolute/new/coordination/software-qa12-tests \
 python3 -B tools/coordinator-file-runtime/test_software_qa.py
 ```
 
@@ -517,6 +534,9 @@ The suite uses clearly synthetic identities and controlled tiny public Git
 repositories. It includes the actual client entrypoint executing every selected
 current core runtime/provider case through five partitions, a real failing test
 with separately successful consolidation END, numeric original collections,
+actual controller/consolidator END 17 after complete result publication, an
+accepted partition pairing the runtime SQL control with the provider assertion,
+and a genuine unexpected SQL import that still fails under module isolation,
 frozen input/tamper checks, SQL-block negative controls, digest/receipt
 correspondence, creation/publication ambiguity and settlement without replay.
 It performs no real operating adoption, model call, independent semantic

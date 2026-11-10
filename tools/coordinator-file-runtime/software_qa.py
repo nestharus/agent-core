@@ -6,6 +6,7 @@ runtime/provider unittest procedure is admitted. No model, shell or Board entry.
 """
 import argparse
 import builtins
+from contextlib import contextmanager
 import hashlib
 import importlib
 import json
@@ -324,6 +325,15 @@ def public_row(row):
     return {k: v for k, v in row.items() if k != 'log'} | {'log_sha256': sha(row['log'])}
 
 
+def stage_outcome(collection, result):
+    """A flushed result never overrides the actual original process outcome."""
+    if type(collection['end']) is int and collection['end'] != 0:
+        return 'failure'
+    if type(collection['end']) is not int or not collection['complete'] or result is None:
+        return 'unknown'
+    return result.get('outcome', 'unknown')
+
+
 def guard(rt, actor, credential, attempt, collector, g):
     def admitted(create):
         with rt.files.transaction(readonly=True) as s:
@@ -382,21 +392,32 @@ class Peer:
         inputs(g)
         output = Path(g['retained_root']) / 'outputs'
         execute = self.stage(g, m, 'execute', secrets)
-        require(execute['collection']['end'] is not None and execute['collection']['complete'] and execute['result'] is not None,
+        require(type(execute['collection']['end']) is int and execute['collection']['complete'] and execute['result'] is not None,
                 'execution collection incomplete; hold original, no consolidation/replay')
         require(execute['result']['binding'] == binding(g, m), 'execution binding mismatch')
         # A failure is still a genuinely collected execution, eligible for a
         # truthful separate consolidation. No test outcome becomes acceptance.
         consolidated = self.stage(g, m, 'consolidate', secrets)
+        result = consolidated['result']
+        require(result is not None and result['binding'] == binding(g, m), 'consolidation binding mismatch')
+        require(result['inputs_before'] == g['inputs'] and result['inputs_after'] == g['inputs'], 'consolidation input binding incomplete')
+        failures, unknowns = list(result['failures']), list(result['unknowns'])
+        for name, stage in [('execution', execute), ('consolidation', consolidated)]:
+            actual = stage_outcome(stage['collection'], stage['result'])
+            if actual == 'failure':
+                failures.append(name + ' numeric END/result failed: ' + str(stage['collection']['end']))
+            elif actual not in ({'collected'} if name == 'execution' else {'success'}):
+                unknowns.append(name + ' successful collection/result unavailable')
+        outcome = 'failure' if failures else ('unknown' if unknowns else 'success')
         record = {'schema': 1, 'binding': binding(g, m), 'grant': g, 'manifest': m,
                   'receiver': {'actor': self.actor, 'pid': os.getpid(), 'program_sha256': g['program_sha256']},
                   'execution': execute, 'partitions': [get(output / ('partition-' + str(i) + '.json')) for i in range(5)],
                   'consolidation': consolidated, 'inputs_after': inputs(g),
                   'output_usage': usage(g), 'semantic_acceptance': 'reserved for designated actual actor',
-                  'unknowns': consolidated['result']['unknowns'] if consolidated['result'] else ['consolidation result unavailable']}
+                  'outcome': outcome, 'failures': failures, 'unknowns': unknowns}
         put(output / 'runner.json', record)
         self.settle(g, record)
-        return {'runner': str(output / 'runner.json'), 'digest': digest(record), 'outcome': consolidated['result']['outcome'] if consolidated['result'] else 'unknown',
+        return {'runner': str(output / 'runner.json'), 'digest': digest(record), 'outcome': record['outcome'],
                 'semantic_acceptance': False}
 
     def stage(self, g, m, mode, secrets):
@@ -415,14 +436,14 @@ class Peer:
         row = capture([p], g['limits']['capture_bytes'], g['limits']['seconds'] + 10, secrets + [collector])[0]
         result = parsed(row)
         public = {'binding': binding(g, m), 'attempt': attempt, 'launch_id': start['launch_id'],
-                  'collection': public_row(row), 'result': result}
+                  'collection': public_row(row), 'result': result, 'outcome': stage_outcome(row, result)}
         out = Path(g['retained_root']) / 'outputs'
         put(out / (mode + '.log'), row['log'])
         put(out / (mode + '.json'), public)
         require(type(row['end']) is int, 'original process END uncollected; held')
         self.rt.call('collect', self.actor, self.credential, attempt=attempt, collector=collector,
                      launch_id=start['launch_id'], end=row['end'], result={'runner_stage': mode, 'digest': digest(public), 'complete': row['complete'],
-                     'outcome': result.get('outcome', 'unknown') if result else 'unknown'}, evidence='actual original Popen numeric END; retained ' + g['retained_root'])
+                     'outcome': public['outcome']}, evidence='actual original Popen numeric END; retained ' + g['retained_root'])
         require(row['complete'] and result is not None, 'partial capture/collection remains unreconciled; no replay')
         self.rt.call('reconcile', self.actor, self.credential, attempt=attempt, collector=collector,
                      evidence='collected software process; admitted output only; ' + digest(public))
@@ -442,7 +463,7 @@ class Peer:
             require(a['state'] == 'collected' and a['reconciled'] and a['end'] == stage['collection']['end'], 'actual collected reconciled stage required')
         self.rt.call('send', self.actor, self.credential, packet=g['result_packet'], event=g['event'], recipient=g['acceptor'],
                      payload={'runner': str(path), 'digest': digest(record), 'binding': record['binding'],
-                              'outcome': record['consolidation']['result']['outcome'], 'semantic_acceptance': False})
+                              'outcome': record['outcome'], 'semantic_acceptance': False})
         for stage in ('processed', 'settled'):
             self.rt.call('receipt', self.actor, self.credential, packet=g['receive_packet'], stage=stage,
                          evidence='software execution/delivery recorded ' + digest(record))
@@ -455,12 +476,31 @@ def flatten(suite):
         else: yield test
 
 
+@contextmanager
+def test_module_context():
+    """Each fixed module gets fresh test fixtures in the same bounded worker.
+
+    Provider imports its own runtime fixtures. Keep the previous module's
+    objects/results intact, but never reuse its mutable test globals or import
+    wrapper for the next module. The outer SQL blocker stays installed; SQL
+    attempts within a module still reach that module's unchanged test oracles.
+    """
+    original_import = builtins.__import__
+    previous = {name: sys.modules.pop(name) for name in MODULES if name in sys.modules}
+    try:
+        yield
+    finally:
+        builtins.__import__ = original_import
+        for name in MODULES:
+            sys.modules.pop(name, None)
+        sys.modules.update(previous)
+
+
 def worker(g, m, index):
     before = inputs(g)
     selected = g['partitions'][index]
     root = Path(g['retained_root']) / 'outputs' / ('fixtures-' + str(index))
     root.mkdir(mode=0o700)
-    os.environ['COORDINATOR_TEST_ARTIFACTS'] = str(root)
     sys.path.insert(0, str(Path(g['retained_root']) / 'inputs' / PREFIX))
     found, unknowns, outcomes = {}, [], []
     class Result(unittest.TestResult):
@@ -482,17 +522,20 @@ def worker(g, m, index):
             super().addSubTest(t, sub, err)
             if err: self.mark(t, 'subtest-failure')
     result = Result()
-    # Load and run a module before importing the next one. Provider tests reuse
-    # and extend runtime fixtures; preloading both changes the runtime suite's
-    # original four-actor environment. No fixture/oracle is rewritten here.
+    # Preserve each module's standalone fixture/import semantics regardless of
+    # Work's accepted partition pairing. No extra workers or rewritten oracles.
     for module in MODULES:
         try:
-            suite = unittest.defaultTestLoader.loadTestsFromModule(importlib.import_module(module))
-            current = list(flatten(suite))
-            for case in current:
-                require(case.id() not in found, 'duplicate discovered testcase')
-                found[case.id()] = case
-            unittest.TestSuite(c for c in current if c.id() in selected).run(result)
+            module_root = root / module
+            module_root.mkdir(mode=0o700)
+            os.environ['COORDINATOR_TEST_ARTIFACTS'] = str(module_root)
+            with test_module_context():
+                suite = unittest.defaultTestLoader.loadTestsFromModule(importlib.import_module(module))
+                current = list(flatten(suite))
+                for case in current:
+                    require(case.id() not in found, 'duplicate discovered testcase')
+                    found[case.id()] = case
+                unittest.TestSuite(c for c in current if c.id() in selected).run(result)
         except BaseException:
             unknowns.append(module + ': discovery/import/test procedure incomplete')
     missing = sorted(set(selected) - set(found))
@@ -547,6 +590,12 @@ def consolidate(g, m):
     expected = execution['result']['records']
     require(len(expected) == 5, 'exact five current run digests required')
     unknowns, failures, records, cases = [], [], [], []
+    if execution['collection']['end'] != 0:
+        failures.append('controller numeric END ' + str(execution['collection']['end']))
+    if execution['result']['outcome'] != 'collected':
+        unknowns.append('controller collection result incomplete')
+    if execution['result']['inputs_after'] != g['inputs']:
+        unknowns.append('controller input binding incomplete')
     before = inputs(g)
     for i in range(5):
         r = get(out / ('partition-' + str(i) + '.json'))

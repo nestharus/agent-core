@@ -18,7 +18,7 @@ import software_qa as qa
 from runtime import Runtime, create
 from storage import Held, digest, encode, check_capacity
 
-BASE = '8663898302f4439210f37361f41166512a91958d'
+BASE = '829957bb2f15bc3c557243d252f4dc2d83167a29'
 ARTIFACTS = Path(os.environ['COORDINATOR_TEST_ARTIFACTS'])
 REPO = Path(__file__).absolute().parents[2]
 TOKENS = {'synthetic-work': 'work-only-synthetic-credential', 'synthetic-peer': 'peer-only-synthetic-credential',
@@ -300,7 +300,72 @@ class SoftwareQA(unittest.TestCase):
         self.assertTrue(record['consolidation']['result']['failures'])
         self.assertFalse(result['semantic_acceptance'])
 
-    def test_complete_current_core_regressions_through_actual_cli(self):
+    def stage_exits_after_result(self, mode):
+        # Execute the unchanged fixed stage, flush its complete bound result,
+        # then really exit 17. Capture/collect must join this original process;
+        # neither its END nor the parsed result is mocked or edited.
+        original = self.peer.processes.popen
+        wrapper = '''import os,runpy,sys
+sys.argv=sys.argv[1:]
+try:
+    runpy.run_path(sys.argv[0],run_name='__main__')
+except SystemExit as exc:
+    if exc.code not in (None,0): raise
+sys.stdout.flush()
+os._exit(17)
+'''
+        def create(command, cwd, payload, stage, guard=None):
+            if stage == mode:
+                command = [sys.executable, '-I', '-B', '-c', wrapper, *command[3:]]
+            return original(command, cwd, payload, stage, guard)
+        with patch.object(self.peer.processes, 'popen', create):
+            result = self.peer.run(self.grant)
+        record = self.result()
+        actual = record['execution' if mode == 'execute' else 'consolidation']
+        originals = [p for p, label in zip(self.peer.processes.originals, self.peer.processes.stages) if label == mode]
+        self.assertEqual(len(originals), 1)
+        self.assertEqual(originals[0].returncode, 17)
+        self.assertEqual(actual['collection']['end'], 17)
+        self.assertEqual(actual['collection']['pid'], originals[0].pid)
+        self.assertTrue(actual['collection']['complete'])
+        self.assertEqual(actual['result']['binding'], qa.binding(self.grant, record['manifest']))
+        self.assertEqual(actual['result']['inputs_after'], self.grant['inputs'])
+        self.assertTrue(all(c['status'] == 'success' for c in record['consolidation']['result']['cases']))
+        qa.put(self.root/'stage-end-witness.json', {'mode': mode, 'actual_end': originals[0].returncode,
+               'pid': originals[0].pid, 'parsed_outcome': actual['result']['outcome'],
+               'exposed': result, 'delivered': self.call('inbox','synthetic-acceptor')['packets'][0]['payload']})
+        self.assertEqual(result['outcome'], 'failure')
+        self.assertEqual(self.call('inbox','synthetic-acceptor')['packets'][0]['payload']['outcome'], 'failure')
+        attempt = self.call('readback','synthetic-peer',kind='attempt',id=self.grant[mode+'_attempt'])['value']
+        self.assertEqual(attempt['end'], 17)
+        self.assertEqual(attempt['result']['outcome'], 'failure')
+        self.assertFalse(result['semantic_acceptance'])
+
+    def test_controller_nonzero_after_complete_result_cannot_report_success(self):
+        self.stage_exits_after_result('execute')
+
+    def test_consolidator_nonzero_after_success_result_cannot_report_success(self):
+        self.stage_exits_after_result('consolidate')
+
+    def test_isolation_preserves_genuine_sql_import_failure(self):
+        runtime_tests = FIXED_TESTS.replace('self.assertEqual(2+2,4)',
+            "\n        with self.assertRaises(RuntimeError): __import__('sqlite3')")
+        provider_tests = FIXED_PROVIDER.replace('self.assertEqual(3*3,9)', "__import__('_sqlite3')")
+        self.revised_candidate(runtime_tests.encode(), provider_tests.encode(), CASES)
+        self.grant['partitions'] = [[CASES[0], CASES[-1]], *[[c] for c in CASES[1:-1]]]
+        self.grant['receive_packet'] = 'qa-sql-control-grant'
+        self.issue()
+        result = self.peer.run(self.grant)
+        record = self.result()
+        actual = {c['id']: c['status'] for c in record['consolidation']['result']['cases']}
+        self.assertEqual(actual[CASES[0]], 'success')
+        self.assertEqual(actual[CASES[-1]], 'error')
+        self.assertEqual(result['outcome'], 'failure')
+        self.assertEqual(record['partitions'][0]['collection']['end'], 0)
+        self.assertEqual(record['consolidation']['collection']['end'], 0)
+        self.assertTrue(record['consolidation']['result']['failures'])
+
+    def current_core_cli(self, pair=False):
         runtime_tests = self.git_call('show',BASE+':'+qa.PREFIX+'test_runtime.py',cwd=REPO)
         provider_tests = self.git_call('show',BASE+':'+qa.PREFIX+'test_provider.py',cwd=REPO)
         inventory = []
@@ -312,6 +377,12 @@ class SoftwareQA(unittest.TestCase):
                                      if isinstance(f,ast.FunctionDef) and f.name.startswith('test_'))
         self.assertEqual(len(inventory),52)
         self.revised_candidate(runtime_tests,provider_tests,sorted(inventory))
+        if pair:
+            paired = ['test_runtime.Trial.test_sql_attempts_fail_and_runtime_imports_do_not_use_sql',
+                      'test_provider.ProviderTrial.test_ambiguous_creation_and_lost_publication_never_replay']
+            rest = [c for c in self.grant['inventory'] if c not in paired]
+            self.grant['partitions'] = [paired + rest[::5], *[rest[i::5] for i in range(1,5)]]
+            qa.validate(self.grant)
         self.grant['limits']['seconds'] = 120
         self.grant['limits']['output_bytes'] = 6*1024**2
         self.grant['limits']['output_entries'] = 2048
@@ -336,6 +407,18 @@ class SoftwareQA(unittest.TestCase):
         self.assertTrue(all(c['status']=='success' for c in cases))
         qa.put(self.root/'current-core-summary.json',{'cases':cases,'runner_digest':value['result']['digest'],
                'runner':value['result']['runner'],'actual_cli_end':row['end'],'outcome':value['result']['outcome']})
+        if pair:
+            actual = record['partitions'][0]
+            self.assertTrue(all(c in actual['result']['selected'] for c in paired))
+            self.assertEqual({c['id']: c['status'] for c in actual['result']['cases'] if c['id'] in paired},
+                             dict.fromkeys(paired, 'success'))
+            self.assertEqual(actual['collection']['end'], 0)
+
+    def test_complete_current_core_regressions_through_actual_cli(self):
+        self.current_core_cli()
+
+    def test_accepted_partition_pairs_sql_negative_control_and_provider_empty_assertion(self):
+        self.current_core_cli(pair=True)
 
     def test_current_revocation_stops_actual_creation(self):
         self.peer.accept_grant(self.grant)
