@@ -56,7 +56,7 @@ class SandboxProtection:
     before callers deliver substantive material. These controls alone establish
     the local sandbox backend only, not complete provider tool routing.
     """
-    def __init__(self, root, executable, runtime_reads, capacity_check, *, probe_helper=None, admit_read=None):
+    def __init__(self, root, executable, runtime_reads, capacity_check, *, probe_helper=None, admit_read=None, before_io=lambda path, operation, amount=0: None, policy_authority=None):
         self.root, self.executable = Path(root), executable
         if not runtime_reads or any(not Path(p).is_absolute() for p in runtime_reads):
             raise Refusal('explicit public runtime read dependencies required')
@@ -67,6 +67,8 @@ class SandboxProtection:
         self.proofs = []
         self.probe_helper = probe_helper
         self.admit_read = admit_read
+        self.before_io = before_io
+        self.policy_authority = policy_authority
 
     def filesystem(self, material, workspace):
         # The backend re-executes this exact program inside its filesystem
@@ -100,11 +102,12 @@ class SandboxProtection:
     async def qualify(self, context, material, publish):
         directory = material.parent / 'protection'
         self.capacity_check(directory.parent)
+        self.before_io(directory, 'mkdir')
         directory.mkdir(mode=0o700)
         allowed = material / 'protection-canary.txt'
         outside = directory / 'outside.txt'
-        private_write(allowed, b'owned-allowed-canary', self.capacity_check)
-        private_write(outside, b'owned-outside-canary', self.capacity_check)
+        private_write(allowed, b'owned-allowed-canary', self.capacity_check, before_io=self.before_io)
+        private_write(outside, b'owned-outside-canary', self.capacity_check, before_io=self.before_io)
         write = material / 'write-attempt.txt'
         server = await asyncio.start_server(lambda r, w: w.close(), '127.0.0.1', 0)
         try:
@@ -116,9 +119,20 @@ class SandboxProtection:
                     '-c', 'permissions.review-material.filesystem='+encoded,
                     '-c', 'permissions.review-material.network.enabled=false',
                     '-P', 'review-material', '--', *program]
+            def before_control():
+                # Complete helper identity may refresh rights/exclusions. The
+                # local controls read the same generated material plus their
+                # own outside canary; no stale policy grants those operands.
+                for path in (allowed, outside):
+                    self.before_io(path, 'read')
+                # Even the nominally denied neighbor may write on failure.
+                self.before_io(write, 'create', len(b'owned-probe-write'))
+                if self.policy_authority is not None:
+                    self.policy_authority(filesystem, material, context.workspace,
+                                          controls=(allowed, outside, write))
             # The unprotected neighbor actually performs all four operations.
-            control = await self._run(context, directory, 'control', program, publish)
-            protected = await self._run(context, directory, 'protected', argv, publish)
+            control = await self._run(context, directory, 'control', program, publish, before_control)
+            protected = await self._run(context, directory, 'protected', argv, publish, before_control)
             good_control = (control.get('allowed',{}).get('read') == 'owned-allowed-canary'
                 and control.get('outside',{}).get('read') == 'owned-outside-canary'
                 and control.get('write') == 'succeeded' and control.get('network') == 'succeeded')
@@ -130,14 +144,14 @@ class SandboxProtection:
                          passed=good_control and good_protection,
                          meaning='actual local sandbox controls; provider acting-boundary qualification separately owed')
             self.proofs.append(proof)
-            private_write(directory/'result.json',json.dumps(proof).encode(),self.capacity_check)
+            private_write(directory/'result.json',json.dumps(proof).encode(),self.capacity_check, before_io=self.before_io)
             if not proof['passed']:
                 raise Refusal('actual local sandbox qualification failed; substantive input withheld')
         finally:
             server.close()
             await server.wait_closed()
 
-    async def _run(self, context, directory, name, argv, publish):
+    async def _run(self, context, directory, name, argv, publish, before_run=lambda: None):
         self.capacity_check(directory)
         evidence = dict(stdout_eof=False, stderr_eof=False, errors=[])
         captures = []
@@ -170,13 +184,16 @@ class SandboxProtection:
                 collection_failures=list(entry['failures']))
             entry['evidence'] = dict(evidence, receipt=path.name,
                 receipt_attempts=list(receipt_attempts), receipt_persisted=False)
-            private_write(path, json.dumps(receipt).encode(), self.capacity_check)
+            private_write(path, json.dumps(receipt).encode(), self.capacity_check, before_io=self.before_io)
             entry['evidence']['receipt_persisted'] = True
+            if any(isinstance(r, BaseException) for r in results):
+                raise Refusal('control capture acquisition remains pending on SAME original')
         # Prepare ordinary argv/environment before the final acting checks.
         env = {'PATH':'/usr/local/bin:/usr/bin:/bin','HOME':context.account_home,
                'CODEX_HOME':str(Path(context.account_home)/context.profile)}
         if self.probe_helper:
             self.probe_helper()  # Complete identity, then current permission.
+        before_run()
         # Costly synchronous preparation can exhaust the fixed original even
         # when an event-loop timeout has not resumed. Refuse before creation;
         # a post-spawn timeout cannot authorize the earlier effect.
@@ -188,9 +205,12 @@ class SandboxProtection:
         key = context.originals.own(child, 'owned-sandbox-control', finish, publish)
         async def drain(pipe, stream_name):
             data = bytearray()
+            path = directory/(name+'.'+stream_name)
             self.capacity_check(directory)
-            with (directory/(name+'.'+stream_name)).open('xb') as out:
+            self.before_io(path, 'create', 0)
+            with path.open('xb') as out:
                 while True:
+                    self.before_io(path, 'read')
                     part = await pipe.read(8192)
                     if not part:
                         evidence[stream_name+'_eof'] = True
@@ -200,6 +220,7 @@ class SandboxProtection:
                         child.terminate()
                         part=part[:max(0,65536-len(data))]
                     self.capacity_check(directory)
+                    self.before_io(path, 'append', len(part))
                     out.write(part); data.extend(part)
         try:
             captures.extend([asyncio.create_task(drain(child.stdout,'stdout')),
@@ -222,7 +243,7 @@ class ExecEndpoint:
     and Originals registration in Context.execute. No shared lock spans a turn.
     """
     def __init__(self, root, executable, originals, admission, authority,
-                 protection, capacity_check, publish, *, execution=None, policy_authority=None):
+                 protection, capacity_check, publish, *, execution=None, policy_authority=None, before_io=lambda path, operation, amount=0: None):
         self.root, self.executable, self.originals = Path(root), executable, originals
         self.admission, self.authority, self.protection = admission, authority, protection
         self.capacity_check, self.publish = capacity_check, publish
@@ -230,6 +251,7 @@ class ExecEndpoint:
         self.context, self.owner, self.receipts = None, None, []
         self.execution = execution
         self.policy_authority = policy_authority
+        self.before_io = before_io
         self.clock = time.monotonic
         self.directory = None
         self.started = lambda: None
@@ -245,7 +267,7 @@ class ExecEndpoint:
             int(ownership.expires-ownership.created),self.originals,
             clock=self.clock,executable=self.executable,protection=self.protection,
             origin=ownership.created,capacity_check=self.capacity_check,execution=self.execution,
-            policy_authority=self.policy_authority)
+            policy_authority=self.policy_authority, before_io=self.before_io)
         return self.context
 
     async def exchange(self, handle, ownership, thread, text, channel):
@@ -391,9 +413,10 @@ class ContinuingReview:
                 raise Refusal('actual qualification turn incomplete; no substantive input')
             # This is the exact freshly owned completed capture, never a foreign
             # session, private store, lost handle or tool-history reconstruction.
+            self.endpoint.before_io(directory/'stdout.jsonl', 'read')
             capture=(directory/'stdout.jsonl').read_text()
             proof=acting_proof(capture,expected)
-            private_write(directory/'acting-proof.json',json.dumps(proof).encode(),self.endpoint.capacity_check)
+            private_write(directory/'acting-proof.json',json.dumps(proof).encode(),self.endpoint.capacity_check, before_io=self.endpoint.before_io)
         finally:
             server.close()
             await server.wait_closed()

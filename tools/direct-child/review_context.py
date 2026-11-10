@@ -39,20 +39,23 @@ async def existing_admission():
     yield
 
 
-def private_write(path, body, capacity_check=lambda parent: None):
+def private_write(path, body, capacity_check=lambda parent: None, *, before_io=lambda path, operation, amount=0: None):
     capacity_check(Path(path).parent)
+    before_io(Path(path), 'create', len(body))
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, 'wb') as stream:
+        before_io(Path(path), 'access')
         stream.write(body)
         stream.flush()
         os.fsync(stream.fileno())
 
 
-def positive_directory(path):
+def positive_directory(path, before_io=lambda path, operation, amount=0: None):
     """Require a caller-owned lexical path; never resolve an exposing alias."""
     path = Path(path)
     if not path.is_absolute() or '..' in path.parts:
         raise ReviewRefusal('absolute positive directory required')
+    before_io(path, 'metadata')
     for part in [*reversed(path.parents), path]:
         info = part.lstat()
         if not stat.S_ISDIR(info.st_mode):
@@ -76,7 +79,7 @@ def make_directory(path, capacity_check=lambda parent: None):
             raise ReviewRefusal('owned parent contains an alias/non-directory')
 
 
-def export(directory, items, capacity_check=lambda parent: None):
+def export(directory, items, capacity_check=lambda parent: None, *, before_io=lambda path, operation, amount=0: None):
     """Only already-admitted bytes enter the model's readable snapshot."""
     if not isinstance(items, list) or not items or len(items) > MAX_ITEMS:
         raise ReviewRefusal('bounded nonempty material list required')
@@ -86,17 +89,20 @@ def export(directory, items, capacity_check=lambda parent: None):
     if sum(len(body) for _, body in items) > MAX_INPUT:
         raise ReviewRefusal('complete selected material exceeds snapshot admission')
     capacity_check(directory.parent)
+    before_io(directory, 'mkdir')
     directory.mkdir(mode=0o700)
     manifest = []
     for index, (label, body) in enumerate(items):
         name = f'{index:04d}.txt'
         # Text validation is before any source export; no encoded/raw captures.
         body.decode('utf-8')
-        private_write(directory / name, body, capacity_check)
+        private_write(directory / name, body, capacity_check, before_io=before_io)
+        before_io(directory / name, 'access')
         (directory / name).chmod(0o400)
         manifest.append(dict(label=label, file=name, bytes=len(body),
                              sha256=hashlib.sha256(body).hexdigest()))
-    private_write(directory / 'manifest.json', json.dumps(manifest, ensure_ascii=False).encode(), capacity_check)
+    private_write(directory / 'manifest.json', json.dumps(manifest, ensure_ascii=False).encode(), capacity_check, before_io=before_io)
+    before_io(directory / 'manifest.json', 'access')
     (directory / 'manifest.json').chmod(0o400)
     return manifest
 
@@ -163,7 +169,7 @@ class Context:
     owner; it neither archives nor deletes provider storage. A lost process or
     interrupted turn cannot become a fresh conversation by reopening this path.
     """
-    def __init__(self, root, profile, collector, lifetime, originals, clock=time.monotonic, *, executable, protection=None, origin=None, capacity_check=lambda parent: None, execution=None, policy_authority=None):
+    def __init__(self, root, profile, collector, lifetime, originals, clock=time.monotonic, *, executable, protection=None, origin=None, capacity_check=lambda parent: None, execution=None, policy_authority=None, before_io=lambda path, operation, amount=0: None):
         if profile not in PROFILES or not isinstance(collector, str) or not collector:
             raise ReviewRefusal('original profile/collector required')
         if type(lifetime) is not int or not 1 <= lifetime <= 7200:
@@ -173,13 +179,15 @@ class Context:
         if not isinstance(created, (int, float)) or not 0 <= clock() - created < lifetime:
             raise ReviewRefusal('original creation origin invalid or expired')
         root = Path(root)
-        positive_directory(root.parent)
+        positive_directory(root.parent, before_io)
         capacity_check(root.parent)
+        before_io(root, 'mkdir')
         root.mkdir(mode=0o700)
         self.root, self.workspace = root, root / 'workspace'
         capacity_check(self.workspace.parent)
+        before_io(self.workspace, 'mkdir')
         self.workspace.mkdir(mode=0o700)
-        self.capacity_check = capacity_check
+        self.capacity_check, self.before_io = capacity_check, before_io
         self.profile, self.collector, self.originals = profile, collector, originals
         self.account_home = str(Path.home())
         self.clock, self.created, self.lifetime = clock, created, lifetime
@@ -218,10 +226,11 @@ class Context:
                 or type(capture_max) is not int or not maximum <= capture_max <= 64*1024**2):
             raise ReviewRefusal('finite selected input/answer/capture limits required')
         directory = Path(directory)
-        positive_directory(directory.parent)
+        positive_directory(directory.parent, self.before_io)
         self.capacity_check(directory.parent)
+        self.before_io(directory, 'mkdir')
         directory.mkdir(mode=0o700)
-        manifest = export(directory / 'material', items, self.capacity_check)
+        manifest = export(directory / 'material', items, self.capacity_check, before_io=self.before_io)
         if self.protection is not None:
             await self.protection.qualify(self, directory / 'material', publish)
         self.authorize_creation(current_authority)
@@ -229,7 +238,7 @@ class Context:
                   '/manifest.json. Read its history first, then complete current method, diff and source. '
                   'Only this snapshot is admitted. Read files in bounded sections and retain unread limits. '
                   'No agents, network access, tests, source writes, private stores or startup discovery. Use only admitted local read commands.\n')
-        private_write(directory / 'prompt.txt', prompt.encode(), self.capacity_check)
+        private_write(directory / 'prompt.txt', prompt.encode(), self.capacity_check, before_io=self.before_io)
         filesystem = self.protection.filesystem(directory / 'material', self.workspace) if self.protection else None
         argv = command(self.profile, self.workspace, directory / 'material', self.thread, filesystem=filesystem)
         argv[0] = self.executable
@@ -237,12 +246,13 @@ class Context:
             argv = self.execution.prepare(argv, self.profile)
         private_write(directory / 'launch.json', json.dumps(dict(argv=self.execution.public_command(argv) if self.execution else argv, profile=self.profile,
             collector=self.collector, expected_thread=self.thread, permissions='requested; qualify enforcement separately',
-            model_reference='opaque consumer selection; normal provider internals supply no identity attestation')).encode(), self.capacity_check)
+            model_reference='opaque consumer selection; normal provider internals supply no identity attestation')).encode(), self.capacity_check, before_io=self.before_io)
         env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': self.account_home,
                'CODEX_HOME': str(Path(self.account_home) / self.profile),
                'XDG_CONFIG_HOME': str(self.root / 'xdg'),
                'TMPDIR': str(directory / 'tmp'), 'PYTHONDONTWRITEBYTECODE': '1'}
         self.capacity_check(directory)
+        self.before_io(directory / 'tmp', 'mkdir')
         (directory / 'tmp').mkdir(mode=0o700)
         def before_use():
             # Retain the policy serialized into THIS argv across admission and
@@ -259,7 +269,7 @@ class Context:
             result = await execute(argv, env, prompt, directory, self.originals, publish,
                 min(self.lifetime, self.created + self.lifetime - self.clock()), shutdown,
                 maximum, capture_max, self.thread, started, admission,
-                before_use, self.capacity_check)
+                before_use, self.capacity_check, before_io=self.before_io)
         except BaseException:
             self.state = 'interrupted'
             raise
@@ -272,7 +282,7 @@ class Context:
         receipt.update(transport=VERSION, profile=self.profile, collector=self.collector,
                        input=self.calls - 1, material=manifest, executable=self.executable,
                        root_end='not a native root', processing_completion=False)
-        private_write(directory / 'receipt.json', json.dumps(receipt, ensure_ascii=False).encode(), self.capacity_check)
+        private_write(directory / 'receipt.json', json.dumps(receipt, ensure_ascii=False).encode(), self.capacity_check, before_io=self.before_io)
         return code, receipt, answer
 
     def close(self, collector):
@@ -286,7 +296,7 @@ class Context:
 
 async def execute(argv, env, prompt, directory, originals, publish, deadline, shutdown,
                   maximum, capture_max, expected_thread, started,
-                  admission=existing_admission, before_spawn=lambda: None, capacity_check=lambda parent: None, before_feed=None):
+                  admission=existing_admission, before_spawn=lambda: None, capacity_check=lambda parent: None, before_feed=None, before_io=lambda path, operation, amount=0: None):
     """Own before feeding input; numeric END and pipe EOF are independent."""
     evidence = dict(errors=[], stdout_eof=False, stderr_eof=False, bytes={'stdout': 0, 'stderr': 0})
     observed = dict(thread=None, completed=0, failed=False, answer=None, diagnostics=[])
@@ -315,7 +325,9 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
         receipt_attempts.append(receipt_name)
         entry['evidence'] = dict(evidence, receipt_attempts=list(receipt_attempts))
         private_write(directory / receipt_name,
-                      json.dumps(dict(actual_END=entry['exit'], evidence=entry['evidence'])).encode(), capacity_check)
+                      json.dumps(dict(actual_END=entry['exit'], evidence=entry['evidence'])).encode(), capacity_check, before_io=before_io)
+        if evidence.get('custody_blocked'):
+            raise ReviewRefusal('capture acquisition blocked; SAME original evidence remains pending')
 
     def stop(reason):
         evidence['errors'].append(reason)
@@ -373,10 +385,13 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
 
     async def capture(pipe, name):
         pending = b''
+        path = directory / (name + '.jsonl' if name == 'stdout' else name + '.bin')
         try:
             capacity_check(directory)
-            with (directory / (name + '.jsonl' if name == 'stdout' else name + '.bin')).open('xb') as stream:
+            before_io(path, 'create', 0)
+            with path.open('xb') as stream:
                 while True:
+                    before_io(path, 'read')
                     data = await pipe.read(16384)
                     if not data:
                         evidence[name + '_eof'] = True
@@ -385,6 +400,7 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
                     evidence['bytes'][name] += len(data)
                     kept = data[:max(0, capture_max - before)]
                     capacity_check(directory)
+                    before_io(path, 'append', len(kept))
                     stream.write(kept)
                     if evidence['bytes'][name] > capture_max:
                         stop(name + ' capture limit; retained prefix is partial')
@@ -406,8 +422,10 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
                         event(pending)
                     except Exception as exc:
                         reject('event handler failed: ' + type(exc).__name__)
-        except (OSError, UnicodeError) as exc:
+        except Exception as exc:
+            evidence['custody_blocked'] = True
             stop(name + ' capture failed: ' + type(exc).__name__)
+            raise
 
     async def feed():
         try:
