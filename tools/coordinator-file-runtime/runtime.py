@@ -22,7 +22,7 @@ _spec.loader.exec_module(_pool)
 _spec = importlib.util.spec_from_file_location('file_runtime_fast_policy', _pool_path.with_name('fast_tier.py'))
 _fast = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_fast)
-ROLES = {'Work', 'Branch', 'Reviews', 'QA'}
+ROLES = {'Work', 'Branch', 'Reviews', 'QA', 'Root'}
 PHASES = {'classifier', 'known', 'discovery', 'qa-execute', 'qa-consolidate', 'review'}
 ALLOWED_PROFILES = {'.codex2', '.codex3', '.codex4', '.codex5'}
 MAX_TEXT = 512  # Encoded JSON bytes, including quotes/escapes; never characters.
@@ -125,7 +125,7 @@ class Runtime:
         require(operation in self.OPERATIONS, 'unsupported operation; no fallback')
         readonly = operation in {'status', 'inbox', 'recover', 'eligibility', 'readback'}
         continuation = operation in {'recover', 'readback', 'inbox', 'cancel', 'collect', 'reconcile', 'observe_effect',
-                                     'classify', 'ack', 'receipt', 'resolve', 'finish', 'hold', 'integrate', 'send', 'partial'}
+                                     'classify', 'ack', 'receipt', 'resolve', 'finish', 'hold', 'integrate', 'send', 'partial', 'provider_report'}
         with self.files.transaction(readonly=readonly, continuation=continuation) as s:
             who = s['actors'].get(actor)
             require(who and secrets.compare_digest(who['credential'], secret_hash(credential)), 'actor credential rejected')
@@ -317,7 +317,7 @@ class Runtime:
         ident(attempt)
         require(attempt not in s['attempts'] and phase in PHASES, 'new attempt and supported phase required')
         e = s['events'][ident(event)]
-        required = {'classifier': {'Work'}, 'discovery': {'Work'}, 'known': {'Work', 'Branch'},
+        required = {'classifier': {'Work'}, 'discovery': {'Work'}, 'known': {'Work', 'Branch', 'Root'},
                     'qa-execute': {'QA'}, 'qa-consolidate': {'QA'}, 'review': {'Reviews'}}
         self.role(s, actor, required[phase])
         if phase == 'classifier':
@@ -386,7 +386,7 @@ class Runtime:
         require(a['state'] == 'reserved', 'launch already started or unknown; no replay')
         # Only the bundled fixture adapter is machine-qualified by this source.
         # Owner-supplied encounters are evidence records, not a provider launcher.
-        require(substrate in {'fixture', 'owner-encounter'}, 'unqualified provider launch refused')
+        require(substrate in {'fixture', 'owner-encounter', 'codex-direct'}, 'unqualified provider launch refused')
         text(evidence)
         self.fast(s)
         with self.pool(s).admission(a['pool']['profile'], ALLOWED_PROFILES, blocking=False, expected_control=s['pool_binding']) as admission:
@@ -406,6 +406,18 @@ class Runtime:
         require(len(encode(result)) <= 4096, 'finite collected result exceeds 4KiB; retain original outside evidence')
         a.update(state='collected', end=end, result=result, collection_evidence=text(evidence), collected_at=self.clock())
         return {'attempt': attempt, 'end': end, 'reconciled': False}
+
+    def op_provider_report(self, s, actor, attempt, collector, report, not_started=False):
+        """Adapter facts only; neither a success verdict nor semantic acceptance."""
+        a = self.attempt(s, actor, attempt, collector)
+        require(a['state'] == 'launching' and a['substrate'] == 'codex-direct', 'current provider attempt required')
+        require(type(not_started) is bool and len(encode(report)) <= 4096, 'finite provider report required')
+        require('provider_report' not in a, 'provider report immutable; recover original after lost reply')
+        a['provider_report'] = report
+        if not_started:
+            a.update(state='not-started', creation_refusal={'actor': actor, 'at': self.clock(),
+                     'evidence': 'adapter refused before task Popen; preflight outcomes retained'})
+        return {'attempt': attempt, 'state': a['state'], 'semantic_acceptance': False}
 
     def op_reconcile(self, s, actor, attempt, collector, evidence, builder=None):
         a = self.attempt(s, actor, attempt, collector)
@@ -628,8 +640,8 @@ class Runtime:
                 'versions': s['versions'], 'events': {k: {'ack': e['ack'], 'owner': (e['responsibility'] or {}).get('owner'),
                                                         'processed_at': e['processed_at'], 'holds': e['holds']} for k, e in s['events'].items()},
                 'pool_routes': s['pool_routes'], 'fast_requested': True,
-                'served_tier': 'unobserved', 'provider_launch': 'unqualified/refused', 'release': 'unsupported'}
+                'served_tier': 'unobserved', 'provider_launch': 'bounded codex-direct entry; operating qualification separate', 'release': 'unsupported'}
 
     OPERATIONS = {'invite', 'adopt', 'revoke', 'package', 'ingest', 'classify', 'ack', 'branch', 'review', 'reserve', 'start', 'collect',
                   'reconcile', 'integrate', 'effect', 'observe_effect', 'send', 'inbox', 'receipt', 'resolve', 'finish',
-                  'hold', 'eligibility', 'recover', 'status', 'readback', 'cancel', 'partial'}
+                  'hold', 'eligibility', 'recover', 'status', 'readback', 'cancel', 'partial', 'provider_report'}

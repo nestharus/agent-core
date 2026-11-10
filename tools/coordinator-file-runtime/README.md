@@ -3,8 +3,9 @@
 This runnable Python 3.11+ CLI/library admits finite new Work, Branch, Reviews
 and QA responsibilities without a database or legacy-board adapter. It is a
 candidate for owner adoption, not a deployed four-role cutover. It never opens
-old runtime state. No migration, release, arbitrary command execution, provider
-launch, exact-session resume or retained-data deletion is supported.
+old runtime state. No migration, release, arbitrary command execution,
+exact-session resume or retained-data deletion is supported. A finite Codex direct
+entry is described below; real provider and operating qualification remain owed.
 
 The selected failure model is cooperative same-user Linux processes, local
 filesystems with flock/rename/fsync, and process interruption. Credentials
@@ -46,10 +47,21 @@ python3 tools/coordinator-file-runtime/coordinator.py \
 All commands take the invoking actor's credential from `COORDINATOR_TOKEN`, never
 an argv flag. A role invitation uses a different, owner-agreed invitation token
 in JSON stdin; the runtime stores only its hash. Work calls `invite`, naming
-`target`, one of `Work`, `Branch`, `Reviews`, `QA`, `invitation_token`, and `basis`.
+`target`, one of `Work`, `Branch`, `Reviews`, `QA`, or external `Root`,
+`invitation_token`, and `basis`.
 The actual recipient then invokes `adopt` with its own credential and encounter
 `basis`. Invitation alone establishes no adoption. Do not enroll another actor
 as if it had encountered this interface.
+
+`Root` is the existing external implementation/result holder, not a fifth
+coordinator. It can receive addressed Work packets, receipt its own pickup,
+processing and settlement, and return results on its own assigned events. Work
+must classify and assign its known-repair event before Root can reserve known
+point work. It cannot invite actors, classify/ACK, create QA packages, administer
+Work, bind Branch or Reviews, take discovery/QA/review lanes, or borrow another
+collector. Use the genuine existing Root identity; synthetic tests confer no
+real adoption or authority. Failure results and unresolved original custody stay
+with that original holder.
 
 All calls have this shape; stdin is one JSON object, at most 32 KiB:
 
@@ -84,8 +96,9 @@ opaque and are never followed to source, provider, private history or old stores
 | `invite`, `adopt`, `revoke` | Work invitation fields above; adoption `basis`; Work revocation `target,reason`. Revocation keeps original attempts/effects held and transfers no collector identity. |
 | `ingest` | Work: `event,payload,producer,source_basis`. Exact ID/content duplicates return current ACK; changed content refuses. Initially unacknowledged, with conservative holds. |
 | `reserve` | `attempt,event,phase,resources,basis`; optionally `point,package,branch,review`. `resources` maps stable resource IDs to `read`/`write`; `basis` maps every declared resource to an integer generation, including absence 0. An attempt never automatically expires. |
-| `start` | `attempt,collector,substrate,evidence`. Only `fixture` or `owner-encounter` evidence records are supported. Rechecks current pool and all-fast policy. Durable `launching` and unique `launch_id` precede effects. No second launch from launching/collected state. |
+| `start` | `attempt,collector,substrate,evidence`. `fixture`, `owner-encounter`, or `codex-direct` correlation. Rechecks current pool and all-fast policy. Durable `launching` and unique `launch_id` precede effects. No second launch from launching/collected state. This record alone proves no process creation. |
 | `collect` | `attempt,collector,launch_id,end,result,evidence`. Same original collector and launch correlation, actual numeric END required. Failures remain failures; result text grants no acceptance. |
+| `provider_report` | Original collector: `attempt,collector,report`, optional `not_started`. The bounded adapter's immutable stage/capture/publication evidence (4 KiB); no semantic acceptance or process creation is inferred from this cooperative record alone. |
 | `cancel` | `attempt,collector,evidence`. Original owner can disposition a `reserved` attempt or a fixture's durably recorded `not-started` control refusal. No numeric END is invented, no pool turn is refunded, and no new reservation is made. Launching/uncertain attempts and attempts with effect records refuse. Exact repeat returns its disposition; changed evidence conflicts. |
 | `classify` | Work: `event,attempt,collector,classification,owner,needs`. Collected successful fresh `luna-low` classifier result must equal `{event_hash:SOURCE_HASH,classification:KIND}`. Kinds: `known,new,unresolved,control,coalesced`. Current adopted owner and 1..16 explicit needs become durable together with LOW provenance. Provenance is supplied evidence, not provider attestation. |
 | `ack` | Work: `event`; refuses until classification **and** responsibility are durable. Lost ACK can be retried without repeating classification. Unresolved/control/coalesced retain their needs and cannot enter ordinary known/discovery work. |
@@ -104,7 +117,7 @@ opaque and are never followed to source, provider, private history or old stores
 | `partial` | `kind,id,evidence`; kinds `event,attempt,packet,effect`. The actual owner, addressed packet participant, or Work for an event records one attributable immutable partial report. Exact repeat is accepted; changed evidence conflicts. This reports unfinished work, retains the entire original record, and changes no ACK, need, attempt state, END, reconciliation, receipt, hold or completion clock. Further work does not erase the historical partial report. |
 
 Phases and capacity are separate from provider execution. `classifier` belongs to
-Work and is fresh per event. `known` belongs to Work/Branch and requires a stable
+Work and is fresh per event. `known` belongs to Work/Branch/external Root and requires a stable
 `point` with `point:ID` in the footprint. `discovery` belongs to Work, requires a
 positive `new` classification and has one slot. Unrelated known work can run
 while discovery is occupied. Read/read can overlap; any shared writer conflicts.
@@ -246,6 +259,62 @@ retirement clock. Never use this runtime to clean old stores or provider history
 
 ## Qualification and tests
 
+`run-provider` accepts exactly `attempt,collector,prompt,cwd,output_limit,timeout,
+declared_secrets` in JSON stdin. It consumes an existing reservation; it never
+allocates another turn, resumes, falls back, searches accounts, or invokes the
+legacy dispatcher/launcher. The production executable is fixed to `codex`.
+Input is limited to 16 KiB, output capture to 1024..65536 bytes per process, raw
+output acquisition to four times that limit plus one 4096-byte read, and each
+original to 1..3600 seconds. Timeout/overflow kills only the newly created owned
+process group and collects that original. No prompt, raw log or provider-written
+final file is published. The caller supplies its positive enclosing allowance;
+these in-memory bounds do not measure opaque provider storage or tools.
+
+The runtime-specific entry supports fresh `luna-low` from the frozen static
+`routes.explore` Codex model with supported low effort, and technical `sol-xhigh`
+from `routes.refine` with supported xhigh effort. It requests fast and ephemeral
+execution. Served tier is unobserved. Opaque continuing Reviews is explicitly
+unsupported here and held before task creation; use its separately qualified
+owner contract without resolving or substituting its selector. A required
+unsupported job remains unfinished, never silently routed through this entry.
+
+Effective MCP discovery is bounded, followed by individual disable flags plus
+the injected docs disable/transport flags and an exact all-disabled readback.
+These are original local processes too. Every actual creation rechecks current
+adopted actor/credential, original collector, reserved profile, current enabled
+pool, frozen static binding and the routes-adjacent fast guard. The short guards
+cover Popen and never the provider run. Precreation refusal is recorded as
+definitely not-started with no END; ambiguity at Popen or after creation stays
+launching/held. A lost publication reply requires readback, never relaunch.
+The adapter's `originals` list retains actual Popen objects before reading output;
+callers using the library should retain the adapter across failures.
+
+Declare at most 30 secret values of 1..512 UTF-8 bytes. The adapter also protects
+its runtime credential and original collector. Literal and standard JSON-escaped
+forms are redacted across read boundaries before bounded capture/result
+publication, and the prompt is sanitized before stdin. Final JSON is sanitized
+again after decoding. Parent environment inheritance is limited to original
+HOME, original reserved CODEX_HOME and a fixed PATH; no parent runtime token or
+arbitrary secret environment is forwarded. This supports declared values, not
+a universal detector or protection against an adversarial transformed encoding.
+The public Codex executable is located through the caller's ordinary PATH before
+building the minimal environment. No profile/config/auth/account-availability
+probe is performed by the adapter itself.
+Production MCP commands are provider operations and need actual operating
+authority; Maker tests execute fixed public processes only.
+
+Only one completed agent-message containing JSON is accepted as a final result,
+at most 4 KiB. Missing, multiple, oversized or incompletely captured finals
+produce an explicit incomplete result. `provider_report` retains stage numeric
+ENDs, input/capture completeness, timeout/overflow, and final completeness within
+4 KiB separately from the task END, effects, reconciliation and semantic QA
+acceptance. A complete final can accompany a failed numeric END. Publication
+failure preserves launch uncertainty and original custody; it never triggers a
+raw output fallback. CLI stdout publishes only the ordinary bounded runtime
+response, not provider output. Provider/platform internals, SQL independence,
+real LOW/model response, service tier and genuine four-role/Root acceptance
+remain unqualified until the successor collects their actual encounters.
+
 `run-fixture` accepts only `{attempt,collector}` and launches the bundled finite
 Python worker, holding pool admission and the supported fast-policy guard through
 actual local process creation. `fast_tier.py set` cooperates on the same stable
@@ -288,6 +357,11 @@ helper, not unexamined CLI/provider/private session internals.
 PYTHONDONTWRITEBYTECODE=1 \
 COORDINATOR_TEST_ARTIFACTS=/absolute/new/coordination/fixture-attempt \
 python3 tools/coordinator-file-runtime/test_runtime.py
+
+# Separate fresh root, same enclosing allocation:
+PYTHONDONTWRITEBYTECODE=1 \
+COORDINATOR_TEST_ARTIFACTS=/absolute/new/provider-fixture-attempt \
+python3 tools/coordinator-file-runtime/test_provider.py
 ```
 
 Every run needs a new bounded artifact root and keeps failed/interrupted files.

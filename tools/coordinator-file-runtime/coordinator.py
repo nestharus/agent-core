@@ -94,6 +94,7 @@ def main():
     call = sub.add_parser('call')
     call.add_argument('operation')
     sub.add_parser('run-fixture')
+    sub.add_parser('run-provider')
     w = sub.add_parser('watch')
     w.add_argument('--timeout', type=float, default=30)
     args = parser.parse_args()
@@ -114,6 +115,9 @@ def main():
                     raise Held('JSON object required')
                 if args.command == 'run-fixture':
                     result = fixture(runtime, args.actor, credential, request)
+                elif args.command == 'run-provider':
+                    from provider import run_provider
+                    result = run_provider(runtime, args.actor, credential, request)
                 else:
                     result = runtime.call(args.operation, args.actor, credential, **request)
         print(json.dumps({'status': 'ok', 'result': result}, sort_keys=True))
