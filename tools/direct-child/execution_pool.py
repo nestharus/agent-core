@@ -72,8 +72,9 @@ def bounded_read(path, maximum):
 
 
 class Pool:
-    def __init__(self, routes=DEFAULT_ROUTES, *, reader=bounded_read, charge=lambda amount: None, before_write=lambda parent: None):
+    def __init__(self, routes=DEFAULT_ROUTES, *, reader=bounded_read, charge=lambda amount: None, before_write=lambda parent: None, before_access=lambda path, operation: None):
         self.reader, self.charge, self.before_write = reader, charge, before_write
+        self.before_access = before_access
         self.routes = Path(routes)
         if not self.routes.is_absolute():
             raise PoolError('absolute public pool routes path required')
@@ -106,16 +107,20 @@ class Pool:
             path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             # Stable control lock serializes first creation too. Retain the old
             # counter flock for compatibility with existing automatic allocators.
+            self.before_access(path.with_suffix('.pool.lock'), 'create')
             guard_fd = os.open(path.with_suffix('.pool.lock'), os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
             with os.fdopen(guard_fd, 'r+') as control:
                 self.lock(control, blocking)
                 try:
+                    self.before_access(path, 'create')
                     fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_RDWR | os.O_NOFOLLOW, 0o600)
                     created = True
                 except FileExistsError:
+                    self.before_access(path, 'access')
                     fd = os.open(path, os.O_RDWR | os.O_NOFOLLOW)
                     created = False
                 with os.fdopen(fd, 'r+') as handle:
+                    handle._pool_path = path
                     self.lock(handle, blocking)
                     raw, pool, current_path = self.read()
                     self.assert_control(raw, expected_control)
@@ -125,6 +130,7 @@ class Pool:
                     if not value:
                         if not created:
                             raise PoolError('empty existing rotation counter; unknown state, no reset/fallback')
+                        self.before_access(path, 'write')
                         handle.write('0\n')
                         handle.flush()
                         os.fsync(handle.fileno())
@@ -133,6 +139,10 @@ class Pool:
             raise PoolError('public execution pool lock/state unavailable: ' + str(exc)) from exc
 
     def read_counter(self, handle):
+        # Current exact-target authority after any intervening control reread.
+        path = getattr(handle, '_pool_path', None)
+        if path is not None:
+            self.before_access(path, 'read')
         # Precharge before body acquisition, including malformed/failed reads.
         self.charge(MAX_COUNTER + 1)
         info = os.fstat(handle.fileno())
@@ -179,6 +189,7 @@ class Pool:
         raw, pool, path = self.read()
         self.eligible(pool)
         try:
+            self.before_access(path, 'read')
             fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
         except FileNotFoundError:
             count = 0
@@ -187,6 +198,7 @@ class Pool:
         else:
             try:
                 with os.fdopen(fd, 'r', encoding='ascii', errors='replace') as handle:
+                    handle._pool_path = path
                     self.lock(handle, False)
                     raw, pool, current_path = self.read()
                     if current_path != path:
@@ -207,6 +219,7 @@ class Pool:
                 next_value = str(count + 1) + '\n'
             except ValueError as exc:
                 raise PoolError('next rotation counter exceeds supported integer conversion; no reset/fallback') from exc
+            self.before_access(handle._pool_path, 'write')
             handle.seek(0)
             handle.write(next_value)
             handle.flush()
