@@ -20,9 +20,9 @@ import time
 from types import ModuleType
 from uuid import uuid4
 
-COMMIT = 'c5d5d6a1c1965df531b34159515fd5f9bedb7af7'
-TREE = 'b5b3bf1dd812693442c85028289e003edeceaf0e'
-PINSET = '0f3df7d6002de8ba2b44b4e6b4ad41490af87b40cea528808e960f5310625d34'
+COMMIT = '44b868eb8a5f813422e047283b881319788045fb'
+TREE = 'b7a28003a557d8c2fc0734998540d9c4e8a880e3'
+PINSET = '22e9210cf4d15ab4cac6a53b46e1727cc745ef487a362a2be6bbd098858126e6'
 DIRECT = ('profile_lease', 'execution_pool', 'fast_tier', 'dispatch',
           'review_context', 'opaque_dialogue', 'continuing_review')
 PROFILES = ('.codex2', '.codex3', '.codex4', '.codex5')

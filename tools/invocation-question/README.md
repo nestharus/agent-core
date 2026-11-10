@@ -189,6 +189,15 @@ held, no access is made to repair it: the SAME original still reaches numeric EN
 and retains truthful missing EOF/evidence/publication debt. No replacement owner,
 recovered held data or zero-usage inference follows.
 
+Provider and local-control stdout/stderr captures use raw, unbuffered files.
+Every physical write attempt reacquires current exact-path permission and reserves
+its remaining suffix. A short write is recorded as a real partial effect and
+rechecked before retry; zero/no-progress and failed suffixes retain pending SAME
+evidence. `bytes` counts pipe bytes received, while `captured_bytes` counts bytes
+accepted by the raw file. Closing or unwinding a raw capture holds no user-space
+output to flush under an earlier permission. These finite checks do not fence
+kernel writeback or make an external change atomic with a syscall.
+
 The directory rule is a conservative contract, not a live backend exposure claim.
 It prevents admitting an enclosing concrete read capability when any current hold
 intersects it. Symbolic minimal runtime and already delivered bytes retain their
@@ -315,6 +324,16 @@ They observe prompt byte counts and retained END/EOF/publication. No real provid
 qualification canary is run. Earlier generations and all failure fixtures stay
 retained. Test success proves bounded mechanism discrimination under these
 premises, not actual authority/protection/provider/semantic acceptance.
+
+PhysicalCapture adds nine controls spanning 40 provider/local, stdout/stderr and
+failure cases. Its explicit synthetic source-scope stub loads the actual pinned
+capture code; real owned FileIO/BufferedWriter taps record physical writes without
+reading held capture bodies or metadata. It reaches lawful short acceptance before
+holding the capture, covers next-read refusal and terminal EOF/close, pipe errors,
+short writes, held/failed suffixes, no-progress writes and allowed neighbors. The
+tap always delegates the underlying write, so an older buffered implementation can
+fail the oracle rather than being made safe by the fixture. These controls remain
+synthetic mechanism evidence, with real helper/provider qualification still owed.
 
 Finite checks do not establish all-world atomicity, future knowledge, a trusted
 OS-tree hash, arbitrary crash recovery, escaped-descendant settlement or provider

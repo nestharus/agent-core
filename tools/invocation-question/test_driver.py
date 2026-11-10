@@ -1487,6 +1487,254 @@ class HardDeadline(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(context.close(h.owner)['caller_processes_collected'])
 
 
+
+class PhysicalCapture(unittest.IsolatedAsyncioTestCase):
+    """Owned physical-I/O oracles; no actual Question, helper or provider.
+
+    Subprocesses and source rights are explicit synthetic stubs. FileIO and
+    BufferedWriter are real. The raw tap always delegates writes, including
+    adverse writes under a represented synthetic hold: it observes the bug
+    rather than implementing the desired permission rule. Held capture bodies
+    and metadata are never acquired to decide the physical-effect assertion.
+    """
+    async def capture_case(self, route, stream_name, mode):
+        import io
+        global SEQUENCE
+        SEQUENCE += 1
+        area = fresh(ROOT, 'physical-%03d-%s-%s-%s' %
+                     (SEQUENCE, route, stream_name, mode))
+        pins = json.loads(Path(__file__).with_name('runtime-pins.json').read_text())
+        # Explicit MOCK source-scope acceptance; actual finite source-pin loader.
+        runtime = driver.PinnedRuntime(RUNTIME, pins, lambda *args: None).load()
+        provider = runtime.direct.review_context
+        local = runtime.direct.continuing_review
+        book = runtime.appserver.Originals()
+        publications = []
+        suffix = ('stdout.jsonl' if stream_name == 'stdout' else 'stderr.bin') if route == 'provider' else 'control.'+stream_name
+        target = area / suffix
+        state = dict(held=False, accepted=0, raw_calls=0, closed=0, denied=0)
+        effects, append_attempts = [], []
+        holds = []
+        reservations = driver.Budget(area, lambda: tuple(holds))
+        thread = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'  # fresh synthetic case
+        stdout = (b''.join(json.dumps(row).encode()+b'\n' for row in [
+            dict(type='thread.started', thread_id=thread),
+            dict(type='item.completed', item=dict(type='agent_message', text='owned synthetic answer')),
+            dict(type='turn.completed')]) if route == 'provider' else b'{"ok": true}')
+        chosen = stdout if stream_name == 'stdout' else b'owned short stderr'
+
+        def hold():
+            if not state['held']:
+                state['held'] = True
+                holds.append(str(target))
+                state['reserved_at_hold'] = reservations.bytes
+
+        def before_io(path, operation, amount=0):
+            if Path(path) == target and state['held']:
+                state['denied'] += 1
+                raise driver.Refusal('represented current synthetic capture hold')
+            if operation in {'create', 'append', 'mkdir'}:
+                reservations.reserve(path, operation, amount)
+            if Path(path) == target and operation == 'append':
+                append_attempts.append(amount)
+
+        class Pipe:
+            def __init__(self, body, selected=False):
+                self.body, self.selected, self.calls = body, selected, 0
+            async def read(self, maximum):
+                self.calls += 1
+                if self.calls == 1:
+                    return self.body
+                if self.selected and mode in {'terminal', 'error'}:
+                    hold()  # after last append and read check, before EOF/error
+                    if mode == 'error':
+                        raise OSError('owned pipe read failure')
+                return b''
+
+        child = MockProcess(output=b'')
+        child.stdout = Pipe(stdout, stream_name == 'stdout')
+        child.stderr = Pipe(chosen if stream_name == 'stderr' else b'', stream_name == 'stderr')
+        if route == 'provider':
+            child.stdin = MockInput(lambda body: None)
+        async def spawn(*args, **kwargs):
+            return child
+        real_open, real_stat, real_lstat = Path.open, Path.stat, Path.lstat
+        real_read_bytes, real_read_text = Path.read_bytes, Path.read_text
+
+        class RawTap(io.RawIOBase):
+            def __init__(self, raw):
+                self.raw = raw
+            def writable(self):
+                return True
+            def fileno(self):
+                return self.raw.fileno()
+            def write(self, body):
+                state['raw_calls'] += 1
+                call = state['raw_calls']
+                if mode == 'zero':
+                    return 0
+                if mode == 'none':
+                    return None
+                if mode == 'partial-error' and call == 2:
+                    raise OSError('owned short-write suffix failure')
+                part = body[:2] if mode in {'short', 'short-hold', 'partial-error'} and call == 1 else body
+                held = state['held']
+                count = self.raw.write(part)  # real physical file effect
+                effects.append((held, count))
+                return count
+            def close(self):
+                try:
+                    super().close()
+                finally:
+                    self.raw.close()
+
+        class CaptureStream:
+            def __init__(self, out):
+                self.out = out
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                try:
+                    self.out.close()
+                finally:
+                    state['closed'] += 1
+            def write(self, body):
+                count = self.out.write(body)
+                if isinstance(count, int) and count > 0:
+                    state['accepted'] += count
+                    if mode in {'mid', 'short-hold'}:
+                        hold()  # lawful append accepted, then a new current hold
+                return count
+
+        def opened(path, mode_arg='r', *args, **kwargs):
+            if path != target:
+                return real_open(path, mode_arg, *args, **kwargs)
+            self.assertFalse(state['held'], 'capture must open lawfully')
+            raw = RawTap(real_open(path, mode_arg, buffering=0))
+            # Honor production buffering choice; do not make the baseline safe.
+            out = raw if kwargs.get('buffering', -1) == 0 else io.BufferedWriter(raw)
+            return CaptureStream(out)
+
+        def no_held_metadata(actual):
+            def check(path, *args, **kwargs):
+                if path == target and state['held']:
+                    raise AssertionError('held capture metadata/body acquired by oracle')
+                return actual(path, *args, **kwargs)
+            return check
+
+        caught = None
+        with patch.object(asyncio, 'create_subprocess_exec', side_effect=spawn), \
+             patch.object(Path, 'open', opened), \
+             patch.object(Path, 'stat', no_held_metadata(real_stat)), \
+             patch.object(Path, 'lstat', no_held_metadata(real_lstat)), \
+             patch.object(Path, 'read_bytes', no_held_metadata(real_read_bytes)), \
+             patch.object(Path, 'read_text', no_held_metadata(real_read_text)):
+            try:
+                if route == 'provider':
+                    await provider.execute(['synthetic-no-executable'], {}, 'owned synthetic prompt',
+                        area, book, publications.append, 3, 1, 4096, 4096, None,
+                        lambda: None, capacity_check=guard, before_io=before_io)
+                else:
+                    context = SimpleNamespace(account_home=str(area), profile='synthetic-only',
+                        created=time.monotonic(), lifetime=10, clock=time.monotonic, originals=book)
+                    protection = local.SandboxProtection(area, '/synthetic-unexecuted',
+                        ['/synthetic-runtime'], guard, before_io=before_io)
+                    await protection._run(context, area, 'control',
+                        ['synthetic-no-executable'], publications.append)
+            except Exception as exc:
+                caught = exc
+        self.assertEqual(state['closed'], 1)
+        if mode not in {'zero', 'none'}:
+            self.assertGreater(state['accepted'], 0, 'must reach actual lawful short append')
+        self.assertTrue(publications, 'SAME collector must publish truthful observation')
+        observation = publications[-1]
+        evidence = observation['evidence']
+        self.assertEqual(observation['exit'], 0, 'numeric END comes from the owned mock wait')
+        self.assertEqual(sum(count for held, count in effects if held), 0,
+                         'post-hold physical append/implicit close flush')
+        actual_bytes = sum(count for held, count in effects)
+        self.assertEqual(evidence['captured_bytes'][stream_name], actual_bytes)
+        if state['held']:
+            self.assertGreaterEqual(reservations.bytes, state['reserved_at_hold'])
+        if mode in {'mid', 'short-hold', 'error', 'partial-error', 'zero', 'none'}:
+            self.assertIsInstance(caught, runtime.appserver.CollectionPending)
+            self.assertEqual(len(book.pending), 1)
+            self.assertFalse(evidence[stream_name+'_eof'])
+            self.assertFalse(observation['evidence_complete'])
+            self.assertFalse(next(iter(book.pending.values()))['evidence_done'])
+            if mode in {'mid', 'short-hold'}:
+                self.assertGreater(state['denied'], 0)
+            if mode in {'short-hold', 'partial-error'}:
+                self.assertEqual(actual_bytes, 2)
+            if mode in {'zero', 'none'}:
+                self.assertEqual(actual_bytes, 0)
+                self.assertEqual(state['raw_calls'], 1)
+        else:
+            self.assertFalse(book.owned)
+            self.assertTrue(evidence['stdout_eof'] and evidence['stderr_eof'])
+            self.assertTrue(observation['evidence_complete'])
+            self.assertEqual(actual_bytes, len(chosen))
+            if mode == 'terminal':
+                self.assertTrue(state['held'])
+                self.assertEqual(state['denied'], 0, 'terminal close without next-read refusal')
+            if mode == 'short':
+                self.assertEqual(append_attempts, [len(chosen), len(chosen)-2])
+        return dict(route=route, stream=stream_name, mode=mode,
+                    physical_bytes=actual_bytes, pending=bool(book.pending))
+
+    async def test_provider_after_append_hold_refusal_unwind(self):
+        for stream in ('stdout', 'stderr'):
+            with self.subTest(stream=stream):
+                await self.capture_case('provider', stream, 'mid')
+
+    async def test_local_after_append_hold_refusal_unwind(self):
+        for stream in ('stdout', 'stderr'):
+            with self.subTest(stream=stream):
+                await self.capture_case('local', stream, 'mid')
+
+    async def test_terminal_hold_before_eof_and_normal_close(self):
+        for route in ('provider', 'local'):
+            for stream in ('stdout', 'stderr'):
+                with self.subTest(route=route, stream=stream):
+                    await self.capture_case(route, stream, 'terminal')
+
+    async def test_pipe_error_after_append_and_hold(self):
+        for route in ('provider', 'local'):
+            for stream in ('stdout', 'stderr'):
+                with self.subTest(route=route, stream=stream):
+                    await self.capture_case(route, stream, 'error')
+
+    async def test_allowed_short_writes_recheck_and_keep_complete_capture(self):
+        for route in ('provider', 'local'):
+            for stream in ('stdout', 'stderr'):
+                with self.subTest(route=route, stream=stream):
+                    await self.capture_case(route, stream, 'short')
+
+    async def test_hold_between_partial_write_and_suffix(self):
+        for route in ('provider', 'local'):
+            for stream in ('stdout', 'stderr'):
+                with self.subTest(route=route, stream=stream):
+                    await self.capture_case(route, stream, 'short-hold')
+
+    async def test_partial_write_then_oserror_retains_pending_capture(self):
+        for route in ('provider', 'local'):
+            for stream in ('stdout', 'stderr'):
+                with self.subTest(route=route, stream=stream):
+                    await self.capture_case(route, stream, 'partial-error')
+
+    async def test_zero_or_none_write_is_finite_failure(self):
+        for mode in ('zero', 'none'):
+            for route in ('provider', 'local'):
+                for stream in ('stdout', 'stderr'):
+                    with self.subTest(mode=mode, route=route, stream=stream):
+                        await self.capture_case(route, stream, mode)
+
+    async def test_allowed_neighbor_normal_capture(self):
+        for route in ('provider', 'local'):
+            for stream in ('stdout', 'stderr'):
+                with self.subTest(route=route, stream=stream):
+                    await self.capture_case(route, stream, 'normal')
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--fixtures', type=Path, required=True)
