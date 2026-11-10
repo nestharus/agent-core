@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 import errno
 import hashlib
 import json
+import os
 from pathlib import Path
 import time
 import shlex
@@ -58,14 +59,28 @@ class SandboxProtection:
         self.root, self.executable = Path(root), executable
         if not runtime_reads or any(not Path(p).is_absolute() for p in runtime_reads):
             raise Refusal('explicit public runtime read dependencies required')
+        if not Path(executable).is_absolute():
+            raise Refusal('absolute selected sandbox executable required')
         self.runtime_reads = tuple(runtime_reads)
         self.capacity_check = capacity_check
         self.proofs = []
         self.probe_helper = probe_helper
 
     def filesystem(self, material, workspace):
-        return {':root': 'deny', ':minimal': 'read',
-                **{p: 'read' for p in self.runtime_reads},
+        # The backend re-executes this exact program inside its filesystem
+        # view. Host identity alone does not put that pathname in the view.
+        reads = dict.fromkeys((*self.runtime_reads, self.executable), 'read')
+        if '/usr/lib64' in reads:
+            # Preserve the kernel's loader spelling on this explicitly checked
+            # usr-merged Linux runtime. This aliases the SAME already admitted
+            # directory, not /lib, /usr or the executable's parent/HOME.
+            alias = Path('/lib64')
+            info = alias.lstat()
+            if (not alias.is_symlink() or info.st_uid != 0
+                    or os.readlink(alias) != 'usr/lib64'):
+                raise Refusal('declared runtime loader alias changed')
+            reads['/lib64'] = 'read'
+        return {':root': 'deny', ':minimal': 'read', **reads,
                 str(material): 'read', str(workspace): 'read'}
 
     async def qualify(self, context, material, publish):
