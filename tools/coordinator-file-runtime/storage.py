@@ -12,6 +12,9 @@ import uuid
 MAX_STATE = 262144
 MAX_BUDGET = 524288
 LIMITS = {'bytes': 134217728, 'reads': 134217728, 'entries': 1024}
+# Normal work cannot consume the last quarter. Original-owner readback and
+# settlement may use it; it is finite headroom, never a new grant or refund.
+HEADROOM = {'bytes': 33554432, 'reads': 67108864, 'entries': 256}
 
 
 class Held(Exception):
@@ -26,11 +29,13 @@ def digest(value):
     return hashlib.sha256(encode(value)).hexdigest()
 
 
-def check_capacity(path):
+def check_capacity(path, bytes=0, entries=0):
     s = os.statvfs(path)
     on_os = os.stat(path).st_dev == os.stat('/').st_dev
     byte_floor, inode_floor = (16 * 1024**3, 100000) if on_os else (1024**3, 2000)
-    if s.f_bavail * s.f_frsize < byte_floor or s.f_favail < inode_floor:
+    # Round a bounded write up to filesystem blocks, including metadata slack.
+    allocation = ((bytes + s.f_frsize - 1) // s.f_frsize + entries) * s.f_frsize
+    if s.f_bavail * s.f_frsize - allocation < byte_floor or s.f_favail - entries < inode_floor:
         raise Held('capacity floor: retain work, no allocation')
 
 
@@ -64,6 +69,7 @@ class Files:
         if s.st_uid != os.getuid() or s.st_mode & 0o077:
             raise Held('state directory must be own 0700')
         self.clock, self.fault = clock, fault
+        self.continuation = False
 
     def sync(self):
         fd = os.open(self.path, os.O_DIRECTORY | os.O_RDONLY | os.O_NOFOLLOW)
@@ -72,7 +78,7 @@ class Files:
         finally:
             os.close(fd)
 
-    def charge(self, *, bytes=0, reads=0, entries=0):
+    def charge(self, *, bytes=0, reads=0, entries=0, future=None):
         """Write-ahead cumulative reservations, including refused/failed work.
 
         A torn charge record holds the runtime. It is never truncated or reset.
@@ -100,10 +106,14 @@ class Files:
                 'entries': previous['entries'] + entries}
         if any(body[k] > LIMITS[k] for k in LIMITS):
             raise Held('cumulative budget exhausted; preserve ownership, no refund')
+        if not self.continuation and any(body[k] + (future or {}).get(k, 0) > LIMITS[k] - HEADROOM[k] for k in LIMITS):
+            raise Held('work pressure hold; reserved original-owner readback/settlement only')
         line = encode({**body, 'hash': digest(body)})
         if len(raw) + len(line) > MAX_BUDGET:
             raise Held('finite charge journal full; no reset')
-        check_capacity(self.path)
+        if not self.continuation and len(raw) + len(line) > MAX_BUDGET - 131072:
+            raise Held('work pressure hold; charge journal continuation headroom')
+        check_capacity(self.path, len(line) + 4096, 0)
         fd = os.open(self.path / 'budget.jsonl', os.O_WRONLY | os.O_APPEND | os.O_NOFOLLOW)
         try:
             if os.write(fd, line) != len(line):
@@ -132,7 +142,7 @@ class Files:
         if len(raw) > MAX_STATE:
             raise Held('finite state full; preserve current state')
         self.charge(bytes=len(raw), entries=1)
-        check_capacity(self.path)
+        check_capacity(self.path, len(raw), 1)
         name = self.path / ('.pending-' + uuid.uuid4().hex)
         fd = os.open(name, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, 'wb') as f:
@@ -145,16 +155,24 @@ class Files:
         self.fault('after-replace')
 
     @contextmanager
-    def transaction(self):
+    def transaction(self, *, readonly=False, continuation=False):
         with self.lock():
-            self.charge(reads=MAX_STATE)
+            self.continuation = continuation
             try:
-                envelope = json.loads(read_regular(self.path / 'state.json', MAX_STATE))
-                state = envelope['state']
-                if envelope['hash'] != digest(state) or state['schema'] != 1:
-                    raise ValueError()
-            except (ValueError, KeyError, TypeError) as exc:
-                raise Held('invalid state; preserve, no fallback') from exc
-            yield state
-            state['generation'] += 1
-            self.save(state)
+                size = os.lstat(self.path / 'state.json').st_size
+                if size > MAX_STATE:
+                    raise Held('finite state exceeded')
+                self.charge(reads=size + 1)
+                try:
+                    envelope = json.loads(read_regular(self.path / 'state.json', size))
+                    state = envelope['state']
+                    if envelope['hash'] != digest(state) or state['schema'] != 1:
+                        raise ValueError()
+                except (ValueError, KeyError, TypeError) as exc:
+                    raise Held('invalid state; preserve, no fallback') from exc
+                yield state
+                if not readonly:
+                    state['generation'] += 1
+                    self.save(state)
+            finally:
+                self.continuation = False

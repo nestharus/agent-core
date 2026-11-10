@@ -4,6 +4,8 @@ The adjacent fast-tier file contains exactly true or false. Missing, linked or
 invalid policy refuses before launch. Disabled means no tier override, allowing
 the original provider/profile semantics. Requests never attest served tier.
 """
+from contextlib import contextmanager
+import fcntl
 import os
 from pathlib import Path
 import stat
@@ -11,6 +13,37 @@ import sys
 import tempfile
 
 POLICY = Path(__file__).with_name('fast-tier')
+
+
+@contextmanager
+def policy_lock(path=None, *, exclusive=False, before_write=lambda p: None):
+    """Stable cooperative guard shared by setters and actual creation adapters.
+
+    A direct edit bypasses the contract. No provider or private account access.
+    """
+    path = POLICY if path is None else Path(path)
+    before_write(path.parent)
+    fd = os.open(path.with_name('fast-tier.lock'), os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise ValueError('invalid fast-tier stable lock')
+        try:
+            fcntl.flock(fd, (fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH) | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise ValueError('fast-tier control busy; no launch/update') from exc
+        yield path
+    finally:
+        os.close(fd)
+
+
+@contextmanager
+def admission(path=None, *, before_write=lambda p: None):
+    """Hold enabled fast policy through the adapter's actual Popen boundary."""
+    with policy_lock(path, before_write=before_write) as selected:
+        if not enabled(selected):
+            raise ValueError('selected all-fast policy disabled; no launch')
+        yield
 
 
 def enabled(path=None):
@@ -42,6 +75,13 @@ def flags(force):
 
 
 def set_policy(value):
+    with policy_lock(exclusive=True):
+        _set_policy(value)
+
+
+def _set_policy(value):
+    if value not in {'true', 'false'}:
+        raise ValueError('fast-tier value must be true or false')
     enabled()  # Preserve a missing/invalid current file for its owner.
     before = POLICY.stat(follow_symlinks=False)
     with tempfile.NamedTemporaryFile(dir=POLICY.parent, prefix='.fast-tier-', delete=False) as stream:

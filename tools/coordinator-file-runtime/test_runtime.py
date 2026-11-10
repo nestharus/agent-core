@@ -13,6 +13,7 @@ import sys
 import time
 import unittest
 import uuid
+from unittest.mock import patch
 
 _original_import = builtins.__import__
 _sql_attempts = []
@@ -26,8 +27,8 @@ def no_sql(name, *args, **kwargs):
 
 
 builtins.__import__ = no_sql
-from runtime import Runtime, create, _pool
-from storage import Held, Files, encode, LIMITS
+from runtime import Runtime, create, _pool, _fast
+from storage import Held, Files, encode, LIMITS, HEADROOM, check_capacity
 
 ARTIFACTS = Path(os.environ['COORDINATOR_TEST_ARTIFACTS'])
 CTX = mp.get_context('fork')
@@ -413,6 +414,294 @@ class Trial(unittest.TestCase):
         for op in ('resume', 'release', 'migrate', 'delete'):
             with self.assertRaisesRegex(Held, 'unsupported operation'):
                 call(self.rt, op)
+
+    def test_c03_lost_reserve_start_and_collection_replies_recover_original_operands(self):
+        self.classify('lost')
+        def lose_reply(op, **fields):
+            def child():
+                rt = Runtime(self.path, fault=lambda phase: os._exit(73) if phase == 'after-commit' else None)
+                call(rt, op, **fields)
+            original = CTX.Process(target=child)
+            original.start(); original.join(5)
+            self.assertEqual(original.exitcode, 73)
+        lose_reply('reserve', attempt='lost', event='lost', phase='known', point='lost',
+                   resources={'point:lost': 'write'}, basis={'point:lost': 0})
+        recovered = call(self.rt, 'recover')['attempts'][0]
+        self.assertEqual(recovered['id'], 'lost')
+        collector = recovered['collector']
+        with self.assertRaisesRegex(Held, 'original owner'):
+            call(self.rt, 'readback', 'qa', kind='attempt', id='lost')
+        lose_reply('start', attempt='lost', collector=collector, substrate='fixture', evidence='original fixture')
+        saved = call(self.rt, 'readback', kind='attempt', id='lost')['value']
+        self.assertEqual(saved['state'], 'launching')
+        with self.assertRaisesRegex(Held, 'no replay'):
+            call(self.rt, 'start', attempt='lost', collector=collector, substrate='fixture', evidence='original fixture')
+        with self.assertRaisesRegex(Held, 'definitely unstarted'):
+            call(self.rt, 'cancel', attempt='lost', collector=collector, evidence='cannot assume absent process')
+        # This child records an independently supplied synthetic numeric END;
+        # fault exit 73 is metadata-process custody, not a provider's END.
+        fields = dict(attempt='lost', collector=collector, launch_id=saved['launch_id'], end=7,
+                      result={'synthetic_original_outcome': 'failed'}, evidence='synthetic original collector END')
+        lose_reply('collect', **fields)
+        current = call(self.rt, 'readback', kind='attempt', id='lost')['value']
+        self.assertEqual((current['end'], current['collection_evidence']), (7, fields['evidence']))
+        self.assertTrue(call(self.rt, 'collect', **fields)['duplicate'])
+        with self.assertRaisesRegex(Held, 'conflict'):
+            call(self.rt, 'collect', **{**fields, 'end': 0})
+
+    def test_c03_unstarted_empty_pool_disposition_releases_discovery_without_refund(self):
+        self.classify('first', kind='new'); self.classify('second', kind='new')
+        a = call(self.rt, 'reserve', attempt='first', event='first', phase='discovery', resources={}, basis={})
+        pool = _pool.Pool(self.routes)
+        before = pool.status()['turn']
+        pool.set([])
+        with self.assertRaises(_pool.PoolError):
+            call(self.rt, 'start', attempt='first', collector=a['collector'], substrate='fixture', evidence='removed')
+        with self.assertRaisesRegex(Held, 'original collector'):
+            call(self.rt, 'cancel', 'qa', attempt='first', collector=a['collector'], evidence='foreign')
+        fields = dict(attempt='first', collector=a['collector'], evidence='original owner: definitely never started')
+        self.assertFalse(call(self.rt, 'cancel', **fields)['turn_refunded'])
+        self.assertTrue(call(self.rt, 'cancel', **fields)['duplicate'])
+        self.assertEqual(pool.status()['turn'], before)
+        pool.set(['.codex4'])  # Explicit fixture control action, no automatic re-enable.
+        b = call(self.rt, 'reserve', attempt='second', event='second', phase='discovery', resources={}, basis={})
+        self.assertTrue(b['collector'])
+        self.assertEqual(pool.status()['turn'], before + 1)
+        self.assertIsNone(call(self.rt, 'readback', kind='attempt', id='first')['value']['end'])
+
+    def test_c03_fast_and_pool_changes_between_start_and_actual_creation_refuse(self):
+        from coordinator import fixture
+        self.classify('one')
+        a = self.reserve('one')
+        original = self.rt.call
+        def change_fast(*args, **kw):
+            result = original(*args, **kw)
+            if args[0] == 'start':
+                with patch.object(_fast, 'POLICY', self.root / 'fast-tier'):
+                    _fast.set_policy('false')
+            return result
+        with patch.object(self.rt, 'call', side_effect=change_fast), patch('coordinator.subprocess.Popen') as popen:
+            with self.assertRaisesRegex(Held, 'all-fast policy'):
+                fixture(self.rt, 'work', TOKENS['work'], {'attempt': 'a', 'collector': a['collector']})
+            popen.assert_not_called()
+        self.assertEqual(call(self.rt, 'readback', kind='attempt', id='a')['value']['state'], 'not-started')
+        call(self.rt, 'cancel', attempt='a', collector=a['collector'], evidence='original observed control refusal before creation')
+        # A separate original reservation proves the equivalent pool interval.
+        (self.root / 'fast-tier').write_text('true\n')
+        self.classify('two')
+        b = self.reserve('two', attempt='b')
+        def change_pool(*args, **kw):
+            result = original(*args, **kw)
+            if args[0] == 'start':
+                _pool.Pool(self.routes).set([])
+            return result
+        with patch.object(self.rt, 'call', side_effect=change_pool), patch('coordinator.subprocess.Popen') as popen:
+            with self.assertRaises(_pool.PoolError):
+                fixture(self.rt, 'work', TOKENS['work'], {'attempt': 'b', 'collector': b['collector']})
+            popen.assert_not_called()
+
+    def test_c03_supported_fast_setter_serializes_with_actual_fixture_creation(self):
+        from coordinator import fixture
+        self.classify('one'); a = self.reserve('one')
+        real_popen = subprocess.Popen
+        result = CTX.Queue()
+        def setter():
+            with patch.object(_fast, 'POLICY', self.root / 'fast-tier'):
+                try:
+                    _fast.set_policy('false')
+                except ValueError as exc:
+                    result.put(str(exc))
+                else:
+                    result.put('unexpectedly changed')
+        def at_creation(*args, **kwargs):
+            p = CTX.Process(target=setter); p.start(); p.join(4)
+            self.assertEqual(p.exitcode, 0)
+            self.assertIn('control busy', result.get(timeout=2))
+            self.assertEqual((self.root / 'fast-tier').read_text(), 'true\n')
+            return real_popen(*args, **kwargs)
+        with patch('coordinator.subprocess.Popen', side_effect=at_creation):
+            self.assertEqual(fixture(self.rt, 'work', TOKENS['work'], {'attempt': 'a', 'collector': a['collector']})['end'], 0)
+        with patch.object(_fast, 'POLICY', self.root / 'fast-tier'):
+            _fast.set_policy('false')  # Guard released after actual creation.
+        self.assertEqual((self.root / 'fast-tier').read_text(), 'false\n')
+
+    def test_c03_four_simultaneous_receivers_get_only_addressed_work(self):
+        from coordinator import watch
+        self.classify('routing')
+        ready = CTX.Queue()
+        children = []
+        for actor in TOKENS:
+            output = CTX.Queue()
+            def receive(actor=actor, output=output):
+                rt = Runtime(self.path)
+                original = rt.call
+                scanned = False
+                def announced(*args, **kw):
+                    nonlocal scanned
+                    value = original(*args, **kw)
+                    if not scanned:
+                        ready.put(actor); scanned = True
+                    return value
+                rt.call = announced
+                output.put(watch(rt, actor, TOKENS[actor], 5))
+            p = CTX.Process(target=receive); p.start()
+            children.append((actor, p, output))
+        self.assertEqual({ready.get(timeout=4) for _ in TOKENS}, set(TOKENS))
+        for actor, _, _ in children:
+            retry(self.rt, 'send', packet='to-' + actor, event='routing', recipient=actor, payload={'for': actor})
+        for actor, p, output in children:
+            value = output.get(timeout=6)
+            p.join(5); self.assertEqual(p.exitcode, 0)
+            self.assertEqual([x['id'] for x in value['packets']], ['to-' + actor])
+
+    def test_c03_interrupted_receiver_rebinds_without_stale_cleanup(self):
+        from coordinator import watch
+        def die():
+            rt = Runtime(self.path)
+            original = rt.call
+            def scanned(*args, **kwargs):
+                original(*args, **kwargs)
+                os._exit(75)
+            rt.call = scanned
+            watch(rt, 'qa', TOKENS['qa'], 2)
+        p = CTX.Process(target=die); p.start(); p.join(4)
+        self.assertEqual(p.exitcode, 75)
+        self.assertEqual(watch(self.rt, 'qa', TOKENS['qa'], 0)['packets'], [])
+
+    def test_c03_cross_event_and_transitive_corrections_restart_whole_processing_clock(self):
+        self.classify('old'); self.classify('new'); self.classify('later')
+        now = [1000.0]
+        rt = Runtime(self.path, clock=lambda: now[0])
+        def settle(packet):
+            for stage in ('picked-up', 'processed', 'settled'):
+                call(rt, 'receipt', 'qa', packet=packet, stage=stage, evidence='synthetic actual recipient ' + stage)
+        call(rt, 'send', packet='p1', event='old', recipient='qa', payload={'v': 1})
+        settle('p1')
+        call(rt, 'resolve', event='old', need='outcome', evidence='first completed outcome')
+        call(rt, 'finish', event='old')
+        for name in self.raw()['events']['old']['holds']:
+            call(rt, 'hold', event='old', name=name, enabled=False, evidence='synthetic holder only')
+        now[0] += 86400
+        self.assertTrue(call(rt, 'eligibility', event='old')['eligible_metadata_only'])
+        call(rt, 'send', packet='p2', event='new', recipient='qa', payload={'v': 2}, correction_of='p1')
+        self.assertFalse(call(rt, 'eligibility', event='old')['eligible_metadata_only'])
+        with self.assertRaisesRegex(Held, 'downstream unsettled'):
+            call(rt, 'finish', event='old')
+        settle('p2')
+        call(rt, 'finish', event='old')
+        self.assertEqual(call(rt, 'readback', kind='event', id='old')['value']['processed_at'], now[0])
+        now[0] += 86400
+        self.assertTrue(call(rt, 'eligibility', event='old')['eligible_metadata_only'])
+        call(rt, 'send', packet='p3', event='later', recipient='qa', payload={'v': 3}, correction_of='p2')
+        self.assertFalse(call(rt, 'eligibility', event='old')['eligible_metadata_only'])
+        self.assertFalse(call(rt, 'eligibility', event='old')['deletion_authorized'])
+        settle('p3')
+        call(rt, 'finish', event='old')
+        self.assertFalse(call(rt, 'eligibility', event='old')['eligible_metadata_only'])
+
+    def test_c03_review_phase_owner_and_branch_associations_are_required(self):
+        call(self.rt, 'branch', 'branch', branch='b', repository='repo', ref='ref', incarnation='one', root='root', basis='synthetic')
+        with self.assertRaisesRegex(Held, 'already bound'):
+            call(self.rt, 'branch', 'branch', branch='alias', repository='repo', ref='ref', incarnation='one', root='root', basis='synthetic')
+        call(self.rt, 'review', 'reviews', review='r', component='one', branch='b', opaque_contract='opaque', context='fresh', history='supplied')
+        with self.assertRaisesRegex(Held, 'association conflict'):
+            call(self.rt, 'review', 'reviews', review='wrong', component='two', branch='b', opaque_contract='opaque', context='new', history='supplied', predecessor='r')
+        self.classify('work'); self.classify('review', 'reviews'); self.classify('build', 'branch')
+        with self.assertRaisesRegex(Held, 'review history'):
+            self.reserve('work', review='r')
+        self.assertEqual(call(self.rt, 'readback', 'reviews', kind='review', id='r')['value']['calls'], [])
+        builder = call(self.rt, 'reserve', 'branch', attempt='builder', event='build', phase='known', point='build', branch='b',
+                       resources={'point:build': 'write', 'branch:b': 'write'}, basis={'point:build': 0, 'branch:b': 0})
+        fields = dict(attempt='review', event='review', phase='review', review='r', resources={'review:r': 'write', 'branch:b': 'read'},
+                      basis={'review:r': 0, 'branch:b': 0})
+        with self.assertRaisesRegex(Held, 'resource conflict'):
+            call(self.rt, 'reserve', 'reviews', **fields)
+        call(self.rt, 'cancel', 'branch', attempt='builder', collector=builder['collector'], evidence='synthetic never started')
+        review = call(self.rt, 'reserve', 'reviews', **fields)
+        self.assertTrue(review['collector'])
+        self.assertEqual(call(self.rt, 'readback', 'reviews', kind='review', id='r')['value']['calls'], ['review'])
+        self.assertNotIn('collector', call(self.rt, 'recover')['attempts'][0])
+
+    def test_c03_pressure_keeps_owner_readback_and_unstarted_disposition(self):
+        self.classify('one'); a = self.reserve('one')
+        self.ingest('pending')
+        low = call(self.rt, 'reserve', attempt='pending-low', event='pending', phase='classifier', resources={}, basis={})
+        started = call(self.rt, 'start', attempt='pending-low', collector=low['collector'], substrate='fixture', evidence='synthetic LOW')
+        call(self.rt, 'collect', attempt='pending-low', collector=low['collector'], launch_id=started['launch_id'], end=0,
+             result={'event_hash': self.raw()['events']['pending']['source_hash'], 'classification': 'unresolved'}, evidence='synthetic collected LOW')
+        generation = self.raw()['generation']
+        call(self.rt, 'status'); call(self.rt, 'inbox')
+        self.assertEqual(self.raw()['generation'], generation)
+        raw = (self.path / 'budget.jsonl').read_bytes()
+        previous = json.loads(raw.splitlines()[-1])
+        with self.rt.files.lock():
+            self.rt.files.charge(bytes=LIMITS['bytes'] - HEADROOM['bytes'] - previous['bytes'] - 1024,
+                                 reads=LIMITS['reads'] - HEADROOM['reads'] - previous['reads'] - len(raw))
+        with self.assertRaisesRegex(Held, 'work pressure hold'):
+            call(self.rt, 'status')
+        recovered = call(self.rt, 'recover')['attempts'][0]
+        self.assertEqual(recovered['collector'], a['collector'])
+        self.assertEqual(call(self.rt, 'readback', kind='attempt', id='a')['value']['state'], 'reserved')
+        call(self.rt, 'cancel', attempt='a', collector=a['collector'], evidence='pressure: definitely unstarted')
+        current = call(self.rt, 'readback', kind='attempt', id='a')['value']
+        self.assertEqual(current['state'], 'cancelled')
+        call(self.rt, 'classify', event='pending', attempt='pending-low', collector=low['collector'],
+             classification='unresolved', owner='work', needs=['outcome'])
+        call(self.rt, 'reconcile', attempt='pending-low', collector=low['collector'], evidence='synthetic no effects')
+        call(self.rt, 'ack', event='pending')
+        call(self.rt, 'resolve', event='pending', need='outcome', evidence='explicit held unresolved outcome disposition')
+        call(self.rt, 'finish', event='pending')
+        last = json.loads((self.path / 'budget.jsonl').read_bytes().splitlines()[-1])
+        self.assertTrue(all(last[k] >= previous[k] for k in LIMITS))
+        with self.assertRaisesRegex(Held, 'work pressure hold'):
+            self.ingest('no-new-grant')
+
+    def test_c03_evidence_is_attributable_immutable_and_readable_after_lost_replies(self):
+        self.classify('one'); a = self.reserve('one')
+        started = call(self.rt, 'start', attempt='a', collector=a['collector'], substrate='fixture', evidence='original')
+        call(self.rt, 'effect', effect='e', attempt='a', collector=a['collector'], kind='delivery', intent='synthetic intent')
+        observation = dict(effect='e', outcome='not-applied', evidence='original holder inspected actual fixture')
+        call(self.rt, 'observe_effect', **observation)
+        self.assertTrue(call(self.rt, 'observe_effect', **observation)['duplicate'])
+        with self.assertRaisesRegex(Held, 'conflict'):
+            call(self.rt, 'observe_effect', **{**observation, 'outcome': 'applied'})
+        call(self.rt, 'collect', attempt='a', collector=a['collector'], launch_id=started['launch_id'], end=3,
+             result={'failed': True}, evidence='original synthetic END')
+        fields = dict(attempt='a', collector=a['collector'], evidence='original failure disposition, no acceptance')
+        call(self.rt, 'reconcile', **fields)
+        self.assertTrue(call(self.rt, 'reconcile', **fields)['duplicate'])
+        with self.assertRaisesRegex(Held, 'conflict'):
+            call(self.rt, 'reconcile', **{**fields, 'evidence': 'replacement success'})
+        resolution = dict(event='one', need='outcome', evidence='first original outcome')
+        call(self.rt, 'resolve', **resolution)
+        self.assertTrue(call(self.rt, 'resolve', **resolution)['duplicate'])
+        with self.assertRaisesRegex(Held, 'conflict'):
+            call(self.rt, 'resolve', **{**resolution, 'evidence': 'overwrite'})
+        event = call(self.rt, 'readback', kind='event', id='one')['value']
+        self.assertEqual(event['resolution_history'][0]['actor'], 'work')
+        self.assertEqual(event['resolutions']['outcome'], resolution['evidence'])
+        attempt = call(self.rt, 'readback', kind='attempt', id='a')['value']
+        self.assertEqual(attempt['end'], 3)
+        self.assertEqual(attempt['reconciliation'], fields['evidence'])
+        self.assertEqual(call(self.rt, 'readback', kind='effect', id='e')['value']['observation'], observation['evidence'])
+
+    def test_c03_imminent_allocation_is_subtracted_from_capacity_before_growth(self):
+        from types import SimpleNamespace
+        on_os = self.path.stat().st_dev == Path('/').stat().st_dev
+        floor, inodes = (16 * 1024**3, 100000) if on_os else (1024**3, 2000)
+        def capacity(extra_bytes, extra_inodes):
+            return SimpleNamespace(f_bavail=(floor + extra_bytes) // 4096, f_frsize=4096, f_favail=inodes + extra_inodes)
+        with patch('storage.os.statvfs', return_value=capacity(65536, 2)):
+            check_capacity(self.path, 4096, 1)
+        for extra_bytes, extra_inodes in [(0, 2), (65536, 0)]:
+            with patch('storage.os.statvfs', return_value=capacity(extra_bytes, extra_inodes)):
+                with self.assertRaisesRegex(Held, 'capacity floor'):
+                    check_capacity(self.path, 4096, 1)
+        before = (self.path / 'state.json').read_bytes()
+        with patch('storage.os.statvfs', return_value=capacity(4096, 2)):
+            with self.assertRaisesRegex(Held, 'capacity floor'):
+                self.ingest('cannot-fit')
+        self.assertEqual((self.path / 'state.json').read_bytes(), before)
 
 
 if __name__ == '__main__':

@@ -22,8 +22,8 @@ directories and the state directory is own 0700. A suggested prospective path is
 `/home/nes/.local/state/coordinator-file-runtime/cutover-20261110` with an
 explicitly prepared parent. This implementation has not initialized that path.
 
-The sole non-stdlib runtime dependency is the public sibling
-`../direct-child/execution_pool.py`. Supply the admitted public routes file
+The non-stdlib runtime dependencies are the public siblings
+`../direct-child/execution_pool.py` and `../direct-child/fast_tier.py`. Supply the admitted public routes file
 explicitly. Its adjacent `fast-tier` file must contain exactly `true` or
 `true\n`; missing, linked, corrupt or disabled fast policy holds admission under
 the current all-fast decision. No private account file is consulted. The
@@ -85,6 +85,7 @@ opaque and are never followed to source, provider, private history or old stores
 | `reserve` | `attempt,event,phase,resources,basis`; optionally `point,package,branch,review`. `resources` maps stable resource IDs to `read`/`write`; `basis` maps every declared resource to an integer generation, including absence 0. An attempt never automatically expires. |
 | `start` | `attempt,collector,substrate,evidence`. Only `fixture` or `owner-encounter` evidence records are supported. Rechecks current pool and all-fast policy. Durable `launching` and unique `launch_id` precede effects. No second launch from launching/collected state. |
 | `collect` | `attempt,collector,launch_id,end,result,evidence`. Same original collector and launch correlation, actual numeric END required. Failures remain failures; result text grants no acceptance. |
+| `cancel` | `attempt,collector,evidence`. Original owner can disposition a `reserved` attempt or a fixture's durably recorded `not-started` control refusal. No numeric END is invented, no pool turn is refunded, and no new reservation is made. Launching/uncertain attempts and attempts with effect records refuse. Exact repeat returns its disposition; changed evidence conflicts. |
 | `classify` | Work: `event,attempt,collector,classification,owner,needs`. Collected successful fresh `luna-low` classifier result must equal `{event_hash:SOURCE_HASH,classification:KIND}`. Kinds: `known,new,unresolved,control,coalesced`. Current adopted owner and 1..16 explicit needs become durable together with LOW provenance. Provenance is supplied evidence, not provider attestation. |
 | `ack` | Work: `event`; refuses until classification **and** responsibility are durable. Lost ACK can be retried without repeating classification. Unresolved/control/coalesced retain their needs and cannot enter ordinary known/discovery work. |
 | `branch` | Branch: `branch,repository,ref,incarnation,root,basis`. Immutable prospective association; a new incarnation needs a new ID. These are owner-supplied bindings, not Git mutations or independent verification of Root acceptance. |
@@ -97,7 +98,8 @@ opaque and are never followed to source, provider, private history or old stores
 | `inbox`, `receipt` | Inbox optional `limit`. Actual recipient receipts `packet,stage,evidence`, strictly `picked-up` then `processed` then `settled`. Exact receipt duplicates are idempotent; changed evidence conflicts. Payload/reference pickup does not assert processing or acceptance. |
 | `resolve`, `finish` | Owner: `event,need,evidence`; then `finish {event}`. Whole processing requires ACK, every need resolved, all original attempts reconciled and all outgoing packets settled. Failed outcomes require explicit owner disposition, not conversion to success. |
 | `hold`, `eligibility` | Owner: `event,name,enabled,evidence`; release assertions require actual holder authority outside this cooperative CLI. Eligibility `event` requires whole processing +86400 seconds **and all holds clear**. Late holds restore ineligibility. No deletion is authorized/performed. |
-| `status`, `recover` | Finite status omits credentials/collector secrets; Work recovery lists outstanding original custody, uncertain effects, incomplete and unacknowledged events. Never borrows handles, probes PIDs, retries effects or releases on elapsed time. |
+| `status`, `recover` | Finite status omits credentials/collector secrets. Every adopted owner can recover its own outstanding collector and launch operands. Work also sees foreign custody metadata, without foreign collector secrets. Never borrows handles, probes PIDs, retries effects or releases on elapsed time. |
+| `readback` | `kind,id`; kinds `attempt,event,packet,effect,branch,review,package`. Read exact committed operands, payloads, classification, results, receipts and evidence. Attempt/effect/branch/review require their original owner; packet requires sender/recipient; event/package require Work or the responsibility owner. No process handle or external truth is reconstructed. |
 
 Phases and capacity are separate from provider execution. `classifier` belongs to
 Work and is fresh per event. `known` belongs to Work/Branch and requires a stable
@@ -105,7 +107,13 @@ Work and is fresh per event. `known` belongs to Work/Branch and requires a stabl
 positive `new` classification and has one slot. Unrelated known work can run
 while discovery is occupied. Read/read can overlap; any shared writer conflicts.
 Branch known work must hold `branch:ID`; Reviews `review` work must hold its
-bound `review:ID` and keeps its opaque contract. `qa-execute` has five package
+bound `review:ID` and its associated `branch:ID`, and keeps its opaque contract.
+Only the owning Reviews actor in review phase can append to that review's calls.
+Predecessors retain the same owner, component, branch/incarnation binding and
+opaque contract; a successor context is a new encounter. Exact duplicate
+repository/ref/incarnation tuples use the existing branch ID. Different physical
+aliases still require honest shared footprint declarations; no path census or
+external ref CAS is implemented. `qa-execute` has five package
 slots; one package cannot duplicate or execute and consolidate simultaneously.
 `qa-consolidate` has its own single slot and requires successful reconciled
 execution for that package. Owners must declare the complete real footprint;
@@ -121,15 +129,47 @@ an explicit finite protocol, not automatic model dispatch.
 
 ## Wake, recovery, retention and resources
 
-`watch --timeout 30` binds an owned datagram receiver before the initial inbox
-scan and returns current durable inbox on a hint or after at most 60 seconds.
+`watch --timeout 30` binds a separate Linux abstract datagram receiver for each
+actor before the initial inbox scan. All four roles can wait simultaneously.
+It returns addressed durable work or the inbox at its finite deadline, at most
+60 seconds. An unrelated hint triggers a scan, then continues the same wait.
 Hints contain no task payload, are lossy/coalescible and cannot authorize work.
-Linux `/proc/self/fd` directory addressing avoids Unix socket pathname limits.
+Abstract names have bounded length and consume no filesystem socket entry.
 Read/status scans do not wake themselves. Repeated model polling is unnecessary.
-An existing socket, including one left after interruption, refuses binding;
-there is no blind stale-socket deletion. The socket's actual owner must reconcile
-that separate cleanup. Without a listener, `inbox`/`recover` on restart still
-read committed responsibilities.
+Only one receiver for a given actor may bind at once. The kernel releases its
+abstract address when the original socket closes, including process death;
+there is no stale-file deletion, PID inquiry or handle transfer. Durable packet
+custody still needs recipient receipts. Without a listener, `inbox` and
+owner `readback` on restart still read committed responsibilities.
+
+After an interrupted reply, use `recover` and `readback` with the surviving
+original actor credential and stable attempt ID. Preserve the returned collector
+and launch ID with the actual original process object. A committed launch ID is
+correlation, never proof a process did or did not start. Do not repeat `start` or
+`run-fixture` for a launching attempt. Only the actual original collector supplies
+its numeric END and reconciles effects. If no original process object/outcome is
+available, leave the attempt held and return that gap. Revocation transfers no
+custody. For a definitely unstarted reservation, `cancel` releases its logical
+slot and retains the disposition; a subsequent attempt needs separate authority
+and a fresh reservation. Control refusal before fixture Popen is recorded as
+`not-started` before returning the error and may then be cancelled. Errors at or
+after Popen, and missing commits, leave launch uncertainty held.
+
+Collection, reconciliation, effect observations and need resolutions accept exact
+evidence repeats and refuse changed evidence. Owner-scoped readback retains the
+original result, numeric END, evidence and attributable timestamps. Resolution
+history records actor, need, evidence and time; changed outcomes use a new
+correction duty rather than overwriting old evidence. These records remain
+cooperative assertions. Real owners and external holders must supply actual
+actions and authority separately. Results are bounded to 4 KiB and addressed
+packets to 8 KiB; larger original evidence stays with its actual custodian.
+
+A cross-event correction depends on every ancestor packet's event. Creating it
+reopens each completed ancestor, clears its old completion clock, and prevents
+finish/eligibility until the correction settles. The original event owner must
+then finish again, starting a new whole-processing clock. Transitive corrections
+carry the same dependency; old evidence and packets remain. Metadata eligibility
+still authorizes no deletion and releases no actual external hold.
 
 A stable nonblocking flock protects only short finite metadata work. State is a
 single checksummed snapshot, written to an exclusive same-directory file,
@@ -146,11 +186,24 @@ journal. Failed/refused operations retain prior charges; partial budget records
 hold rather than truncate/reset. Init control reads, public helper code loading,
 caller I/O and external provider work remain the caller's enclosing allocation,
 not a claim of whole-process/host resource measurement. Limits cannot be raised
-or reset by this CLI. Metadata reads also consume budget; do not status-poll.
+or reset by this CLI. Metadata queries charge their actual bounded state read
+and charge-journal read, without rewriting the snapshot or incrementing its
+generation; do not status-poll. Ordinary work cannot consume the final 32 MiB
+write allowance, 64 MiB logical reads, 256 creation entries, 128 KiB of the
+journal, or final 64 audit records. Admission also checks the current outstanding
+object count (at most 16), projected state space, audit visits and continuation
+cost against that headroom. These checks bound a finite bootstrap, not an
+indefinite continuation promise. Under a work-pressure hold, stop admitting work;
+use `recover`/`readback` and the original owners' `cancel`, `collect`, `classify`,
+`ack`, `reconcile`, `observe_effect`, `receipt`, `resolve`, `finish`, `hold` paths.
+They may spend the retained headroom and never refund previous charges. Torn
+journals, hard exhaustion, oversized outcomes or lost external custody remain
+explicit held partial outcomes; there is no bypass or emergency reset.
 A future long-lived epoch transition requires conservation/current-consumer and
 budget authority; no automatic rollover is implemented.
 
-Capacity checks leave at least 16 GiB/100000 inodes on the OS filesystem and
+Capacity checks subtract the imminent bounded allocation (rounded blocks and
+metadata/entry slack) before requiring at least 16 GiB/100000 inodes on the OS filesystem and
 1 GiB/2000 inodes on other selected filesystems. Checks observe, never reserve
 capacity. Default original/source/effect/consumer/outbox/recovery/privacy/resource
 holds require scoped holder evidence. All actual historical holds remain outside
@@ -160,7 +213,10 @@ retirement clock. Never use this runtime to clean old stores or provider history
 ## Qualification and tests
 
 `run-fixture` accepts only `{attempt,collector}` and launches the bundled finite
-Python worker, rechecking pool admission through actual local process creation.
+Python worker, holding pool admission and the supported fast-policy guard through
+actual local process creation. `fast_tier.py set` cooperates on the same stable
+`fast-tier.lock`; busy setters refuse and may be retried as refused control
+operations. Direct/noncooperating file edits are outside that fencing contract.
 It records actual numeric exit and synthetic result, not provider/role acceptance.
 There is no arbitrary argv/shell API. `owner-encounter` only records an already
 owned encounter; it does not launch or qualify that external substrate.

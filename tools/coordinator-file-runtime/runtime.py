@@ -11,7 +11,7 @@ import re
 import secrets
 import time
 
-from storage import Files, Held, MAX_STATE, check_capacity, digest, encode, read_regular
+from storage import Files, Held, MAX_STATE, HEADROOM, check_capacity, digest, encode, read_regular
 
 # This public helper has no provider/account-store access. Never import the old
 # runtime or Board as a compatibility adapter.
@@ -19,6 +19,9 @@ _pool_path = Path(__file__).resolve().parents[1] / 'direct-child' / 'execution_p
 _spec = importlib.util.spec_from_file_location('file_runtime_public_pool', _pool_path)
 _pool = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_pool)
+_spec = importlib.util.spec_from_file_location('file_runtime_fast_policy', _pool_path.with_name('fast_tier.py'))
+_fast = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_fast)
 ROLES = {'Work', 'Branch', 'Reviews', 'QA'}
 PHASES = {'classifier', 'known', 'discovery', 'qa-execute', 'qa-consolidate', 'review'}
 ALLOWED_PROFILES = {'.codex2', '.codex3', '.codex4', '.codex5'}
@@ -53,7 +56,7 @@ def create(path, owner, credential, routes):
     secret_hash(credential)
     path = Path(path)
     require(path.is_absolute() and path.parent.is_dir(), 'absolute state path with existing parent required')
-    check_capacity(path.parent)
+    check_capacity(path.parent, MAX_STATE + 16384, 6)
     # Validate ancestry before creating anything. No mkdir(parents=True).
     for p in [path.parent, *path.parent.parents]:
         require(not p.is_symlink(), 'linked state ancestry refused')
@@ -87,8 +90,17 @@ class Runtime:
 
     def pool(self, s):
         return _pool.Pool(s['pool_routes'], charge=lambda n: self.files.charge(reads=n),
-                          before_write=lambda p: check_capacity(p if p.exists() else p.parent),
+                          before_write=self.pool_capacity,
                           reader=lambda p, n: self.pool_read(p, n))
+
+    def pool_capacity(self, path):
+        # Selected public control ancestry only; no profile or store traversal.
+        parent = path
+        missing = 0
+        while not parent.exists():
+            missing += 1
+            parent = parent.parent
+        check_capacity(parent, 16384, missing + 3)
 
     def fast(self, s):
         self.files.charge(reads=17)
@@ -106,35 +118,59 @@ class Runtime:
         require(len(encode(args)) <= 32768, 'finite command body exceeded')
         ident(actor)
         require(operation in self.OPERATIONS, 'unsupported operation; no fallback')
-        with self.files.transaction() as s:
+        readonly = operation in {'status', 'inbox', 'recover', 'eligibility', 'readback'}
+        continuation = operation in {'recover', 'readback', 'cancel', 'collect', 'reconcile', 'observe_effect',
+                                     'classify', 'ack', 'receipt', 'resolve', 'finish', 'hold'}
+        with self.files.transaction(readonly=readonly, continuation=continuation) as s:
             who = s['actors'].get(actor)
             require(who and secrets.compare_digest(who['credential'], secret_hash(credential)), 'actor credential rejected')
             require(who['active'], 'actor revoked; original custody remains')
             require(who['adopted'] or operation == 'adopt', 'explicit self-adoption required')
+            if not readonly and not continuation:
+                require(len(s['audit']) < 448, 'work pressure hold; audit continuation headroom')
+            if operation in {'ingest', 'reserve', 'send', 'effect', 'invite', 'package', 'branch', 'review'}:
+                # Admit bounded consequences, not just today's request. Each
+                # unresolved object gets space for readback and owner settlement.
+                obligations = (sum(not a['reconciled'] for a in s['attempts'].values())
+                               + sum(p['stage'] != 'settled' for p in s['packets'].values())
+                               + sum(not e['finished'] for e in s['events'].values()) + 1)
+                require(obligations <= 16 and len(s['audit']) + 12 * obligations < 512,
+                        'work pressure hold; settlement/audit headroom required')
+                require(len(encode(s)) + len(encode(args)) + 8192 * obligations + 32768 < MAX_STATE,
+                        'work pressure hold; conserved state needs settlement headroom')
+                projected_state = len(encode(s)) + len(encode(args)) + 8192 * obligations
+                projected_journal = os.lstat(self.files.path / 'budget.jsonl').st_size + 12 * obligations * 512
+                future = {'bytes': obligations * 8 * (MAX_STATE + 1024),
+                          'reads': obligations * 12 * (projected_state + projected_journal),
+                          'entries': obligations * 12}
+                require(all(future[k] <= HEADROOM[k] for k in future), 'work pressure hold; finite continuation capacity')
+                self.files.charge(future=future)
             try:
                 result = getattr(self, 'op_' + operation)(s, actor, **args)
             except TypeError as exc:
                 raise Held('invalid command fields') from exc
-            if operation not in {'status', 'inbox', 'recover', 'eligibility'}:
+            if not readonly:
                 s['audit'].append({'op': operation, 'actor': actor, 'at': self.clock()})
                 require(len(s['audit']) <= 512, 'finite audit full; no truncation')
             self.files.fault('before-commit')
+            receivers = tuple(s['actors'])
         self.files.fault('after-commit')
-        if operation not in {'status', 'inbox', 'recover', 'eligibility'}:
-            self.hint()
+        if not readonly:
+            self.hint(receivers)
         return result
 
-    def hint(self):
+    def wake_address(self, actor):
+        return '\0rfq-file-' + hashlib.sha256((str(self.files.path) + '\0' + actor).encode()).hexdigest()
+
+    def hint(self, receivers):
         import socket
-        fd = os.open(self.files.path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        try:
-            with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sock:
-                sock.setblocking(False)
-                sock.sendto(b'changed', '/proc/self/fd/' + str(fd) + '/wake.sock')
-        except OSError:
-            pass  # Identity-only lossy hint. Durable state is authoritative.
-        finally:
-            os.close(fd)
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sock:
+            sock.setblocking(False)
+            for actor in receivers:
+                try:
+                    sock.sendto(b'changed', self.wake_address(actor))
+                except OSError:
+                    pass  # Lossy hints; durable addressed state is authoritative.
 
     def role(self, s, actor, roles):
         require(s['actors'][actor]['role'] in roles, 'operation outside role authority')
@@ -223,6 +259,8 @@ class Runtime:
         self.role(s, actor, {'Branch'})
         ident(branch)
         require(branch not in s['branches'], 'branch binding immutable; new incarnation needs new ID')
+        require(not any((b['repository'], b['ref'], b['incarnation']) == (repository, ref, incarnation)
+                        for b in s['branches'].values()), 'branch association already bound; use its existing ID')
         s['branches'][branch] = {'owner': actor, 'repository': text(repository), 'ref': text(ref),
                                  'incarnation': text(incarnation), 'root': text(root), 'basis': text(basis)}
         return {'branch': branch, 'prospective': True}
@@ -233,6 +271,9 @@ class Runtime:
         require(review not in s['reviews'] and branch in s['branches'], 'new review and bound branch required')
         if predecessor is not None:
             require(predecessor in s['reviews'], 'unknown predecessor; no invented continuity')
+            prior = s['reviews'][predecessor]
+            require((prior['owner'], prior['component'], prior['branch'], prior['opaque_contract']) ==
+                    (actor, component, branch, opaque_contract), 'review predecessor association conflict')
         s['reviews'][review] = {'owner': actor, 'component': text(component), 'branch': branch,
                                 'opaque_contract': text(opaque_contract), 'context': text(context),
                                 'history': text(history), 'predecessor': predecessor, 'calls': []}
@@ -273,6 +314,14 @@ class Runtime:
         if phase == 'review':
             require(review in s['reviews'] and s['reviews'][review]['owner'] == actor, 'opaque Reviews continuity binding required')
             require(resources.get('review:' + review) == 'write', 'review run must declare its continuity resource')
+            associated = s['reviews'][review]['branch']
+            require(branch in (None, associated), 'review branch association conflict')
+            require('branch:' + associated in resources, 'review must declare its actual branch footprint')
+            branch = associated
+        else:
+            require(review is None, 'review history accepts only owner review-phase attempts')
+            require(branch is None or (phase == 'known' and s['actors'][actor]['role'] == 'Branch'),
+                    'branch attempt requires Branch known authority')
         active = [a for a in s['attempts'].values() if not a['reconciled']]
         require(not any(a['event'] == event and a['phase'] == phase for a in active), 'event phase already owned')
         require(not any(any(k in a['resources'] and ('write' in (m, a['resources'][k]))
@@ -312,23 +361,47 @@ class Runtime:
 
     def op_collect(self, s, actor, attempt, collector, launch_id, end, result, evidence):
         a = self.attempt(s, actor, attempt, collector)
+        if a['state'] == 'collected':
+            require((a['launch_id'], a['end'], a['result'], a['collection_evidence']) ==
+                    (launch_id, end, result, evidence) and type(end) is int, 'collection identity/evidence conflict')
+            return {'attempt': attempt, 'end': a['end'], 'reconciled': a['reconciled'], 'duplicate': True}
         require(a['state'] == 'launching' and a['launch_id'] == launch_id, 'original launch correlation required')
         require(type(end) is int and -255 <= end <= 255, 'actual numeric process END required')
+        require(len(encode(result)) <= 4096, 'finite collected result exceeds 4KiB; retain original outside evidence')
         a.update(state='collected', end=end, result=result, collection_evidence=text(evidence), collected_at=self.clock())
         return {'attempt': attempt, 'end': end, 'reconciled': False}
 
     def op_reconcile(self, s, actor, attempt, collector, evidence, builder=None):
         a = self.attempt(s, actor, attempt, collector)
+        if a['reconciled']:
+            require(a.get('reconciliation') == evidence and a.get('builder') == builder,
+                    'reconciliation identity/evidence conflict')
+            return {'attempt': attempt, 'reconciled': True, 'acceptance': 'not implied', 'duplicate': True}
         require(a['state'] == 'collected', 'numeric END missing; original custody retained')
         require(all(x['state'] == 'settled' for x in s['effects'].values() if x['attempt'] == attempt), 'uncertain effect remains held')
-        if a['branch']:
+        if a['branch'] and a['phase'] == 'known':
             require(isinstance(builder, dict) and set(builder) == {'commit', 'remote_readback', 'pushed', 'signed', 'effects_reconciled'}, 'builder handback requires exact commit/push/readback/effects')
             require(re.fullmatch('[0-9a-f]{40}', builder['commit']) and builder['commit'] == builder['remote_readback']
                     and builder['pushed'] is True and builder['signed'] is True and builder['effects_reconciled'] is True,
                     'builder commit/push/readback not reconciled')
             a['builder'] = builder
-        a.update(reconciled=True, reconciliation=text(evidence))
+        else:
+            require(builder is None, 'builder evidence belongs only to Branch known attempts')
+        a.update(reconciled=True, reconciliation=text(evidence), reconciled_by=actor, reconciled_at=self.clock())
         return {'attempt': attempt, 'reconciled': True, 'acceptance': 'not implied'}
+
+    def op_cancel(self, s, actor, attempt, collector, evidence):
+        """Account for definitely unstarted work only; never refund a turn."""
+        a = self.attempt(s, actor, attempt, collector)
+        text(evidence)
+        if a['state'] == 'cancelled':
+            require(a['disposition']['evidence'] == evidence, 'disposition identity/evidence conflict')
+            return {'attempt': attempt, 'state': 'cancelled', 'duplicate': True, 'turn_refunded': False}
+        require(a['state'] in {'reserved', 'not-started'} and not any(x['attempt'] == attempt for x in s['effects'].values()),
+                'only definitely unstarted reservation can be dispositioned; uncertain custody retained')
+        a.update(state='cancelled', reconciled=True,
+                 disposition={'actor': actor, 'evidence': evidence, 'at': self.clock(), 'launched': False})
+        return {'attempt': attempt, 'state': 'cancelled', 'turn_refunded': False}
 
     def op_integrate(self, s, actor, attempt, collector, writes):
         a = self.attempt(s, actor, attempt, collector)
@@ -346,7 +419,12 @@ class Runtime:
     def op_effect(self, s, actor, effect, attempt, collector, kind, intent):
         a = self.attempt(s, actor, attempt, collector)
         ident(effect)
-        require(effect not in s['effects'] and not a['reconciled'] and a['state'] == 'launching', 'new pre-effect intent required')
+        if effect in s['effects']:
+            x = s['effects'][effect]
+            require((x['owner'], x['attempt'], x['kind'], x['intent']) == (actor, attempt, kind, intent),
+                    'effect intent identity/content conflict')
+            return {'effect': effect, 'state': x['state'], 'duplicate': True, 'replay': 'not authorized'}
+        require(not a['reconciled'] and a['state'] == 'launching', 'new pre-effect intent required')
         require(kind in {'publication', 'push', 'delivery'}, 'unsupported effect kind')
         s['effects'][effect] = {'owner': actor, 'attempt': attempt, 'kind': kind, 'intent': text(intent),
                                 'state': 'intent', 'observation': None}
@@ -354,25 +432,40 @@ class Runtime:
 
     def op_observe_effect(self, s, actor, effect, outcome, evidence):
         x = s['effects'][ident(effect)]
-        require(x['owner'] == actor and x['state'] == 'intent', 'original effect owner required')
+        require(x['owner'] == actor, 'original effect owner required')
+        if x['state'] == 'settled':
+            require(x['outcome'] == outcome and x['observation'] == evidence, 'effect identity/evidence conflict')
+            return {'effect': effect, 'state': 'settled', 'outcome': outcome, 'duplicate': True}
         require(outcome in {'applied', 'not-applied'}, 'unknown effect must remain intent/held')
-        x.update(state='settled', outcome=outcome, observation=text(evidence))
+        x.update(state='settled', outcome=outcome, observation=text(evidence), observed_by=actor, observed_at=self.clock())
         return {'effect': effect, 'state': 'settled', 'outcome': outcome}
 
     def op_send(self, s, actor, packet, event, recipient, payload, correction_of=None):
         e = self.event(s, actor, event)
-        require(not e['finished'], 'closed source cannot create new downstream duties')
         ident(packet)
         target = s['actors'].get(recipient)
         require(target and target['active'] and target['adopted'], 'current adopted recipient required')
         if correction_of is not None:
             require(correction_of in s['packets'] and s['packets'][correction_of]['sender'] == actor, 'correction source not owned')
         value = {'event': event, 'sender': actor, 'recipient': recipient, 'payload': payload, 'correction_of': correction_of}
+        require(len(encode(value)) <= 8192, 'finite packet exceeds 8KiB')
         if packet in s['packets']:
             require(s['packets'][packet]['hash'] == digest(value), 'packet ID/content conflict')
         else:
+            require(not e['finished'], 'closed source cannot create new downstream duties')
             s['packets'][packet] = {**value, 'hash': digest(value), 'stage': 'pending', 'receipts': []}
+            for affected in self.packet_events(s, packet):
+                if s['events'][affected]['finished']:
+                    s['events'][affected].update(finished=False, processed_at=None)
         return {'packet': packet, 'stage': s['packets'][packet]['stage']}
+
+    def packet_events(self, s, packet):
+        events = set()
+        while packet is not None:
+            p = s['packets'][packet]
+            events.add(p['event'])
+            packet = p['correction_of']
+        return events
 
     def op_inbox(self, s, actor, limit=16):
         require(type(limit) is int and 1 <= limit <= 32, 'finite inbox limit required')
@@ -395,8 +488,13 @@ class Runtime:
 
     def op_resolve(self, s, actor, event, need, evidence):
         e = self.event(s, actor, event)
-        require(need in e['responsibility']['needs'] and not e['finished'], 'unknown or closed responsibility')
+        require(need in e['responsibility']['needs'], 'unknown responsibility')
+        if need in e['resolutions']:
+            require(e['resolutions'][need] == evidence, 'resolution identity/evidence conflict; use a correction duty')
+            return {'event': event, 'need': need, 'resolved': True, 'duplicate': True}
+        require(not e['finished'], 'closed responsibility')
         e['resolutions'][need] = text(evidence)
+        e.setdefault('resolution_history', []).append({'actor': actor, 'need': need, 'evidence': evidence, 'at': self.clock()})
         return {'event': event, 'need': need, 'resolved': True}
 
     def incomplete(self, s, event):
@@ -406,7 +504,7 @@ class Runtime:
             reasons.append('unresolved responsibilities')
         if any(not a['reconciled'] for a in s['attempts'].values() if a['event'] == event):
             reasons.append('original attempt custody')
-        if any(p['stage'] != 'settled' for p in s['packets'].values() if p['event'] == event):
+        if any(p['stage'] != 'settled' and event in self.packet_events(s, key) for key, p in s['packets'].items()):
             reasons.append('downstream unsettled')
         return reasons
 
@@ -429,7 +527,7 @@ class Runtime:
             # Named holders must authorize release; runtime records their scoped
             # evidence but performs no actual retained-data cleanup.
             e['holds'].remove(name)
-        e.setdefault('hold_evidence', []).append({'name': name, 'enabled': enabled, 'evidence': evidence})
+        e.setdefault('hold_evidence', []).append({'actor': actor, 'at': self.clock(), 'name': name, 'enabled': enabled, 'evidence': evidence})
         return {'holds': e['holds'], 'deletion_authorized': False}
 
     def op_eligibility(self, s, actor, event):
@@ -438,13 +536,29 @@ class Runtime:
         return {'eligible_metadata_only': eligible, 'holds': e['holds'], 'deletion_authorized': False}
 
     def op_recover(self, s, actor):
-        self.role(s, actor, {'Work'})
         return {'attempts': [{'id': key, 'owner': a['owner'], 'state': a['state'], 'end': a['end'],
+                               **({'collector': a['collector'], 'launch_id': a.get('launch_id')} if a['owner'] == actor else {}),
                                'action': 'original collector reconciliation; no timeout release'}
-                              for key, a in s['attempts'].items() if not a['reconciled']],
-                'effects': [{'id': key, 'owner': x['owner'], 'state': x['state']} for key, x in s['effects'].items() if x['state'] != 'settled'],
+                              for key, a in s['attempts'].items() if not a['reconciled'] and (a['owner'] == actor or s['actors'][actor]['role'] == 'Work')],
+                'effects': [{'id': key, 'owner': x['owner'], 'state': x['state']} for key, x in s['effects'].items() if x['state'] != 'settled' and (x['owner'] == actor or s['actors'][actor]['role'] == 'Work')],
                 'unacked': [key for key, e in s['events'].items() if not e['ack']],
                 'incomplete': [key for key, e in s['events'].items() if not e['finished']]}
+
+    def op_readback(self, s, actor, kind, id):
+        """Read committed operands/results, never recover a process handle."""
+        collections = {'attempt': 'attempts', 'event': 'events', 'packet': 'packets', 'effect': 'effects',
+                       'branch': 'branches', 'review': 'reviews', 'package': 'packages'}
+        require(kind in collections, 'unsupported readback kind')
+        value = s[collections[kind]][ident(id)]
+        if kind in {'attempt', 'effect', 'branch', 'review'}:
+            require(value['owner'] == actor, 'only original owner can read back owned operands/results')
+        elif kind == 'packet':
+            require(actor in {value['sender'], value['recipient']}, 'packet readback outside addressed relationship')
+        else:
+            e = value if kind == 'event' else s['events'][value['event']]
+            require(s['actors'][actor]['role'] == 'Work' or (e['responsibility'] or {}).get('owner') == actor,
+                    'event readback outside responsibility')
+        return {'kind': kind, 'id': id, 'value': value, 'custody': 'original owner; no replay or external truth implied'}
 
     def op_status(self, s, actor):
         return {'generation': s['generation'], 'actors': {k: {x: a[x] for x in ('role', 'active', 'adopted')} for k, a in s['actors'].items()},
@@ -455,4 +569,4 @@ class Runtime:
 
     OPERATIONS = {'invite', 'adopt', 'revoke', 'package', 'ingest', 'classify', 'ack', 'branch', 'review', 'reserve', 'start', 'collect',
                   'reconcile', 'integrate', 'effect', 'observe_effect', 'send', 'inbox', 'receipt', 'resolve', 'finish',
-                  'hold', 'eligibility', 'recover', 'status'}
+                  'hold', 'eligibility', 'recover', 'status', 'readback', 'cancel'}
