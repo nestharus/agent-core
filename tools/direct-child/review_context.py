@@ -163,7 +163,7 @@ class Context:
     owner; it neither archives nor deletes provider storage. A lost process or
     interrupted turn cannot become a fresh conversation by reopening this path.
     """
-    def __init__(self, root, profile, collector, lifetime, originals, clock=time.monotonic, *, executable, protection=None, origin=None, capacity_check=lambda parent: None, execution=None):
+    def __init__(self, root, profile, collector, lifetime, originals, clock=time.monotonic, *, executable, protection=None, origin=None, capacity_check=lambda parent: None, execution=None, policy_authority=None):
         if profile not in PROFILES or not isinstance(collector, str) or not collector:
             raise ReviewRefusal('original profile/collector required')
         if type(lifetime) is not int or not 1 <= lifetime <= 7200:
@@ -185,6 +185,7 @@ class Context:
         self.clock, self.created, self.lifetime = clock, created, lifetime
         self.protection = protection
         self.execution = execution
+        self.policy_authority = policy_authority
         self.thread, self.state, self.busy, self.calls = None, 'new', False, 0
 
     def authorize(self, collector, profile, current_authority, current_profiles):
@@ -243,12 +244,22 @@ class Context:
                'TMPDIR': str(directory / 'tmp'), 'PYTHONDONTWRITEBYTECODE': '1'}
         self.capacity_check(directory)
         (directory / 'tmp').mkdir(mode=0o700)
+        def before_use():
+            # Retain the policy serialized into THIS argv across admission and
+            # process creation awaits. Complete caller identity work runs first;
+            # its success cannot preserve a withdrawn read-policy capability.
+            self.authorize_creation(current_authority)
+            if self.policy_authority is not None:
+                self.policy_authority(filesystem, directory / 'material', self.workspace)
+            if self.clock() >= self.created + self.lifetime:
+                raise ReviewRefusal('original whole-context lifetime elapsed during policy authorization')
+
         self.busy = True
         try:
             result = await execute(argv, env, prompt, directory, self.originals, publish,
                 min(self.lifetime, self.created + self.lifetime - self.clock()), shutdown,
                 maximum, capture_max, self.thread, started, admission,
-                lambda: self.authorize_creation(current_authority), self.capacity_check)
+                before_use, self.capacity_check)
         except BaseException:
             self.state = 'interrupted'
             raise

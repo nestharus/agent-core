@@ -222,13 +222,14 @@ class ExecEndpoint:
     and Originals registration in Context.execute. No shared lock spans a turn.
     """
     def __init__(self, root, executable, originals, admission, authority,
-                 protection, capacity_check, publish, *, execution=None):
+                 protection, capacity_check, publish, *, execution=None, policy_authority=None):
         self.root, self.executable, self.originals = Path(root), executable, originals
         self.admission, self.authority, self.protection = admission, authority, protection
         self.capacity_check, self.publish = capacity_check, publish
         self.probe_helper = protection.probe_helper
         self.context, self.owner, self.receipts = None, None, []
         self.execution = execution
+        self.policy_authority = policy_authority
         self.clock = time.monotonic
         self.directory = None
         self.started = lambda: None
@@ -243,7 +244,8 @@ class ExecEndpoint:
         self.context = Context(self.root,ownership.profile,ownership.collector,
             int(ownership.expires-ownership.created),self.originals,
             clock=self.clock,executable=self.executable,protection=self.protection,
-            origin=ownership.created,capacity_check=self.capacity_check,execution=self.execution)
+            origin=ownership.created,capacity_check=self.capacity_check,execution=self.execution,
+            policy_authority=self.policy_authority)
         return self.context
 
     async def exchange(self, handle, ownership, thread, text, channel):
