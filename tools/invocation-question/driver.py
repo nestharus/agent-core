@@ -27,6 +27,8 @@ DIRECT = ('profile_lease', 'execution_pool', 'fast_tier', 'dispatch',
           'review_context', 'opaque_dialogue', 'continuing_review')
 PROFILES = ('.codex2', '.codex3', '.codex4', '.codex5')
 MIB = 1024**2
+MATERIAL_MAX_BYTES = 4 * MIB
+MATERIAL_MAX_ITEMS = 128
 CONTROL_EFFECTS = ('allowed-read-canary', 'owned-outside-read-attempt',
                    'owned-material-write-attempt', 'owned-loopback-connect-attempt')
 
@@ -295,6 +297,22 @@ class Material:
     path: str
     bytes: int
     sha256: str
+
+
+def measure_materials(materials):
+    """Bill declared whole raw bodies before acquisition; identity is checked by selected().
+
+    This pure descriptor check grants no read rights and says nothing about
+    manifest/prompt encoding size, provider context or final material completeness.
+    """
+    if not 1 <= len(materials) <= MATERIAL_MAX_ITEMS:
+        raise Refusal('selected snapshot requires 1..128 whole material items')
+    if any(type(m.bytes) is not int or m.bytes < 0 for m in materials):
+        raise Refusal('material byte lengths must be nonnegative integers')
+    raw_bytes = sum(m.bytes for m in materials)
+    if raw_bytes > MATERIAL_MAX_BYTES:
+        raise Refusal('selected whole raw material exceeds 4194304 bytes')
+    return dict(raw_bytes=raw_bytes, items=len(materials))
 
 
 class Question:
@@ -627,8 +645,7 @@ class Question:
     def selected(self):
         if not self.review.status['protection_qualified']:
             raise Refusal('no selected source/material before qualified proof')
-        if not 1 <= len(self.materials) <= 128 or sum(m.bytes for m in self.materials) > 2 * MIB:
-            raise Refusal('finite positive selected snapshot required')
+        measure_materials(self.materials)
         result = {}
         for item in self.materials:
             self.check('material', [item.path])
@@ -649,6 +666,7 @@ class Question:
             turn_receipts=list(self.endpoint.receipts) if self.endpoint else [],
             local_controls=list(self.endpoint.protection.proofs) if self.endpoint else [],
             material=[asdict(m) for m in self.materials], error=self.error,
+            material_limits=dict(raw_bytes=MATERIAL_MAX_BYTES, items=MATERIAL_MAX_ITEMS),
             pending_originals=list(self.originals.owned) if self.originals else [],
             publications=list(self.publisher.attempts) if self.publisher else [],
             semantic_assessment='OWED to genuine caller; transport answers are not substantive acceptance',

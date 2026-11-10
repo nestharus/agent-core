@@ -1,8 +1,10 @@
 # Invocation-owned protected question binding
 
 This caller contribution uses immutable runtime
-`c5d5d6a1c1965df531b34159515fd5f9bedb7af7`, tree
-`b5b3bf1dd812693442c85028289e003edeceaf0e`. The sandbox filesystem gives the exact selected executable a read rule for backend
+`44b868eb8a5f813422e047283b881319788045fb`, tree
+`b7a28003a557d8c2fc0734998540d9c4e8a880e3`. The canonical sorted-JSON SHA-256 of `runtime-pins.json` is
+`22e9210cf4d15ab4cac6a53b46e1727cc745ef487a362a2be6bbd098858126e6`,
+matching `driver.COMMIT`, `TREE` and `PINSET`. The sandbox filesystem gives the exact selected executable a read rule for backend
 self-reexecution. For the named /usr/lib64 runtime, it checks the root-owned
 /lib64 -> usr/lib64 alias and preserves that loader spelling as a read rule.
 Each alias metadata/readlink acquisition and policy admission requires current
@@ -277,8 +279,28 @@ narrows lexical spelling; it is no alias closure or generic filesystem theorem.
    and may itself remain pending. Successful push/END/close is not whole
    processing, independent acceptance, rollout or retention release.
 
-Suggested finite real-run preparation: <=512KiB selected source/method/history
-snapshot (hard binding ceiling 2MiB/128 items); 128GiB total acquisition/identity-read I/O
+Selected source/method/history admission is 1..128 whole items totaling at most
+4,194,304 raw body bytes (4MiB), including every necessary body, role, provenance
+and adverse history. There is no 512KiB dropping rule. `MATERIAL_MAX_BYTES` and
+`MATERIAL_MAX_ITEMS` publish these caller limits. `measure_materials(materials)`
+checks a finite descriptor sequence and returns `{raw_bytes, items}`; it refuses
+over-limit counts/totals and noninteger or negative byte lengths before body
+acquisition. This is a declared raw-body bill, not identity verification or
+permission. `Question.selected()` additionally requires protection qualification,
+current exact read rights, stable whole-body length/SHA-256, unique labels and
+UTF-8. The returned bytes and channel manifest receipts retain whole-body
+identities. `Question.report()['material_limits']` records the caller ceilings;
+its `material` rows remain the declared bill.
+
+Raw-body totals differ from manifest, prompt and channel representations.
+This finite limit makes no provider-context or final complete-material fit
+promise. Measure the actual complete packet, including future provenance,
+against both limits. Current inert callers/policies may still enforce 2MiB:
+genuine Work must join independently accepted new caller source, its exact
+caller pin, matching measurement/body-limit facts and the actual inert caller
+before operating use. This source change grants no Question or source admission.
+
+Suggested finite real-run preparation: 128GiB total acquisition/identity-read I/O
 (an explicit ceiling, not disk allocation); 512MiB/8192 whole owned output with
 256MiB/4096 context envelope and 8MiB per process capture stream. Each identity
 check charges two full maxima, including the helper. More demands return a

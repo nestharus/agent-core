@@ -1735,6 +1735,163 @@ class PhysicalCapture(unittest.IsolatedAsyncioTestCase):
                 with self.subTest(route=route, stream=stream):
                     await self.capture_case(route, stream, 'normal')
 
+
+class MaterialContract(unittest.TestCase):
+    """Synthetic whole bodies through actual selection, reading and channel receipts.
+
+    No Question.create/run, program/helper, pool, listener or subprocess is used.
+    Current rights below are an explicit synthetic predicate, never a Work grant.
+    """
+    def setUp(self):
+        self.area = fresh(ROOT, self.id().rsplit('.', 1)[-1])
+        self.rights = set()
+
+    def material(self, body, name='whole.txt', label='whole role/provenance/history'):
+        path = self.area / name
+        # Separate fresh checks for exclusive creation and the content write.
+        guard(path.parent)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        try:
+            guard(path.parent)
+            with os.fdopen(fd, 'wb', buffering=0) as out:
+                fd = None
+                self.assertEqual(out.write(body), len(body))
+                os.fsync(out.fileno())
+        finally:
+            if fd is not None:
+                os.close(fd)
+        self.rights.add(str(path))
+        return driver.Material(label, str(path), len(body), driver.digest(body))
+
+    def question(self, materials):
+        q = object.__new__(driver.Question)
+        q.review = SimpleNamespace(status={'protection_qualified': True})
+        q.materials, q.exclusions, q.io_remaining = tuple(materials), (), 16 * driver.MIB
+        def current(action, paths):
+            self.assertEqual(action, 'material')
+            for path in paths:
+                driver.positive(path, q.exclusions)
+                if path not in self.rights:
+                    raise driver.Refusal('synthetic current material right withdrawn')
+        q.check = current
+        return q
+
+    def test_complete_known_over_old_limit_and_raw_measurement(self):
+        prefix = b'ROLE: source\nPROVENANCE: synthetic whole fixture\n'
+        suffix = b'\nADVERSE HISTORY: retained in full\n'
+        body = prefix + b'x' * (2111958 - len(prefix) - len(suffix)) + suffix
+        item = self.material(body)
+        q = self.question([item])
+        before = q.io_remaining
+        self.assertEqual(driver.measure_materials(q.materials),
+                         dict(raw_bytes=2111958, items=1))
+        self.assertGreater(len(body), 2 * driver.MIB)
+        self.assertEqual(q.selected(), {item.label: body})
+        self.assertEqual(q.io_remaining, before - len(body) - 1)
+
+    def test_exact_four_mib_utf8_receipt_and_above_limit_refusal(self):
+        body = 'é'.encode('utf-8') * (2 * driver.MIB)
+        item = self.material(body)
+        q = self.question([item])
+        selected = q.selected()
+        self.assertEqual(selected, {item.label: body})
+        self.assertEqual(driver.measure_materials(q.materials),
+                         dict(raw_bytes=4194304, items=1))
+        pins = json.loads(Path(__file__).with_name('runtime-pins.json').read_text())
+        runtime = driver.PinnedRuntime(RUNTIME, pins, lambda *args: None).load()
+        channel = runtime.direct.opaque_dialogue.MaterialChannel(selected, lambda: None)
+        receipt, = channel.manifest()
+        self.assertEqual(receipt['bytes'], 4194304)
+        self.assertEqual(receipt['sha256'], driver.digest(body))
+        self.assertEqual(receipt['label'], item.label)
+        # The actual channel returns a lossless raw suffix with its original offset.
+        chunk = channel.request(dict(op='read', item=receipt['item'],
+                                     offset=len(body)-8, limit=8))
+        self.assertEqual(chunk, body[-8:])
+        path = Path(item.path)
+        guard(path.parent)
+        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_NOFOLLOW)
+        try:
+            guard(path.parent)
+            self.assertEqual(os.write(fd, b'x'), 1)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        over = driver.Material(item.label, item.path, len(body)+1, driver.digest(body+b'x'))
+        q.materials = (over,)
+        with patch.object(q, 'acquire', side_effect=AssertionError('over-limit acquisition')):
+            with self.assertRaises(driver.Refusal):
+                q.selected()
+
+    def test_128_whole_items_and_129_refused_before_read(self):
+        item = self.material(b'x')
+        items = [driver.Material('whole-%03d' % i, item.path, 1, item.sha256)
+                 for i in range(128)]
+        q = self.question(items)
+        self.assertEqual(driver.measure_materials(q.materials), dict(raw_bytes=128, items=128))
+        self.assertEqual(q.selected(), {m.label: b'x' for m in items})
+        q.materials += (driver.Material('whole-128', item.path, 1, item.sha256),)
+        with patch.object(q, 'acquire', side_effect=AssertionError('129th-item acquisition')):
+            with self.assertRaises(driver.Refusal):
+                q.selected()
+
+    def test_aggregate_over_limit_and_invalid_byte_bills_refuse_before_read(self):
+        item = self.material(b'x')
+        cases = [
+            (driver.Material('a', item.path, 2*driver.MIB+1, item.sha256),
+             driver.Material('b', item.path, 2*driver.MIB, item.sha256)),
+            (),
+        ]
+        cases += [(driver.Material('invalid', item.path, amount, item.sha256),)
+                  for amount in (-1, True, 1.5, '1')]
+        for materials in cases:
+            with self.subTest(materials=materials):
+                q = self.question(materials)
+                with patch.object(q, 'acquire', side_effect=AssertionError('invalid bill acquisition')):
+                    with self.assertRaises(driver.Refusal):
+                        q.selected()
+
+    def test_whole_identity_duplicate_label_and_utf8_are_required(self):
+        item = self.material(b'actual whole bytes')
+        q = self.question([item])
+        for changed in (
+                driver.Material(item.label, item.path, item.bytes, '0'*64),
+                driver.Material(item.label, item.path, item.bytes-1, item.sha256),
+                driver.Material(item.label, item.path, item.bytes+1, item.sha256)):
+            with self.subTest(changed=changed):
+                q.materials = (changed,)
+                with self.assertRaises(driver.Refusal):
+                    q.selected()
+        q.materials = (item, item)
+        with self.assertRaises(driver.Refusal):
+            q.selected()
+        invalid = self.material(b'\xff', 'invalid-utf8.txt')
+        q.materials = (invalid,)
+        with self.assertRaises(UnicodeDecodeError):
+            q.selected()
+        empty = self.material(b'', 'empty-whole.txt')
+        q.materials = (empty,)
+        self.assertEqual(q.selected(), {empty.label: b''})
+
+    def test_current_right_hold_and_qualification_precede_acquisition(self):
+        item = self.material(b'whole current material')
+        q = self.question([item])
+        self.assertEqual(q.selected(), {item.label: b'whole current material'})
+        self.rights.clear()
+        with patch.object(q, 'acquire', side_effect=AssertionError('withdrawn read')):
+            with self.assertRaises(driver.Refusal):
+                q.selected()
+        self.rights.add(item.path)
+        q.exclusions = (item.path,)
+        with patch.object(driver, 'directory', side_effect=AssertionError('held metadata')):
+            with self.assertRaises(driver.Refusal):
+                q.selected()
+        q.exclusions = ()
+        q.review.status['protection_qualified'] = False
+        with patch.object(q, 'acquire', side_effect=AssertionError('unqualified read')):
+            with self.assertRaises(driver.Refusal):
+                q.selected()
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--fixtures', type=Path, required=True)
