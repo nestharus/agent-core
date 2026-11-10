@@ -393,3 +393,132 @@ QA acceptance; then current customer-risk disposition by the real delivery owner
 External canonical publication, automatic model scheduling, safe resume after
 owner exit, historical import, physical retention reclamation and automatic
 budget rollover remain unsupported. Their needs stay explicitly owned/offline.
+
+## Bounded software QA execution peer
+
+`software_qa.py` supplies the software receiver/controller selected by Decision08
+B. It runs software tests; the existing Work-designated QA actor remains the
+independent semantic acceptor. The implementation Maker is not that controller.
+No operating identities or grants are supplied by this source or its tests.
+This is the cooperative Linux failure model above, with trusted fixed public
+tests, not a security sandbox or a general command runner.
+
+Work invites the actual running instance as a separate `QA` execution peer using
+`invite`. That instance performs its own `adopt` with its invitation credential
+in `COORDINATOR_TOKEN` and a truthful encounter basis:
+
+```bash
+python3 -B tools/coordinator-file-runtime/software_qa.py \
+  --state /absolute/selected/state --actor ACTUAL_EXECUTION_PEER adopt <<'JSON'
+{"basis":"actual software instance and job receive encounter"}
+JSON
+```
+
+The instance exposes the same finite JSON stdin receive point with command
+`run`. Its input is exactly `{"grant":WORK_ISSUED_OBJECT,"declared_secrets":[]}`;
+no shell, arbitrary argv, API, model/profile lookup or legacy Board adapter is
+available. The actor and state are explicit arguments. The token is never an
+argument or a grant field. Only the following version 1 grant is supported:
+
+| Fields | Work must issue |
+| --- | --- |
+| `schema`, `procedure` | `1`, `runtime-provider-unittest-v1` |
+| `job`, `attempt`, `event`, `event_source_hash`, `package`, `scope` | Current software job, exact original attempt, acknowledged QA-owned event/source hash, admitted package and scope |
+| `source`, `policy`, `authority` | Current Source, selected policy and authority references, carried unchanged into candidate, run and delivery; package basis must equal authority |
+| `config_actor`, `controller`, `workers`, `acceptor` | Current Work configuration authority, actual receiving peer, five issued worker bindings, designated independent acceptor. The acceptor must differ from every worker, controller and configuration actor. Controller and workers may share the execution peer identity; actual program/PID/partition bindings distinguish their processes. Root keeps its own role. |
+| `repository`, `commit`, `inputs`, `program_sha256` | Explicit authorized public repository, immutable full 40-hex commit, complete path-to-SHA256 input manifest and actual running program hash |
+| `retained_root` | New exclusive absolute original-attempt root under an admitted existing parent. Never repoint a candidate/digest to another attempt root. |
+| `inventory`, `partitions` | Complete current selected runtime/provider testcase IDs, and exactly five nonempty disjoint lists covering them once. Work selects the actual inventory; the program independently discovers both modules and retains differences. |
+| `execute_attempt`, `consolidate_attempt`, `resources`, `basis` | Two distinct fresh core attempts and their complete current resource footprint/generations |
+| `limits` | Exactly `workers:5`, `seconds:1..300`, `capture_bytes:4096..65536`, `output_bytes:1048576..12582912`, `output_entries:32..4096` |
+| `receive_packet`, `result_packet` | Exact issued addressed grant packet and unique result packet ID |
+
+Work must create a packet on its own assigned intake event, addressed to this
+peer, with payload exactly `{"software_qa_grant":digest(grant)}`. `digest` is
+`storage.digest`: SHA256 of sorted compact JSON plus newline. Work separately
+admits the QA-owned event/package. The receiver verifies the packet's actual
+sender, current Work/peer/acceptor authority and package/source/scope bindings.
+A role label by itself supplies no grant or acceptance. The actual acceptor must
+self-adopt under its own identity before it can receive delivery.
+
+The fixed public input whitelist is `software_qa.PUBLIC`: coordinator, runtime,
+storage, provider, fixture worker, runtime/provider tests, this client, and the
+two public pool/fast helper scripts. All ten paths must be present with exact
+hashes. Export uses only regular tracked Git blobs at the issued immutable
+commit; links, extra/untracked paths and changed hashes refuse. It never exports
+working files, private stores or Git metadata. The complete manifest retains
+Git blob IDs, byte lengths, modes, hashes, grant, Source, policy, authority and
+original root. Exported files and code directories are read-only; fixture
+outputs are a separate admitted area. Input bindings are checked before and
+after execution and consolidation. Read-only permissions are cooperative byte
+protection, not hostile same-user isolation or semantic adequacy of a harness.
+
+One package `qa-execute` reservation owns a fixed Python controller process. That
+controller starts exactly five direct QA workers concurrently and records every
+original `Popen` object before reading/filtering output. Every creation rechecks
+current actor/credential, original collector and public admission controls; no
+provider is invoked. The receiving instance retains the controller's original
+object and collects its real numeric END. Each worker binds its actual PID,
+controller PID, issued worker identity, program hash, partition and grant. The
+fixed unittest procedure records actual case IDs/statuses, discovery/setup
+errors, missing/duplicate cases, skipped/expected-failure results and incomplete
+collection. A count alone never supplies completeness.
+
+A separate `qa-consolidate` attempt then owns one new Python process. It consumes
+exactly five current partition record digests with the same candidate, grant,
+job, original attempt and retained root, checks discovery/actual case accounting
+and returns failures and unknowns unchanged. A consolidation process can END 0
+while truthfully reporting failed tests. The outer receiver adds both actual
+process collections, full partition records, manifests, grant and input facts
+to `outputs/runner.json`; its exact complete `storage.digest` is delivered to the
+designated actual acceptor through `send`. Delivery carries the current bindings
+and original root. No program here issues a semantic acceptance decision. Only
+the genuine acceptor can judge the corresponding successful current run and
+receipt its own pickup, processing and settlement.
+
+Capture is secret-aware and bounded in memory per process; raw acquisition stops
+at four times the capture allowance plus one 4096-byte read. Declare up to 30
+literal/JSON-escaped secrets; the current credential/collector are also protected.
+Timeout, overflow, interruption, missing result, creation ambiguity, lost
+collector and partial publication stay held. Workers have a finite self timer
+if their controller is lost. Never relaunch a `launching` attempt, reconstruct
+PIDs/procfs, retry a failed effect, switch accounts or reset budgets. Keep the
+`Peer` and `Processes` objects when using the library. Source Git processes are
+also original objects, with bounded outputs and no diagnostics published.
+
+The five-worker limit counts direct test workers. Existing fixed tests also own
+finite subprocess/multiprocessing fixtures; their original collection remains
+with those procedures. This client does not inventory a process tree or enforce
+host-wide/opaque-descendant limits. Output byte/entry accounting is over its new
+controlled output tree and detects exceeded grants; it is not a preemptive disk
+quota for hostile code or a physical-I/O measurement. Work must admit the fixed
+inventory's fixture effects and enclosing capacity before an operating grant.
+Public source export is capped at 1 MiB; grants and CLI receives at 32 KiB.
+These limits do not renew the runtime's separate cumulative admission budget.
+
+If a genuinely collected run's delivery/receipt metadata reply is lost, use the
+same grant with command `settle`, input exactly `{"grant":WORK_ISSUED_OBJECT}`.
+This verifies the retained runner and current core collection digests and only
+repeats idempotent metadata operations; it cannot spawn or replay workers.
+It does not recover missing originals or partial publication. Actual result
+receipts, need resolution, whole processing plus 24 hours AND all holds remain
+separate from numeric END, ACK, delivery, report and push. No automatic deletion
+or budget-epoch rollover exists.
+
+Run the complete local software suite with a new admitted root:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 \
+COORDINATOR_TEST_ARTIFACTS=/absolute/new/coordination/software-qa08-tests \
+python3 -B tools/coordinator-file-runtime/test_software_qa.py
+```
+
+The suite uses clearly synthetic identities and controlled tiny public Git
+repositories. It includes the actual client entrypoint executing every selected
+current core runtime/provider case through five partitions, a real failing test
+with separately successful consolidation END, numeric original collections,
+frozen input/tamper checks, SQL-block negative controls, digest/receipt
+correspondence, creation/publication ambiguity and settlement without replay.
+It performs no real operating adoption, model call, independent semantic
+acceptance, CI or cutover. Returned source/tests still require independent
+observation, Frame and Root disposition before Work issues an operating grant.
