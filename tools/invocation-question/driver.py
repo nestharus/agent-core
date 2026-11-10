@@ -20,9 +20,9 @@ import time
 from types import ModuleType
 from uuid import uuid4
 
-COMMIT = '7e7d0b7a7c3014806270e23887244c6d7a4ffbd8'
-TREE = '7636f90cad91352a38255d41114773332e845289'
-PINSET = 'cfb00be55cd0ac07237dc475b3cc3fcce483dd68e877795ec80e5c8b2103ce3b'
+COMMIT = '1a7d86baa63f8db8012173b4d8cdfe197fd3dadf'
+TREE = '03b1a66c515e9e82831a8a98f637a99b6f16f788'
+PINSET = 'bd7ca73ccef51bef86e10837bbe4c36b6862ed32070df658ff5ef9797813ccd3'
 DIRECT = ('profile_lease', 'execution_pool', 'fast_tier', 'dispatch',
           'review_context', 'opaque_dialogue', 'continuing_review')
 PROFILES = ('.codex2', '.codex3', '.codex4', '.codex5')
@@ -340,7 +340,7 @@ class Question:
         return json.loads(json.dumps(dict(home=str(self.home), runtime=str(self.runtime.repo),
             runtime_commit=COMMIT, runtime_tree=TREE, pinset=PINSET,
             caller_pins=self.caller_pins, program=self.program, helper=self.helper,
-            runtime_reads=self.runtime_reads, pool_control=self.pool_control,
+            runtime_reads=self.runtime_reads, runtime_policy_aliases=['/lib64'], pool_control=self.pool_control,
             fast_control=self.fast_control, whole_lifetime=7200)))
 
     def check(self, action, paths=(), ownership=None):
@@ -439,10 +439,14 @@ class Question:
         # identity is checked around export and again immediately before feed.
         self.authorize(ownership, complete_identity=False)
 
+    def admit_runtime_read(self, path):
+        self.check('dependencies', [path])
+
     def probe_helper(self):
         self.check('qualify')
         self.budget.check(self.home)
         self.identities()
+        self.check('qualify', [*self.runtime_reads, self.program['path'], '/lib64'])
         return self.helper['path']
 
     def create(self):
@@ -486,7 +490,7 @@ class Question:
         self.publisher = Publisher(self.home, self.capacity, lambda: self.check('publish'))
         protection = self.runtime.direct.continuing_review.SandboxProtection(
             self.home / 'context', self.program['path'], self.runtime_reads,
-            self.capacity, probe_helper=self.probe_helper)
+            self.capacity, probe_helper=self.probe_helper, admit_read=self.admit_runtime_read)
         self.endpoint = self.runtime.direct.continuing_review.ExecEndpoint(
             self.home / 'context', self.program['path'], self.originals, self.admission,
             self.authorize, protection, self.capacity, self.publisher, execution=execution)

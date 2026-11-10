@@ -1,14 +1,22 @@
 # Invocation-owned protected question binding
 
 This caller contribution uses immutable runtime
-`7e7d0b7a7c3014806270e23887244c6d7a4ffbd8`, tree
-`7636f90cad91352a38255d41114773332e845289`. The sandbox filesystem gives the exact selected executable a read rule for backend
+`1a7d86baa63f8db8012173b4d8cdfe197fd3dadf`, tree
+`03b1a66c515e9e82831a8a98f637a99b6f16f788`. The sandbox filesystem gives the exact selected executable a read rule for backend
 self-reexecution. For the named /usr/lib64 runtime, it checks the root-owned
 /lib64 -> usr/lib64 alias and preserves that loader spelling as a read rule.
+Each alias metadata/readlink acquisition and policy admission requires current
+positive/exclusion mediation; root ownership alone supplies no authority.
 It adds no executable-parent or HOME grant, and retains root deny, read-only
 material/workspace and network denial. Full program/helper identity checks and
 current scope/deadline checks remain required. Local qualification is separate
 from any later provider proof or admission.
+
+Local controls reacquire qualification permission after complete identity work,
+then check the fixed original processing cutoff immediately before subprocess
+creation. Preparation includes policy and environment construction; no await
+separates the final finite checks from the creation call. An expired or revoked
+permission, or an exhausted original, withholds creation itself.
 
 This runtime enforces the fixed
 processing cutoff after synchronous feed preparation and authorization. The
@@ -41,7 +49,7 @@ loader to import the seven admitted byte strings together. The binding uses:
   pool_module=admitted_module, expected_control=pool_control).admission(profile)` and the supported
   underlying `Pool.allocate(..., expected_control=...)`;
 - `SandboxProtection(root, executable, runtime_reads, capacity_check,
-  probe_helper=...)`;
+  probe_helper=..., admit_read=question.admit_runtime_read)`;
 - `ExecEndpoint(root, executable, originals, admission, authority, protection,
   capacity_check, publish, execution=execution)`;
 - `ContinuingReview(endpoint, 'gpt-xhigh', profile, collector, authority,
@@ -96,7 +104,8 @@ revoked: current boolean
 expires_at: finite wall-clock expiry; never a renewal of the original lifetime
 write_roots: [exact positively new question home]
 pool_write_parents: [actual public counter/lock parent]
-read_files: exact admitted source/caller/program/helper/control/material files
+read_files: exact admitted source/caller/program/helper/control/material files,
+            plus explicit /lib64 metadata/readlink/read-policy authority
 runtime_directories: three expressly trusted canonical public OS directories
 binding: exact independently admitted Question.describe_binding() value
 control_effects: list(CONTROL_EFFECTS), for the actual owned nonsecret controls
@@ -254,6 +263,10 @@ and pool code with mock provider processes. Real local stdlib processes and pipe
 blocked authorization, encoding cost and expiry of a one-second original.
 Additional controls expire/revoke scope during complete owned-program identity
 work, include scope-validation cost, and preserve useful delayed valid delivery.
+Local creation controls additionally delay complete identity work through scope
+expiry, revocation and original cutoff; the valid delayed neighbor must still
+create and collect. Alias controls distinguish absent mediation, missing rights,
+exclusions, shape changes and revocation between metadata, readlink and policy.
 They observe prompt byte counts and retained END/EOF/publication. No real provider, socket/listener or actual
 qualification canary is run. Earlier generations and all failure fixtures stay
 retained. Test success proves bounded mechanism discrimination under these

@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 import time
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import driver
@@ -147,7 +148,7 @@ class Harness:
             pool_write_parents=[str(self.state)],
             read_files=[str(RUNTIME / p) for p in pins['files']] +
                 [str(p) for p in (caller, self.routes, self.fast, self.program, self.material,
-                                  Path('/usr/bin/python3.12'))],
+                                  Path('/usr/bin/python3.12'), Path('/lib64'))],
             runtime_directories=['/usr/lib/python3.12', '/usr/lib/x86_64-linux-gnu', '/usr/lib64'])
         self.scope['control_effects'] = list(driver.CONTROL_EFFECTS)
         self.scope['questions'] = ['MOCK first causal question', 'MOCK continuation question']
@@ -266,7 +267,7 @@ class NamespacePolicy(unittest.TestCase):
     def test_exact_entry_and_runtime_alias_without_ancestor_or_write_grant(self):
         h = Harness('namespace-policy')
         policy = h.q.runtime.direct.continuing_review.SandboxProtection(
-            h.area, str(h.program), h.q.runtime_reads, guard).filesystem(
+            h.area, str(h.program), h.q.runtime_reads, guard, admit_read=h.q.admit_runtime_read).filesystem(
                 h.area / 'material', h.area / 'workspace')
         self.assertEqual(policy[str(h.program)], 'read')
         self.assertNotIn(str(h.program.parent), policy)
@@ -279,9 +280,65 @@ class NamespacePolicy(unittest.TestCase):
     def test_changed_loader_alias_refuses_before_execution(self):
         h = Harness('namespace-alias-change')
         module = h.q.runtime.direct.continuing_review
-        protection = module.SandboxProtection(h.area, str(h.program), h.q.runtime_reads, guard)
+        protection = module.SandboxProtection(h.area, str(h.program), h.q.runtime_reads, guard,
+            admit_read=h.q.admit_runtime_read)
         with patch.object(module.os, 'readlink', return_value='different-runtime'):
             with self.assertRaises(module.Refusal):
+                protection.filesystem(h.area / 'material', h.area / 'workspace')
+
+    def test_alias_without_explicit_mediation_refuses_before_metadata(self):
+        h = Harness('alias-unmediated')
+        module = h.q.runtime.direct.continuing_review
+        protection = module.SandboxProtection(h.area, str(h.program), h.q.runtime_reads, guard)
+        with patch.object(Path, 'lstat', side_effect=AssertionError('unadmitted metadata')):
+            with self.assertRaises(module.Refusal):
+                protection.filesystem(h.area / 'material', h.area / 'workspace')
+
+    def test_missing_alias_right_refuses_before_metadata(self):
+        h = Harness('alias-no-right')
+        module = h.q.runtime.direct.continuing_review
+        h.scope['read_files'].remove('/lib64')
+        protection = module.SandboxProtection(h.area, str(h.program), h.q.runtime_reads, guard,
+            admit_read=h.q.admit_runtime_read)
+        with patch.object(Path, 'lstat', side_effect=AssertionError('unadmitted metadata')):
+            with self.assertRaises(driver.Refusal):
+                protection.filesystem(h.area / 'material', h.area / 'workspace')
+
+    def test_excluded_alias_refuses_before_metadata(self):
+        h = Harness('alias-excluded')
+        module = h.q.runtime.direct.continuing_review
+        h.q.exclusions += ('/lib64',)
+        protection = module.SandboxProtection(h.area, str(h.program), h.q.runtime_reads, guard,
+            admit_read=h.q.admit_runtime_read)
+        with patch.object(Path, 'lstat', side_effect=AssertionError('excluded metadata')):
+            with self.assertRaises(driver.Refusal):
+                protection.filesystem(h.area / 'material', h.area / 'workspace')
+
+    def test_revocation_after_alias_metadata_prevents_readlink(self):
+        h = Harness('alias-revoked-metadata')
+        module = h.q.runtime.direct.continuing_review
+        protection = module.SandboxProtection(h.area, str(h.program), h.q.runtime_reads, guard,
+            admit_read=h.q.admit_runtime_read)
+        lstat = Path.lstat
+        def revoke(path):
+            info = lstat(path)
+            h.scope['revoked'] = True
+            return info
+        with patch.object(Path, 'lstat', revoke), patch.object(module.os, 'readlink') as link:
+            with self.assertRaises(driver.Refusal):
+                protection.filesystem(h.area / 'material', h.area / 'workspace')
+            link.assert_not_called()
+
+    def test_revocation_after_readlink_prevents_policy_admission(self):
+        h = Harness('alias-revoked-policy')
+        module = h.q.runtime.direct.continuing_review
+        protection = module.SandboxProtection(h.area, str(h.program), h.q.runtime_reads, guard,
+            admit_read=h.q.admit_runtime_read)
+        def revoke(path):
+            h.scope['revoked'] = True
+            return 'usr/lib64'
+        with patch.object(module.os, 'readlink', side_effect=revoke):
+            with self.assertRaises(driver.Refusal):
                 protection.filesystem(h.area / 'material', h.area / 'workspace')
 
     def test_alias_is_not_granted_for_undeclared_runtime(self):
@@ -292,6 +349,69 @@ class NamespacePolicy(unittest.TestCase):
         self.assertNotIn('/lib64', policy)
         with self.assertRaises(module.Refusal):
             module.SandboxProtection(h.area, 'codex', ['/usr/bin/python3.12'], guard)
+
+class LocalCreationBoundary(unittest.IsolatedAsyncioTestCase):
+    async def boundary(self, mode):
+        h = Harness('local-creation-' + mode)
+        h.create()
+        module = h.q.runtime.direct.continuing_review
+        out = fresh(h.area, 'local-control')
+        origin = time.monotonic()
+        context = SimpleNamespace(created=origin, lifetime=.025 if mode == 'cutoff' else 10,
+            clock=time.monotonic, account_home=str(h.area), profile='owned-nonsecret',
+            originals=h.q.originals)
+        complete = h.q.identities
+        completed = []
+        def delayed_identity():
+            complete()  # Actual complete owned program check; helper remains MOCK.
+            if mode == 'expires':
+                h.scope['expires_at'] = time.time() + .025
+            time.sleep(.06)
+            if mode == 'revoked':
+                h.scope['revoked'] = True
+            if mode == 'alias-right':
+                h.scope['read_files'].remove('/lib64')
+            if mode == 'alias-exclusion':
+                h.q.exclusions += ('/lib64',)
+            completed.append(mode)
+        h.q.identities = delayed_identity
+        protection = module.SandboxProtection(out, str(h.program), h.q.runtime_reads,
+            guard, probe_helper=h.q.probe_helper)
+        calls = []
+        async def spawn(*argv, **kwargs):
+            calls.append(argv)
+            return MockProcess(output=json.dumps(dict(ok=True)).encode())
+        with patch.object(h.q.runtime.public_runtime, 'check_helper', return_value={'MOCK': True}), \
+             patch.object(asyncio, 'create_subprocess_exec', side_effect=spawn):
+            if mode == 'valid':
+                self.assertEqual(await protection._run(context, out, 'neighbor',
+                    [str(h.program)], h.q.publisher), {'ok': True})
+                self.assertEqual(len(calls), 1)
+            else:
+                with self.assertRaises((driver.Refusal, module.Refusal)):
+                    await protection._run(context, out, 'neighbor', [str(h.program)], h.q.publisher)
+                self.assertEqual(calls, [], 'creation itself must be withheld')
+        self.assertEqual(completed, [mode])
+        self.assertFalse(h.q.originals.owned)
+
+    async def test_local_expiry_during_complete_identity_prevents_creation(self):
+        await self.boundary('expires')
+
+    async def test_local_revocation_during_complete_identity_prevents_creation(self):
+        await self.boundary('revoked')
+
+    async def test_local_fixed_cutoff_during_complete_identity_prevents_creation(self):
+        await self.boundary('cutoff')
+
+    async def test_local_alias_right_lost_during_identity_prevents_creation(self):
+        await self.boundary('alias-right')
+
+    async def test_local_alias_excluded_during_identity_prevents_creation(self):
+        await self.boundary('alias-exclusion')
+
+    async def test_local_delayed_complete_identity_valid_neighbor(self):
+        await self.boundary('valid')
+
 
 class Mechanisms(unittest.IsolatedAsyncioTestCase):
     async def test_same_original_and_hot_policy_new_vs_continuing(self):
