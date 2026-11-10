@@ -16,10 +16,10 @@ import shlex
 import stat
 if __package__:
     from .opaque_dialogue import Dialogue, Reply, Refusal
-    from .review_context import Context, command, private_write
+    from .review_context import Context, command, private_write, capture_append
 else:
     from opaque_dialogue import Dialogue, Reply, Refusal
-    from review_context import Context, command, private_write
+    from review_context import Context, command, private_write, capture_append
 
 
 PROBE = r"""import json,socket,sys
@@ -153,7 +153,8 @@ class SandboxProtection:
 
     async def _run(self, context, directory, name, argv, publish, before_run=lambda: None):
         self.capacity_check(directory)
-        evidence = dict(stdout_eof=False, stderr_eof=False, errors=[])
+        evidence = dict(stdout_eof=False, stderr_eof=False, errors=[],
+                        bytes={'stdout': 0, 'stderr': 0}, captured_bytes={'stdout': 0, 'stderr': 0})
         captures = []
         child = None
         results, receipt_attempts = [], []
@@ -208,20 +209,22 @@ class SandboxProtection:
             path = directory/(name+'.'+stream_name)
             self.capacity_check(directory)
             self.before_io(path, 'create', 0)
-            with path.open('xb') as out:
+            with path.open('xb', buffering=0) as out:
                 while True:
                     self.before_io(path, 'read')
                     part = await pipe.read(8192)
                     if not part:
                         evidence[stream_name+'_eof'] = True
                         return bytes(data)
+                    evidence['bytes'][stream_name] += len(part)
                     if len(data)+len(part)>65536:
                         evidence['errors'].append('bounded capture exceeded')
                         child.terminate()
                         part=part[:max(0,65536-len(data))]
-                    self.capacity_check(directory)
-                    self.before_io(path, 'append', len(part))
-                    out.write(part); data.extend(part)
+                    def recorded(count):
+                        evidence['captured_bytes'][stream_name] += count
+                    capture_append(out, path, part, self.capacity_check, self.before_io, recorded)
+                    data.extend(part)
         try:
             captures.extend([asyncio.create_task(drain(child.stdout,'stdout')),
                              asyncio.create_task(drain(child.stderr,'stderr'))])

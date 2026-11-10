@@ -50,6 +50,27 @@ def private_write(path, body, capacity_check=lambda parent: None, *, before_io=l
         os.fsync(stream.fileno())
 
 
+
+def capture_append(stream, path, body, capacity_check, before_io, recorded):
+    """Write directly, with current permission and a reservation per attempt.
+
+    Capture streams MUST be unbuffered: neither normal close nor exception
+    unwinding may flush bytes accepted under an earlier permission. A short
+    write is a real partial effect; recheck before its remaining suffix, retain
+    every attempted reservation, and record only bytes actually accepted by the
+    raw file. Closing that raw file holds no user-space output to copy later.
+    """
+    remaining = memoryview(body)
+    while remaining:
+        capacity_check(path.parent)
+        before_io(path, 'append', len(remaining))
+        count = stream.write(remaining)
+        if type(count) is not int or not 0 < count <= len(remaining):
+            raise OSError('raw capture write made no valid progress')
+        recorded(count)
+        remaining = remaining[count:]
+
+
 def positive_directory(path, before_io=lambda path, operation, amount=0: None):
     """Require a caller-owned lexical path; never resolve an exposing alias."""
     path = Path(path)
@@ -298,7 +319,7 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
                   maximum, capture_max, expected_thread, started,
                   admission=existing_admission, before_spawn=lambda: None, capacity_check=lambda parent: None, before_feed=None, before_io=lambda path, operation, amount=0: None):
     """Own before feeding input; numeric END and pipe EOF are independent."""
-    evidence = dict(errors=[], stdout_eof=False, stderr_eof=False, bytes={'stdout': 0, 'stderr': 0})
+    evidence = dict(errors=[], stdout_eof=False, stderr_eof=False, bytes={'stdout': 0, 'stderr': 0}, captured_bytes={'stdout': 0, 'stderr': 0})
     observed = dict(thread=None, completed=0, failed=False, answer=None, diagnostics=[])
     captures = []
     observations = 0
@@ -389,7 +410,7 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
         try:
             capacity_check(directory)
             before_io(path, 'create', 0)
-            with path.open('xb') as stream:
+            with path.open('xb', buffering=0) as stream:
                 while True:
                     before_io(path, 'read')
                     data = await pipe.read(16384)
@@ -399,9 +420,9 @@ async def execute(argv, env, prompt, directory, originals, publish, deadline, sh
                     before = evidence['bytes'][name]
                     evidence['bytes'][name] += len(data)
                     kept = data[:max(0, capture_max - before)]
-                    capacity_check(directory)
-                    before_io(path, 'append', len(kept))
-                    stream.write(kept)
+                    def recorded(count):
+                        evidence['captured_bytes'][name] += count
+                    capture_append(stream, path, kept, capacity_check, before_io, recorded)
                     if evidence['bytes'][name] > capture_max:
                         stop(name + ' capture limit; retained prefix is partial')
                     if name != 'stdout' or evidence['bytes'][name] > capture_max:
