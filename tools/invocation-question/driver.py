@@ -20,9 +20,9 @@ import time
 from types import ModuleType
 from uuid import uuid4
 
-COMMIT = '1a7d86baa63f8db8012173b4d8cdfe197fd3dadf'
-TREE = '03b1a66c515e9e82831a8a98f637a99b6f16f788'
-PINSET = 'bd7ca73ccef51bef86e10837bbe4c36b6862ed32070df658ff5ef9797813ccd3'
+COMMIT = '1532722e46ec2db51badd46672533e6ddd0ff84f'
+TREE = '7c61a40d8c4692d563d896534874435127aed884'
+PINSET = '0defbb6bdb423e948c0e3b15c59e6e763697c5e0877538595c21d13843e9b85a'
 DIRECT = ('profile_lease', 'execution_pool', 'fast_tier', 'dispatch',
           'review_context', 'opaque_dialogue', 'continuing_review')
 PROFILES = ('.codex2', '.codex3', '.codex4', '.codex5')
@@ -442,6 +442,41 @@ class Question:
     def admit_runtime_read(self, path):
         self.check('dependencies', [path])
 
+    def authorize_policy(self, filesystem, material, workspace):
+        """Current rights for the exact prepared provider policy, never a rebuild.
+
+        Named external rules need current positive read rights. The two generated
+        read roots derive from the currently owned question home; exclusions
+        still apply to their actual paths before use. Symbolic minimal-runtime
+        policy remains an explicit trusted-backend premise, not a path grant.
+        """
+        if (not isinstance(filesystem, dict) or filesystem.get(':root') != 'deny'
+                or filesystem.get(':minimal') != 'read'):
+            raise Refusal('prepared provider read policy unavailable or changed')
+        owned = {str(material), str(workspace)}
+        if len(owned) != 2 or not owned <= filesystem.keys():
+            raise Refusal('exact generated material/workspace read policy required')
+        for path in owned:
+            if not positive(path, self.exclusions).is_relative_to(self.home / 'context'):
+                raise Refusal('prepared generated read outside owned question context')
+        external = []
+        for path, access in filesystem.items():
+            if path in {':root', ':minimal'}:
+                continue
+            if access != 'read':
+                raise Refusal('prepared provider policy exceeds read authority')
+            positive(path, self.exclusions)
+            if path not in owned:
+                external.append(path)
+        # One current scope validates all concrete external reads together, after
+        # preparation/full identities. check also rebinds home/material/control,
+        # current exclusions, processing permission and original lifetime.
+        self.check('dependencies', external)
+        self.check('analysis', [*external, *(item.path for item in self.materials)])
+        # Current scope validation may itself refresh the owner's exclusions.
+        for path in owned:
+            positive(path, self.exclusions)
+
     def probe_helper(self):
         self.check('qualify')
         self.budget.check(self.home)
@@ -493,7 +528,8 @@ class Question:
             self.capacity, probe_helper=self.probe_helper, admit_read=self.admit_runtime_read)
         self.endpoint = self.runtime.direct.continuing_review.ExecEndpoint(
             self.home / 'context', self.program['path'], self.originals, self.admission,
-            self.authorize, protection, self.capacity, self.publisher, execution=execution)
+            self.authorize, protection, self.capacity, self.publisher, execution=execution,
+            policy_authority=self.authorize_policy)
         self.endpoint.clock = self.clock
         self.endpoint.capture_max = 8 * MIB
         self.review = self.runtime.direct.continuing_review.ContinuingReview(

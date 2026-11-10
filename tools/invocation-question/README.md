@@ -1,8 +1,8 @@
 # Invocation-owned protected question binding
 
 This caller contribution uses immutable runtime
-`1a7d86baa63f8db8012173b4d8cdfe197fd3dadf`, tree
-`03b1a66c515e9e82831a8a98f637a99b6f16f788`. The sandbox filesystem gives the exact selected executable a read rule for backend
+`1532722e46ec2db51badd46672533e6ddd0ff84f`, tree
+`7c61a40d8c4692d563d896534874435127aed884`. The sandbox filesystem gives the exact selected executable a read rule for backend
 self-reexecution. For the named /usr/lib64 runtime, it checks the root-owned
 /lib64 -> usr/lib64 alias and preserves that loader spelling as a read rule.
 Each alias metadata/readlink acquisition and policy admission requires current
@@ -11,6 +11,17 @@ It adds no executable-parent or HOME grant, and retains root deny, read-only
 material/workspace and network denial. Full program/helper identity checks and
 current scope/deadline checks remain required. Local qualification is separate
 from any later provider proof or admission.
+
+Provider creation and feed retain the concrete filesystem policy serialized in
+that turn's argv. After preparation, full identities and any NEW admission await,
+the caller rechecks every concrete external read rule against current positive
+rights and exclusions. Generated material/workspace roots require current
+ownership of the exact question home and remain exclusion mediated; the snapshot
+also retains current rights to its selected source material. A withdrawn right
+withholds creation, or closes stdin without input if an original already exists.
+That same original still owes numeric END, pipe EOF, capture and receipts. The
+symbolic `:minimal` rule retains its trusted-backend meaning; these finite checks
+do not attest OS enforcement or make external changes atomic with the syscall.
 
 Local controls reacquire qualification permission after complete identity work,
 then check the fixed original processing cutoff immediately before subprocess
@@ -51,7 +62,8 @@ loader to import the seven admitted byte strings together. The binding uses:
 - `SandboxProtection(root, executable, runtime_reads, capacity_check,
   probe_helper=..., admit_read=question.admit_runtime_read)`;
 - `ExecEndpoint(root, executable, originals, admission, authority, protection,
-  capacity_check, publish, execution=execution)`;
+  capacity_check, publish, execution=execution,
+  policy_authority=question.authorize_policy)`;
 - `ContinuingReview(endpoint, 'gpt-xhigh', profile, collector, authority,
   lifetime=7200, clock=clock, origin=origin,
   material_authority=question.authorize_material)`;

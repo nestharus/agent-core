@@ -694,6 +694,219 @@ class Mechanisms(unittest.IsolatedAsyncioTestCase):
             # Reading the admitted public routes is permitted; target state is not.
 
 
+class PreparedReadPolicy(unittest.IsolatedAsyncioTestCase):
+    """Prepared argv survives supported awaits; its read rights must not.
+
+    Provider processes, helper acceptance and loader shape are MOCK premises.
+    The real Question, Context, admission, complete owned-program identity,
+    registration, capture, receipts and publication code remain in the path.
+    """
+    async def boundary(self, phase, operand='alias', *, excluded=False, valid=False):
+        from contextlib import asynccontextmanager
+        h = Harness('prepared-policy-' + phase + '-' + operand)
+        entered, changed, identities = [], [], []
+        actual_admission = h.q.admission
+        def path():
+            return dict(alias='/lib64', program=str(h.program), helper=h.q.helper['path'],
+                python='/usr/lib/python3.12', libraries='/usr/lib/x86_64-linux-gnu',
+                loader='/usr/lib64', material=str(h.material),
+                snapshot=str(h.q.home / 'context/turn-0/material'),
+                workspace=str(h.q.home / 'context/workspace'))[operand]
+        def withdraw():
+            if changed or valid:
+                return
+            target = path()
+            if excluded:
+                h.q.exclusions += (target,)
+            elif target in h.scope['read_files']:
+                h.scope['read_files'].remove(target)
+            else:
+                h.scope['runtime_directories'].remove(target)
+            changed.append(target)
+        @asynccontextmanager
+        async def admission(profile):
+            async with actual_admission(profile) as witness:
+                await asyncio.sleep(0)  # A supported suspension after policy preparation.
+                entered.append(witness)
+                if phase == 'admission':
+                    withdraw()
+                yield witness
+        h.q.admission = admission
+        h.create()
+        h.scope['runtime_directories'] = list(h.scope['runtime_directories'])
+        complete_identity = h.q.identities
+        def identity():
+            complete_identity()  # Real full dual-pass OWNED mock program; helper is mocked.
+            if entered:
+                identities.append(h.provider_calls)
+                if (phase == 'identity-create' and h.provider_calls == 0
+                        or phase == 'identity-feed' and h.provider_calls == 1):
+                    withdraw()
+        h.q.identities = identity
+        spawn = h.spawn
+        async def creation(*argv, **kwargs):
+            child = await spawn(*argv, **kwargs)
+            if 'exec' in argv and phase == 'creation':
+                withdraw()
+            return child
+        h.spawn = creation
+        def registered():
+            self.assertEqual(len(h.q.originals.owned), 1)
+            if phase == 'registration':
+                withdraw()
+        h.q.endpoint.started = registered
+        if valid:
+            result = await h.run()
+            self.assertEqual(len(result['answers']), 2)
+            self.assertEqual(len(h.prompts), 3)
+            self.assertEqual(h.provider_calls, 3)
+            self.assertTrue(all('resume' in argv for argv in h.commands[1:]))
+            self.assertEqual(result['status']['state'], 'closed')
+            self.assertEqual(result['ownership']['profile'], '.codex2')
+            self.assertEqual(len(entered), 1, 'continuations keep the original admission/account')
+        else:
+            with self.assertRaises(driver.Refusal):
+                await h.run()
+            self.assertEqual(changed, [path()])
+            self.assertEqual(h.provider_calls, 0 if phase in {'admission', 'identity-create'} else 1,
+                             'withhold creation itself when permission is lost before spawn')
+            self.assertEqual(h.prompts, [], 'a post-delivery refusal cannot unsend input')
+            self.assertEqual(h.q.answers, [])
+            self.assertFalse(h.q.review.status['protection_qualified'])
+        self.assertTrue(entered)
+        self.assertTrue(identities)
+        self.assertFalse(h.q.originals.owned)
+        self.assertTrue(all(row['persisted'] for row in h.q.publisher.attempts))
+        self.assertTrue(all(server.closed for server in h.listeners))
+        if h.provider_calls:
+            receipt = json.loads((h.q.home / 'context/turn-0/original-0.json').read_text())
+            self.assertIsInstance(receipt['actual_END'], int)
+            self.assertTrue(receipt['evidence']['stdout_eof'])
+            self.assertTrue(receipt['evidence']['stderr_eof'])
+
+    async def test_alias_withdrawn_during_new_admission_withholds_creation(self):
+        await self.boundary('admission')
+
+    async def test_alias_excluded_during_new_admission_withholds_creation(self):
+        await self.boundary('admission', excluded=True)
+
+    async def test_every_external_policy_read_is_current_after_complete_identity(self):
+        for phase in ('identity-create', 'identity-feed'):
+            for operand in ('alias', 'program', 'helper', 'python', 'libraries', 'loader'):
+                for excluded in (False, True):
+                    with self.subTest(phase=phase, operand=operand, excluded=excluded):
+                        await self.boundary(phase, operand, excluded=excluded)
+
+    async def test_generated_read_roots_remain_exclusion_mediated(self):
+        for phase in ('identity-create', 'identity-feed'):
+            for operand in ('snapshot', 'workspace'):
+                with self.subTest(phase=phase, operand=operand):
+                    await self.boundary(phase, operand, excluded=True)
+
+    async def test_snapshot_source_right_is_current_at_policy_use(self):
+        for phase in ('identity-create', 'identity-feed'):
+            with self.subTest(phase=phase):
+                await self.boundary(phase, 'material')
+
+    async def test_selective_alias_loss_during_awaited_creation_withholds_feed(self):
+        await self.boundary('creation')
+
+    async def test_selective_alias_loss_after_registration_withholds_feed(self):
+        await self.boundary('registration')
+
+    async def test_current_neighbor_keeps_original_continuation_useful(self):
+        await self.boundary('identity-feed', valid=True)
+
+    async def test_policy_validation_cost_cannot_outlive_the_original(self):
+        for phase in ('creation', 'feed'):
+            with self.subTest(phase=phase):
+                h = Harness('policy-cost-' + phase)
+                h.create()
+                actual = h.q.endpoint.policy_authority
+                completed = []
+                def current(*args):
+                    actual(*args)
+                    if not completed and (phase == 'creation' or h.provider_calls):
+                        context = h.q.endpoint.context
+                        context.clock = lambda: context.created + context.lifetime
+                        completed.append(phase)
+                h.q.endpoint.policy_authority = current
+                with self.assertRaises(h.q.runtime.direct.review_context.ReviewRefusal):
+                    await h.run()
+                self.assertEqual(completed, [phase])
+                self.assertEqual(h.provider_calls, 0 if phase == 'creation' else 1)
+                self.assertEqual(h.prompts, [])
+                self.assertFalse(h.q.originals.owned)
+                self.assertTrue(all(row['persisted'] for row in h.q.publisher.attempts))
+                self.assertTrue(all(server.closed for server in h.listeners))
+
+    async def test_additional_prepared_read_is_mediated_without_a_named_operand_list(self):
+        from contextlib import asynccontextmanager
+        h = Harness('additional-policy-read')
+        extra = h.area / 'additional-owned-read.txt'
+        put(extra, b'owned synthetic additional policy operand')
+        h.scope['read_files'].append(str(extra))
+        h.create()
+        filesystem = h.q.endpoint.protection.filesystem
+        def prepared(material, workspace):
+            return dict(filesystem(material, workspace), **{str(extra): 'read'})
+        h.q.endpoint.protection.filesystem = prepared
+        entered, removed = [], []
+        admission = h.q.admission
+        @asynccontextmanager
+        async def suspend(profile):
+            async with admission(profile) as witness:
+                await asyncio.sleep(0)
+                entered.append(witness)
+                yield witness
+        h.q.endpoint.admission = suspend
+        identity = h.q.identities
+        def complete():
+            identity()
+            if entered and not removed:
+                h.scope['read_files'].remove(str(extra))
+                removed.append(str(extra))
+        h.q.identities = complete
+        with self.assertRaises(driver.Refusal):
+            await h.run()
+        self.assertEqual(removed, [str(extra)])
+        self.assertEqual(h.provider_calls, 0)
+        self.assertEqual(h.prompts, [])
+        self.assertFalse(h.q.originals.owned)
+        self.assertTrue(all(row['persisted'] for row in h.q.publisher.attempts))
+        self.assertTrue(all(server.closed for server in h.listeners))
+
+    async def test_generated_exclusion_refreshed_by_scope_validation_withholds_creation(self):
+        h = Harness('generated-exclusion-validation-tail')
+        h.create()
+        actual_policy = h.q.endpoint.policy_authority
+        actual_current = h.q.current
+        active, excluded = [], []
+        def policy(*args):
+            active.append(True)
+            try:
+                return actual_policy(*args)
+            finally:
+                active.pop()
+        def current(action):
+            scope = actual_current(action)
+            if active and action == 'analysis' and not excluded:
+                path = str(h.q.home / 'context/workspace')
+                h.q.exclusions += (path,)
+                excluded.append(path)
+            return scope
+        h.q.current = current
+        h.q.endpoint.policy_authority = policy
+        with self.assertRaises(driver.Refusal):
+            await h.run()
+        self.assertEqual(len(excluded), 1)
+        self.assertEqual(h.provider_calls, 0)
+        self.assertEqual(h.prompts, [])
+        self.assertFalse(h.q.originals.owned)
+        self.assertTrue(all(row['persisted'] for row in h.q.publisher.attempts))
+        self.assertTrue(all(server.closed for server in h.listeners))
+
+
 class CurrentUse(unittest.IsolatedAsyncioTestCase):
     async def test_revocation_during_process_creation_never_feeds_but_collects(self):
         h = Harness('revoke-during-creation')
