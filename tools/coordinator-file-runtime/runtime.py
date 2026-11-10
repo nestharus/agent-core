@@ -1,6 +1,6 @@
 """Prospective file-native Work/Branch/Reviews/QA coordination.
 
-No legacy imports. Public pool control is the sole non-stdlib dependency.
+No legacy imports. Only the public pool and fast-control helpers are loaded.
 External owners assert identity/evidence inside the same-user cooperative model.
 """
 import hashlib
@@ -11,7 +11,7 @@ import re
 import secrets
 import time
 
-from storage import Files, Held, MAX_STATE, HEADROOM, check_capacity, digest, encode, read_regular
+from storage import Files, Held, MAX_STATE, MAX_BUDGET, check_capacity, digest, encode, read_regular
 
 # This public helper has no provider/account-store access. Never import the old
 # runtime or Board as a compatibility adapter.
@@ -25,6 +25,10 @@ _spec.loader.exec_module(_fast)
 ROLES = {'Work', 'Branch', 'Reviews', 'QA'}
 PHASES = {'classifier', 'known', 'discovery', 'qa-execute', 'qa-consolidate', 'review'}
 ALLOWED_PROFILES = {'.codex2', '.codex3', '.codex4', '.codex5'}
+MAX_TEXT = 512  # Encoded JSON bytes, including quotes/escapes; never characters.
+MAX_HISTORY = 12
+COLLECTIONS = {'attempt': 'attempts', 'event': 'events', 'packet': 'packets', 'effect': 'effects',
+               'branch': 'branches', 'review': 'reviews', 'package': 'packages'}
 
 
 def require(condition, message):
@@ -33,7 +37,8 @@ def require(condition, message):
 
 
 def text(value):
-    require(isinstance(value, str) and 0 < len(value) <= 2048, 'nonempty bounded string required')
+    require(isinstance(value, str) and value and len(encode(value)) <= MAX_TEXT,
+            'nonempty text exceeds 512 encoded JSON bytes; preserve original outside runtime')
     return value
 
 
@@ -119,8 +124,8 @@ class Runtime:
         ident(actor)
         require(operation in self.OPERATIONS, 'unsupported operation; no fallback')
         readonly = operation in {'status', 'inbox', 'recover', 'eligibility', 'readback'}
-        continuation = operation in {'recover', 'readback', 'cancel', 'collect', 'reconcile', 'observe_effect',
-                                     'classify', 'ack', 'receipt', 'resolve', 'finish', 'hold'}
+        continuation = operation in {'recover', 'readback', 'inbox', 'cancel', 'collect', 'reconcile', 'observe_effect',
+                                     'classify', 'ack', 'receipt', 'resolve', 'finish', 'hold', 'integrate', 'send', 'partial'}
         with self.files.transaction(readonly=readonly, continuation=continuation) as s:
             who = s['actors'].get(actor)
             require(who and secrets.compare_digest(who['credential'], secret_hash(credential)), 'actor credential rejected')
@@ -128,23 +133,6 @@ class Runtime:
             require(who['adopted'] or operation == 'adopt', 'explicit self-adoption required')
             if not readonly and not continuation:
                 require(len(s['audit']) < 448, 'work pressure hold; audit continuation headroom')
-            if operation in {'ingest', 'reserve', 'send', 'effect', 'invite', 'package', 'branch', 'review'}:
-                # Admit bounded consequences, not just today's request. Each
-                # unresolved object gets space for readback and owner settlement.
-                obligations = (sum(not a['reconciled'] for a in s['attempts'].values())
-                               + sum(p['stage'] != 'settled' for p in s['packets'].values())
-                               + sum(not e['finished'] for e in s['events'].values()) + 1)
-                require(obligations <= 16 and len(s['audit']) + 12 * obligations < 512,
-                        'work pressure hold; settlement/audit headroom required')
-                require(len(encode(s)) + len(encode(args)) + 8192 * obligations + 32768 < MAX_STATE,
-                        'work pressure hold; conserved state needs settlement headroom')
-                projected_state = len(encode(s)) + len(encode(args)) + 8192 * obligations
-                projected_journal = os.lstat(self.files.path / 'budget.jsonl').st_size + 12 * obligations * 512
-                future = {'bytes': obligations * 8 * (MAX_STATE + 1024),
-                          'reads': obligations * 12 * (projected_state + projected_journal),
-                          'entries': obligations * 12}
-                require(all(future[k] <= HEADROOM[k] for k in future), 'work pressure hold; finite continuation capacity')
-                self.files.charge(future=future)
             try:
                 result = getattr(self, 'op_' + operation)(s, actor, **args)
             except TypeError as exc:
@@ -152,12 +140,57 @@ class Runtime:
             if not readonly:
                 s['audit'].append({'op': operation, 'actor': actor, 'at': self.clock()})
                 require(len(s['audit']) <= 512, 'finite audit full; no truncation')
+                # Exact candidate bytes plus a bounded accountable-partial tail,
+                # NOT an estimate claiming every possible successful closure fits.
+                # All mutations, including duplicates and continuation growth,
+                # must leave this tail for existing admitted records.
+                self.partial_capacity(s)
             self.files.fault('before-commit')
             receivers = tuple(s['actors'])
         self.files.fault('after-commit')
         if not readonly:
             self.hint(receivers)
         return result
+
+    def partial_capacity(self, s):
+        pending = self.partial_records(s)
+        count = len(pending)
+        # Each record gets two read/discovery visits and one immutable partial
+        # disposition. 1024 covers its entire encoded marker (512-byte evidence,
+        # 128-byte actor, finite timestamp and field syntax). Audit <=256/visit.
+        # 4096 covers envelope/hash, generation and fixed syntax slack.
+        visits = 5 * count + 4
+        state_bound = len(encode(s)) + count * (1024 + 256) + 4096
+        require(state_bound <= MAX_STATE and len(s['audit']) + count <= 512,
+                'consequence pressure: use owner partial/readback; new material does not fit')
+        # Tail operations do not access controls: one read charge per query,
+        # read+save per disposition, <=384 encoded bytes per journal record.
+        journal = os.lstat(self.files.path / 'budget.jsonl').st_size
+        journal_bound = journal + (6 * count + 8) * 384
+        require(journal_bound <= MAX_BUDGET, 'consequence journal pressure: owner partial required')
+        future = {'bytes': (count + 1) * (state_bound + 8192),
+                  'reads': visits * (state_bound + journal_bound), 'entries': count + 1}
+        self.files.charge(future=future)
+        self.files.future = future
+
+    def partial_records(self, s):
+        records = []
+        for kind, collection in COLLECTIONS.items():
+            for key, value in s[collection].items():
+                if value.get('partial'):
+                    continue
+                pending = (kind == 'event' and not value['finished'] or
+                           kind == 'attempt' and not value['reconciled'] or
+                           kind == 'packet' and value['stage'] != 'settled' or
+                           kind == 'effect' and value['state'] != 'settled')
+                if pending:
+                    records.append({'kind': kind, 'id': key})
+        return records
+
+    def authority(self, s, actor, credential):
+        who = s['actors'].get(actor)
+        require(who and secrets.compare_digest(who['credential'], secret_hash(credential)), 'actor credential rejected')
+        require(who['active'] and who['adopted'], 'actor revoked or not adopted; original custody remains')
 
     def wake_address(self, actor):
         return '\0rfq-file-' + hashlib.sha256((str(self.files.path) + '\0' + actor).encode()).hexdigest()
@@ -210,6 +243,7 @@ class Runtime:
     def op_ingest(self, s, actor, event, payload, producer, source_basis):
         self.role(s, actor, {'Work'})
         ident(event)
+        require(len(encode(payload)) <= 4096, 'intake payload exceeds 4KiB; retain source, not admitted')
         value = {'payload': payload, 'producer': text(producer), 'source_basis': text(source_basis)}
         h = digest(value)
         if event in s['events']:
@@ -307,7 +341,9 @@ class Runtime:
             require(package in s['packages'] and s['packages'][package]['event'] == event, 'Work-admitted exact QA package required')
             if phase == 'qa-consolidate':
                 executions = [a for a in s['attempts'].values() if a['package'] == package and a['phase'] == 'qa-execute']
-                require(executions and all(a['reconciled'] and a['end'] == 0 for a in executions), 'successful collected QA execution required before consolidation')
+                executed = [a for a in executions if a['state'] != 'cancelled']
+                require(executed and all(a['reconciled'] and a['end'] == 0 for a in executed),
+                        'successful collected QA execution required before consolidation; failures/unknowns retained')
         if phase == 'known' and s['actors'][actor]['role'] == 'Branch':
             require(branch in s['branches'] and s['branches'][branch]['owner'] == actor, 'current branch/role binding required')
             require(resources.get('branch:' + branch) == 'write', 'branch writer must declare branch resource')
@@ -408,6 +444,7 @@ class Runtime:
         require(a['state'] == 'collected' and a['end'] == 0 and not a.get('integrated'), 'one successful collected proposal required')
         require(isinstance(writes, dict) and set(writes) <= {k for k, m in a['resources'].items() if m == 'write'}, 'write outside admitted footprint')
         require(writes and all(s['versions'].get(k, 0) == v for k, v in a['basis'].items()), 'stale proposal; reconciliation required')
+        require(len(encode(writes)) <= 4096, 'integration exceeds 4KiB; retain proposal for accountable partial return')
         require(not a['reconciled'], 'released proposal cannot integrate; new admitted attempt required')
         # These are coordinator material versions/deltas only. External files or
         # Git refs require a separately owned effect; never mutate them here.
@@ -520,6 +557,8 @@ class Runtime:
         ident(name)
         require(type(enabled) is bool, 'enabled must be boolean')
         text(evidence)
+        require(len(e.get('hold_evidence', [])) < MAX_HISTORY,
+                'finite 12-entry hold history; preserve new assertion outside runtime and report partial')
         if enabled:
             if name not in e['holds']:
                 e['holds'].append(name)
@@ -542,7 +581,31 @@ class Runtime:
                               for key, a in s['attempts'].items() if not a['reconciled'] and (a['owner'] == actor or s['actors'][actor]['role'] == 'Work')],
                 'effects': [{'id': key, 'owner': x['owner'], 'state': x['state']} for key, x in s['effects'].items() if x['state'] != 'settled' and (x['owner'] == actor or s['actors'][actor]['role'] == 'Work')],
                 'unacked': [key for key, e in s['events'].items() if not e['ack']],
-                'incomplete': [key for key, e in s['events'].items() if not e['finished']]}
+                'incomplete': [key for key, e in s['events'].items() if not e['finished']],
+                'addressed': [key for key, p in s['packets'].items() if actor in {p['sender'], p['recipient']} and p['stage'] != 'settled'],
+                'partial_candidates': [p for p in self.partial_records(s) if self.can_partial(s, actor, p['kind'], p['id'])]}
+
+    def can_partial(self, s, actor, kind, id):
+        value = s[COLLECTIONS[kind]][id]
+        if kind == 'event':
+            return (value['responsibility'] or {}).get('owner') == actor or s['actors'][actor]['role'] == 'Work'
+        if kind == 'packet':
+            return actor in {value['sender'], value['recipient']}
+        return value.get('owner') == actor
+
+    def op_partial(self, s, actor, kind, id, evidence):
+        require(kind in {'event', 'attempt', 'packet', 'effect'}, 'partial requires an obligation record')
+        ident(id)
+        text(evidence)
+        require(self.can_partial(s, actor, kind, id), 'partial outside actual owner/addressed authority')
+        value = s[COLLECTIONS[kind]][id]
+        if value.get('partial'):
+            require(value['partial']['actor'] == actor and value['partial']['evidence'] == evidence,
+                    'partial identity/evidence conflict')
+        else:
+            value['partial'] = {'actor': actor, 'at': self.clock(), 'evidence': evidence}
+        return {'kind': kind, 'id': id, 'partial': value['partial'], 'completed': False,
+                'custody': 'unchanged; all needs, originals, effects and holds retained'}
 
     def op_readback(self, s, actor, kind, id):
         """Read committed operands/results, never recover a process handle."""
@@ -569,4 +632,4 @@ class Runtime:
 
     OPERATIONS = {'invite', 'adopt', 'revoke', 'package', 'ingest', 'classify', 'ack', 'branch', 'review', 'reserve', 'start', 'collect',
                   'reconcile', 'integrate', 'effect', 'observe_effect', 'send', 'inbox', 'receipt', 'resolve', 'finish',
-                  'hold', 'eligibility', 'recover', 'status', 'readback', 'cancel'}
+                  'hold', 'eligibility', 'recover', 'status', 'readback', 'cancel', 'partial'}

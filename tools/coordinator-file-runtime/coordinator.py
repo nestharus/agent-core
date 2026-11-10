@@ -26,8 +26,11 @@ def fixture(runtime, actor, credential, request):
     refusal = None
     with runtime.files.transaction() as s:
         a = s['attempts'][request['attempt']]
+        runtime.attempt(s, actor, **request)
         entered_creation = False
         try:
+            runtime.authority(s, actor, credential)
+            runtime.partial_capacity(s)
             with runtime.pool(s).admission(a['pool']['profile'], ALLOWED_PROFILES, blocking=False, expected_control=s['pool_binding']):
                 runtime.fast(s)
                 with _fast.admission(Path(s['pool_routes']).with_name('fast-tier'), before_write=runtime.pool_capacity):
@@ -41,6 +44,8 @@ def fixture(runtime, actor, credential, request):
             a.update(state='not-started', creation_refusal={'actor': actor, 'at': runtime.clock(),
                      'evidence': 'fixture control refused before Popen: ' + str(exc)[:512]})
             refusal = exc
+        if refusal is not None:
+            runtime.partial_capacity(s)
     if refusal is not None:
         raise refusal
     output, _ = child.communicate(b'finish\n', timeout=5)

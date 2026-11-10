@@ -65,7 +65,8 @@ Success is exit 0 with `{status:"ok",result:...}`. Refusal/error is exit 2 with
 immediately. Retrying an explicitly refused metadata lock acquisition is safe;
 interrupted/postcommit or external-effect ambiguity requires recovery/readback,
 not an automatic command or launch retry. Domain IDs are 1..128 ASCII identifier
-characters, string references at most 2048 characters, audit at most 512 changes,
+characters, nonempty string references at most **512 encoded JSON bytes**
+(including quotes, escapes and newline), audit at most 512 changes,
 resource sets at most 16, inbox at most 32. Unknown operations/fields refuse.
 
 For library use, add this directory to the importing process's module search
@@ -100,6 +101,7 @@ opaque and are never followed to source, provider, private history or old stores
 | `hold`, `eligibility` | Owner: `event,name,enabled,evidence`; release assertions require actual holder authority outside this cooperative CLI. Eligibility `event` requires whole processing +86400 seconds **and all holds clear**. Late holds restore ineligibility. No deletion is authorized/performed. |
 | `status`, `recover` | Finite status omits credentials/collector secrets. Every adopted owner can recover its own outstanding collector and launch operands. Work also sees foreign custody metadata, without foreign collector secrets. Never borrows handles, probes PIDs, retries effects or releases on elapsed time. |
 | `readback` | `kind,id`; kinds `attempt,event,packet,effect,branch,review,package`. Read exact committed operands, payloads, classification, results, receipts and evidence. Attempt/effect/branch/review require their original owner; packet requires sender/recipient; event/package require Work or the responsibility owner. No process handle or external truth is reconstructed. |
+| `partial` | `kind,id,evidence`; kinds `event,attempt,packet,effect`. The actual owner, addressed packet participant, or Work for an event records one attributable immutable partial report. Exact repeat is accepted; changed evidence conflicts. This reports unfinished work, retains the entire original record, and changes no ACK, need, attempt state, END, reconciliation, receipt, hold or completion clock. Further work does not erase the historical partial report. |
 
 Phases and capacity are separate from provider execution. `classifier` belongs to
 Work and is fresh per event. `known` belongs to Work/Branch and requires a stable
@@ -116,7 +118,11 @@ aliases still require honest shared footprint declarations; no path census or
 external ref CAS is implemented. `qa-execute` has five package
 slots; one package cannot duplicate or execute and consolidate simultaneously.
 `qa-consolidate` has its own single slot and requires successful reconciled
-execution for that package. Owners must declare the complete real footprint;
+execution for that package. Definitely unstarted cancelled executions remain
+recorded with END null and are excluded from the executed set. Cancellation
+alone cannot qualify consolidation. A later actual success can qualify the same
+package; any executed failure, unknown END, or unreconciled execution still holds
+consolidation. Owners must declare the complete real footprint;
 undeclared physical conflicts cannot be inferred from arbitrary payloads.
 
 For actual adoption, Work creates/classifies an event, assigning responsibility
@@ -163,6 +169,12 @@ correction duty rather than overwriting old evidence. These records remain
 cooperative assertions. Real owners and external holders must supply actual
 actions and authority separately. Results are bounded to 4 KiB and addressed
 packets to 8 KiB; larger original evidence stays with its actual custodian.
+Intake payloads and integration deltas are each bounded to 4 KiB of encoded JSON.
+Each event retains at most twelve hold assertions, including repeats. Additional
+history is refused before mutation: keep that assertion with its actual holder
+and record an honest partial report. No history is truncated, coalesced or reset.
+Sixteen maximum supported need-evidence values, including escaped supplementary
+Unicode, are bounded by encoded bytes, rather than a character-count estimate.
 
 A cross-event correction depends on every ancestor packet's event. Creating it
 reopens each completed ancestor, clears its old completion clock, and prevents
@@ -190,15 +202,35 @@ or reset by this CLI. Metadata queries charge their actual bounded state read
 and charge-journal read, without rewriting the snapshot or incrementing its
 generation; do not status-poll. Ordinary work cannot consume the final 32 MiB
 write allowance, 64 MiB logical reads, 256 creation entries, 128 KiB of the
-journal, or final 64 audit records. Admission also checks the current outstanding
-object count (at most 16), projected state space, audit visits and continuation
-cost against that headroom. These checks bound a finite bootstrap, not an
-indefinite continuation promise. Under a work-pressure hold, stop admitting work;
-use `recover`/`readback` and the original owners' `cancel`, `collect`, `classify`,
-`ack`, `reconcile`, `observe_effect`, `receipt`, `resolve`, `finish`, `hold` paths.
-They may spend the retained headroom and never refund previous charges. Torn
-journals, hard exhaustion, oversized outcomes or lost external custody remain
-explicit held partial outcomes; there is no bypass or emergency reset.
+journal, or final 64 audit records. The old 8192-byte/object and twelve-visit
+successful-closure projection is removed. **Admission promises a finite supported
+success or an accountable partial return**, not that every possible sequence of
+successful actions fits. Every candidate mutation measures the actual complete
+encoded state and leaves a conservative tail for each unfinished event, attempt,
+packet and effect without a partial report: two discovery/readback visits and
+one owner-attributed partial report. The tail bounds marker bytes, audit space,
+snapshot writes, entries, state reads and growing charge-journal reads. The
+snapshot's own imminent save is checked with the same remaining tail. New material
+that would consume it refuses before snapshot commit, retaining the old record
+and caller's original material. There is no refund, reset or per-epoch renewal.
+
+Under ordinary pressure stop unrelated intake. `inbox`, `recover` (including
+addressed packet IDs and authorized partial candidates), `readback`, `integrate`
+and bounded `send` remain available alongside original-owner settlement. Useful
+integration and downstream return can succeed; each still must fit its actual
+encoded consequences and the partial tail. If a necessary result, assertion or
+follow-up cannot fit, discover/read back the obligation and call `partial` with
+its honest reason, preserving originals outside this finite metadata store. The
+owning attempt/packet/effect remains outstanding: this is **not completion** or
+permission to release a lane, settle an effect, fake acceptance, or drop a hold.
+Do not report cutover success merely because every item has a partial report.
+
+Tail capacity covers that finite visit sequence, not arbitrary duplicate reads,
+invalid requests, contention retries, repeated successful duplicates or failed
+writes. Such work remains charged; hard exhaustion, journal corruption, missing
+authority or lost actual custody can still hold even readback/disposition. Return
+these as explicit gaps with original owners. There is no universal recovery,
+bypass or emergency reset.
 A future long-lived epoch transition requires conservation/current-consumer and
 budget authority; no automatic rollover is implemented.
 
@@ -217,11 +249,33 @@ Python worker, holding pool admission and the supported fast-policy guard throug
 actual local process creation. `fast_tier.py set` cooperates on the same stable
 `fast-tier.lock`; busy setters refuse and may be retried as refused control
 operations. Direct/noncooperating file edits are outside that fencing contract.
+At that second transaction the fixture also rechecks the current adopted actor
+and credential. Intervening revocation refuses before Popen, recording definitely
+not-started without inventing END or giving Work replacement-collector authority.
+Failure at the Popen boundary remains launching/unknown, never cancellation proof.
 It records actual numeric exit and synthetic result, not provider/role acceptance.
 There is no arbitrary argv/shell API. `owner-encounter` only records an already
 owned encounter; it does not launch or qualify that external substrate.
 Reservations carry the required all-fast request and unobserved served tier;
 actual provider argv/service-tier evidence remains a provider-adapter obligation.
+
+Select the same actual public controls explicitly for runtime and setters:
+
+```bash
+python3 tools/direct-child/execution_pool.py --routes /home/nes/ai/tools/direct-child/routes.toml status
+python3 tools/direct-child/fast_tier.py --routes /home/nes/ai/tools/direct-child/routes.toml get
+```
+
+The supported `fast_tier.py --routes ABSOLUTE_ROUTES set on|off` targets that
+routes file's adjacent policy **and stable guard**, just as this runtime does.
+Without `--routes`, the helper's existing adjacent-policy default is unchanged;
+do not assume it names a different checkout's selected controls. Real shared
+membership/counter remains at ROOT's actual shared routes, never a stale copy.
+Standalone calls remain caller-owned: supply a positive finite allowance for
+their lock/control/temp effects and check fresh capacity minus imminent growth
+against the selected leave floors before invoking them. Runtime callbacks do not
+cover independent CLI calls. This is not a whole-host resource platform or
+qualification of other launch consumers or opaque provider internals.
 
 Tests disable both SQLite module imports and fail on attempted use. The CLI
 bootstrap is also executed under that guard; the fixed worker imports only stdlib
@@ -230,7 +284,7 @@ helper, not unexamined CLI/provider/private session internals.
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 \
-COORDINATOR_TEST_ARTIFACTS=/absolute/new/projects/fixture-attempt \
+COORDINATOR_TEST_ARTIFACTS=/absolute/new/coordination/fixture-attempt \
 python3 tools/coordinator-file-runtime/test_runtime.py
 ```
 
@@ -238,6 +292,10 @@ Every run needs a new bounded artifact root and keeps failed/interrupted files.
 The suite uses synthetic actors, finite local processes, synthetic clocks,
 actual overlap and crash exits, actual CLI subprocess execution, live fixture
 pool changes, stale versions, responsibility/ACK, addressed receipts and holds.
+The suite also distinguishes encoded Unicode/history limits, pressure discovery,
+integration/return, preserved partials under real encoded-state pressure, QA
+cancellation versus later success/failure, creation-time revocation versus
+ambiguous creation, and the real public setter CLI at the fixed worker boundary.
 No real actor, provider, external ref, CI, product release or actual data cleanup
 is exercised. Check remaining material budget before repeating.
 

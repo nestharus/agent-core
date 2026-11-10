@@ -73,6 +73,9 @@ def worker(path, args, actor, ready, release):
 
 class Trial(unittest.TestCase):
     def setUp(self):
+        # Fresh coordination-only test purpose. This is an observed floor,
+        # never a reservation or a renewed allocation for previous attempts.
+        check_capacity(ARTIFACTS, 8 * 1024**2, 2048)
         self.root = ARTIFACTS / (self._testMethodName + '-' + uuid.uuid4().hex[:8])
         self.root.mkdir(mode=0o700)
         self.routes = self.root / 'routes.toml'
@@ -86,6 +89,19 @@ class Trial(unittest.TestCase):
         for actor, role in [('branch', 'Branch'), ('reviews', 'Reviews'), ('qa', 'QA')]:
             call(self.rt, 'invite', target=actor, role=role, invitation_token=TOKENS[actor], basis='synthetic fixture invitation')
             call(self.rt, 'adopt', actor, basis='synthetic self-adoption; no real owner represented')
+
+    def public_control(self, helper, *args):
+        # Standalone calls have their own positive 128KiB/16-entry allowance
+        # inside this fixture's allocation; no Runtime callback is assumed.
+        check_capacity(self.root, 131072, 16)
+        command = [sys.executable, '-B', str(Path(__file__).parents[1] / 'direct-child' / helper),
+                   '--routes', str(self.routes), *args]
+        p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                             env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+        print('ORIGINAL_CONTROL_PROCESS', p.pid, flush=True)
+        out, err = p.communicate(timeout=5)
+        print('CONTROL_END', p.pid, p.returncode, flush=True)
+        return p.returncode, out, err
 
     def ingest(self, event):
         return call(self.rt, 'ingest', event=event, payload={'point': event}, producer='fixture', source_basis='independent test intent')
@@ -415,6 +431,192 @@ class Trial(unittest.TestCase):
             with self.assertRaisesRegex(Held, 'unsupported operation'):
                 call(self.rt, op)
 
+    def test_c04_encoded_unicode_history_and_accountable_partial(self):
+        self.ingest('unicode')
+        source = self.raw()['events']['unicode']['source_hash']
+        a = call(self.rt, 'reserve', attempt='low', event='unicode', phase='classifier', resources={}, basis={})
+        start = call(self.rt, 'start', attempt='low', collector=a['collector'], substrate='fixture', evidence='synthetic LOW')
+        call(self.rt, 'collect', attempt='low', collector=a['collector'], launch_id=start['launch_id'], end=0,
+             result={'event_hash': source, 'classification': 'known'}, evidence='synthetic original collected')
+        needs = ['n' + str(i) for i in range(16)]
+        call(self.rt, 'classify', event='unicode', attempt='low', collector=a['collector'], classification='known', owner='work', needs=needs)
+        call(self.rt, 'reconcile', attempt='low', collector=a['collector'], evidence='no effects')
+        call(self.rt, 'ack', event='unicode')
+        from runtime import MAX_TEXT, MAX_HISTORY
+        evidence = '\U0001f600' * 42
+        self.assertLessEqual(len(encode(evidence)), MAX_TEXT)
+        with self.assertRaisesRegex(Held, 'encoded JSON bytes'):
+            call(self.rt, 'resolve', event='unicode', need='n0', evidence='\U0001f600' * 43)
+        self.assertEqual(self.raw()['events']['unicode']['resolutions'], {})
+        for need in needs:
+            call(self.rt, 'resolve', event='unicode', need=need, evidence=evidence)
+        e = self.raw()['events']['unicode']
+        self.assertEqual(list(e['resolutions'].values()), [evidence] * 16)
+        self.assertEqual([h['evidence'] for h in e['resolution_history']], [evidence] * 16)
+        # No replacement or silent history drop, including same-value repeats.
+        for i in range(MAX_HISTORY):
+            call(self.rt, 'hold', event='unicode', name='resource', enabled=True, evidence='observed-' + str(i))
+        before = self.raw()['events']['unicode']['hold_evidence']
+        with self.assertRaisesRegex(Held, 'hold history'):
+            call(self.rt, 'hold', event='unicode', name='resource', enabled=False, evidence='additional assertion stays outside')
+        result = call(self.rt, 'partial', kind='event', id='unicode', evidence='hold history full; actual pending release retained outside, resource hold remains')
+        self.assertFalse(result['completed'])
+        self.assertEqual(self.raw()['events']['unicode']['hold_evidence'], before)
+        self.assertIn('resource', self.raw()['events']['unicode']['holds'])
+        self.assertIsNone(self.raw()['events']['unicode']['processed_at'])
+        with self.assertRaisesRegex(Held, 'outside actual'):
+            call(self.rt, 'partial', 'qa', kind='event', id='unicode', evidence='foreign substitution')
+        with self.assertRaisesRegex(Held, 'conflict'):
+            call(self.rt, 'partial', kind='event', id='unicode', evidence='pretend complete')
+
+    def test_c04_pressure_discovery_integration_return_and_partial_tail(self):
+        self.classify('pressure')
+        a = self.reserve('pressure')
+        self.collect('a', a['collector'])
+        call(self.rt, 'send', packet='pending', event='pressure', recipient='qa', payload={'actual': 'unreceived'})
+        with self.rt.files.lock():
+            self.rt.files.continuation = True
+            latest = self.rt.files.charge()
+            self.rt.files.charge(bytes=LIMITS['bytes'] - HEADROOM['bytes'] - latest['bytes'],
+                                 reads=LIMITS['reads'] - HEADROOM['reads'] - latest['reads'])
+            self.rt.files.continuation = False
+        with self.assertRaisesRegex(Held, 'pressure'):
+            self.ingest('unsupported-new-intake')
+        recovered = call(self.rt, 'recover', 'qa')
+        self.assertEqual(recovered['addressed'], ['pending'])
+        self.assertEqual(call(self.rt, 'inbox', 'qa')['packets'][0]['id'], 'pending')
+        call(self.rt, 'integrate', attempt='a', collector=a['collector'], writes={'point:pressure': {'value': '\U0001f600'}})
+        call(self.rt, 'send', packet='necessary-return', event='pressure', recipient='branch', payload={'result': 'integrated'})
+        for actor, packet in [('qa', 'pending'), ('branch', 'necessary-return')]:
+            self.assertEqual(call(self.rt, 'inbox', actor)['packets'][0]['id'], packet)
+            for stage in ('picked-up', 'processed', 'settled'):
+                call(self.rt, 'receipt', actor, packet=packet, stage=stage, evidence='actual fixture ' + stage)
+        call(self.rt, 'reconcile', attempt='a', collector=a['collector'], evidence='no effects')
+        call(self.rt, 'resolve', event='pressure', need='outcome', evidence='necessary return accepted by synthetic recipient')
+        call(self.rt, 'finish', event='pressure')
+        self.assertTrue(self.raw()['events']['pressure']['finished'])
+        self.assertNotIn('unsupported-new-intake', self.raw()['events'])
+        # A failed/unknown original is reportable, never reconciled by partial.
+        # Use a separate unclassified admitted event to distinguish an honest
+        # partial from fabricated classification/ACK/whole processing.
+        call(self.rt, 'partial', kind='event', id='pressure', evidence='external acceptance remains synthetic only')
+        self.assertGreater(json.loads((self.path / 'budget.jsonl').read_text().splitlines()[-1])['bytes'],
+                           LIMITS['bytes'] - HEADROOM['bytes'])
+
+    def test_c04_partial_reservation_survives_encoded_material_pressure(self):
+        self.ingest('one')
+        self.ingest('two')
+        from runtime import MAX_STATE
+        current = self.raw()
+        # Actual published cap is exercised by a candidate whose encoded body
+        # fits the command cap but would consume reserved dispositions.
+        # Many bounded records, no filler or direct state fabrication.
+        admitted = ['one', 'two']
+        for i in range(64):
+            name = 'bounded-' + str(i)
+            try:
+                call(self.rt, 'ingest', event=name, payload='x' * 4092, producer='fixture', source_basis='finite encoded material')
+            except Held as exc:
+                self.assertIn('pressure', str(exc))
+                break
+            admitted.append(name)
+        else:
+            self.fail('finite admission must refuse before reserved dispositions are lost')
+        self.assertNotIn(name, self.raw()['events'])
+        # Partial all admitted records using recovered IDs, preserving sources,
+        # ACK false, holds and all unfinished facts under the real cap.
+        ids = [p['id'] for p in call(self.rt, 'recover')['partial_candidates'] if p['kind'] == 'event']
+        self.assertCountEqual(ids, admitted)
+        for event in ids:
+            call(self.rt, 'readback', kind='event', id=event)
+            call(self.rt, 'partial', kind='event', id=event, evidence='capacity pressure; original retained, classification and all downstream work unfinished')
+        state = self.raw()
+        self.assertLess(len(encode(state)), MAX_STATE)
+        self.assertTrue(all(e.get('partial') and not e['ack'] and not e['finished'] and e['holds'] for e in state['events'].values()))
+
+    def test_c04_cancelled_qa_allows_later_success_without_erasing_failure(self):
+        self.classify('qa-cancel', 'qa')
+        call(self.rt, 'package', package='same', event='qa-cancel', scope='same genuine package', basis='synthetic')
+        def reserve(attempt, phase='qa-execute'):
+            return call(self.rt, 'reserve', 'qa', attempt=attempt, event='qa-cancel', phase=phase, package='same', resources={}, basis={})
+        cancelled = reserve('cancelled')
+        before = _pool.Pool(self.routes).status()['turn']
+        call(self.rt, 'cancel', 'qa', attempt='cancelled', collector=cancelled['collector'], evidence='definitely never created')
+        self.assertEqual(_pool.Pool(self.routes).status()['turn'], before)
+        with self.assertRaisesRegex(Held, 'successful collected'):
+            reserve('too-early', 'qa-consolidate')
+        success = reserve('later')
+        self.collect('later', success['collector'], 'qa')
+        call(self.rt, 'reconcile', 'qa', attempt='later', collector=success['collector'], evidence='actual synthetic success, no effects')
+        consolidation = reserve('consolidation', 'qa-consolidate')
+        call(self.rt, 'cancel', 'qa', attempt='consolidation', collector=consolidation['collector'], evidence='test leaves consolidation definitely unstarted')
+        failed = reserve('real-failure')
+        self.collect('real-failure', failed['collector'], 'qa', end=7)
+        call(self.rt, 'reconcile', 'qa', attempt='real-failure', collector=failed['collector'], evidence='actual failure retained')
+        later = reserve('another-success')
+        self.collect('another-success', later['collector'], 'qa')
+        call(self.rt, 'reconcile', 'qa', attempt='another-success', collector=later['collector'], evidence='later success does not erase failure')
+        with self.assertRaisesRegex(Held, 'failures/unknowns'):
+            reserve('failure-still-matters', 'qa-consolidate')
+        self.assertIsNone(self.raw()['attempts']['cancelled']['end'])
+        self.assertEqual(self.raw()['attempts']['real-failure']['end'], 7)
+
+    def test_c04_revocation_at_creation_and_ambiguous_popen_remain_distinct(self):
+        from coordinator import fixture
+        self.classify('authority', 'qa')
+        call(self.rt, 'package', package='authority', event='authority', scope='fixture', basis='synthetic')
+        a = call(self.rt, 'reserve', 'qa', attempt='revoked', event='authority', phase='qa-execute', package='authority', resources={}, basis={})
+        original = self.rt.call
+        def intervene(op, *args, **kwargs):
+            result = original(op, *args, **kwargs)
+            if op == 'start':
+                call(Runtime(self.path), 'revoke', target='qa', reason='revoked after start before creation')
+            return result
+        with patch.object(self.rt, 'call', side_effect=intervene), patch('coordinator.subprocess.Popen') as popen:
+            with self.assertRaisesRegex(Held, 'revoked'):
+                fixture(self.rt, 'qa', TOKENS['qa'], {'attempt': 'revoked', 'collector': a['collector']})
+            popen.assert_not_called()
+        state = self.raw()['attempts']['revoked']
+        self.assertEqual(state['state'], 'not-started')
+        self.assertIsNone(state['end'])
+        self.assertFalse(state['reconciled'])
+        with self.assertRaisesRegex(Held, 'revoked'):
+            call(self.rt, 'cancel', 'qa', attempt='revoked', collector=a['collector'], evidence='no successor authority')
+        with self.assertRaisesRegex(Held, 'original collector'):
+            call(self.rt, 'cancel', attempt='revoked', collector=a['collector'], evidence='Work cannot borrow custody')
+        self.classify('ambiguous')
+        b = self.reserve('ambiguous', 'unknown')
+        with patch('coordinator.subprocess.Popen', side_effect=OSError('unknown original creation outcome')):
+            with self.assertRaisesRegex(_pool.PoolError, 'unknown original creation outcome'):
+                fixture(self.rt, 'work', TOKENS['work'], {'attempt': 'unknown', 'collector': b['collector']})
+        self.assertEqual(self.raw()['attempts']['unknown']['state'], 'launching')
+        with self.assertRaisesRegex(Held, 'uncertain custody'):
+            call(self.rt, 'cancel', attempt='unknown', collector=b['collector'], evidence='cannot infer never started')
+
+    def test_c04_real_public_cli_paths_guard_actual_fixture_creation(self):
+        from coordinator import fixture
+        self.assertEqual(self.public_control('execution_pool.py', 'set', '.codex4')[0], 0)
+        self.assertEqual(self.public_control('fast_tier.py', 'get')[:2], (0, 'true\n'))
+        self.classify('public')
+        a = self.reserve('public')
+        original = subprocess.Popen
+        control_ends = []
+        def create_child(*args, **kwargs):
+            # Use the real CLI with its --routes selector, no POLICY patch.
+            with patch('subprocess.Popen', original):
+                control_ends.append(self.public_control('fast_tier.py', 'set', 'off')[0])
+            self.assertEqual((self.root / 'fast-tier').read_text(), 'true\n')
+            child = original(*args, **kwargs)
+            print('ORIGINAL_FIXED_WORKER', child.pid, flush=True)
+            return child
+        with patch('coordinator.subprocess.Popen', side_effect=create_child):
+            result = fixture(self.rt, 'work', TOKENS['work'], {'attempt': 'a', 'collector': a['collector']})
+        self.assertEqual(control_ends, [2])
+        self.assertEqual(result['end'], 0)
+        self.assertEqual(self.public_control('fast_tier.py', 'set', 'off')[:2], (0, 'false\n'))
+        self.assertEqual(self.public_control('fast_tier.py', 'set', 'on')[:2], (0, 'true\n'))
+        self.assertEqual(self.raw()['attempts']['a']['pool']['profile'], '.codex4')
+
     def test_c03_lost_reserve_start_and_collection_replies_recover_original_operands(self):
         self.classify('lost')
         def lose_reply(op, **fields):
@@ -705,5 +907,6 @@ class Trial(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    check_capacity(ARTIFACTS.parent, 8 * 1024**2, 2048)
     ARTIFACTS.mkdir(mode=0o700, parents=True, exist_ok=False)
     unittest.main(verbosity=2)

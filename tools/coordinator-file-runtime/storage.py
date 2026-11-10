@@ -70,6 +70,7 @@ class Files:
             raise Held('state directory must be own 0700')
         self.clock, self.fault = clock, fault
         self.continuation = False
+        self.future = {}
 
     def sync(self):
         fd = os.open(self.path, os.O_DIRECTORY | os.O_RDONLY | os.O_NOFOLLOW)
@@ -104,7 +105,7 @@ class Files:
                 'bytes': previous['bytes'] + bytes + 1024,
                 'reads': previous['reads'] + reads + len(raw),
                 'entries': previous['entries'] + entries}
-        if any(body[k] > LIMITS[k] for k in LIMITS):
+        if any(body[k] + (future or {}).get(k, 0) > LIMITS[k] for k in LIMITS):
             raise Held('cumulative budget exhausted; preserve ownership, no refund')
         if not self.continuation and any(body[k] + (future or {}).get(k, 0) > LIMITS[k] - HEADROOM[k] for k in LIMITS):
             raise Held('work pressure hold; reserved original-owner readback/settlement only')
@@ -141,7 +142,7 @@ class Files:
         raw = encode({'state': state, 'hash': digest(state)})
         if len(raw) > MAX_STATE:
             raise Held('finite state full; preserve current state')
-        self.charge(bytes=len(raw), entries=1)
+        self.charge(bytes=len(raw), entries=1, future=self.future)
         check_capacity(self.path, len(raw), 1)
         name = self.path / ('.pending-' + uuid.uuid4().hex)
         fd = os.open(name, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
@@ -158,6 +159,7 @@ class Files:
     def transaction(self, *, readonly=False, continuation=False):
         with self.lock():
             self.continuation = continuation
+            self.future = {}
             try:
                 size = os.lstat(self.path / 'state.json').st_size
                 if size > MAX_STATE:
@@ -176,3 +178,4 @@ class Files:
                     self.save(state)
             finally:
                 self.continuation = False
+                self.future = {}
