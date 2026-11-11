@@ -27,6 +27,7 @@ PHASES = {'classifier', 'known', 'discovery', 'qa-execute', 'qa-consolidate', 'r
 ALLOWED_PROFILES = {'.codex2', '.codex3', '.codex4', '.codex5'}
 MAX_TEXT = 512  # Encoded JSON bytes, including quotes/escapes; never characters.
 MAX_HISTORY = 12
+FRESH_REVIEW = 'fresh-current-component-v1'
 COLLECTIONS = {'attempt': 'attempts', 'event': 'events', 'packet': 'packets', 'effect': 'effects',
                'branch': 'branches', 'review': 'reviews', 'package': 'packages'}
 
@@ -299,10 +300,13 @@ class Runtime:
                                  'incarnation': text(incarnation), 'root': text(root), 'basis': text(basis)}
         return {'branch': branch, 'prospective': True}
 
-    def op_review(self, s, actor, review, component, branch, opaque_contract, context, history, predecessor=None):
+    def op_review(self, s, actor, review, component, branch, opaque_contract, context, history, predecessor=None,
+                  execution_contract=None):
         self.role(s, actor, {'Reviews'})
         ident(review)
         require(review not in s['reviews'] and branch in s['branches'], 'new review and bound branch required')
+        require(execution_contract is None or (execution_contract == FRESH_REVIEW and opaque_contract == 'gpt-xhigh'),
+                'unsupported explicit review execution contract or opaque selector')
         if predecessor is not None:
             require(predecessor in s['reviews'], 'unknown predecessor; no invented continuity')
             prior = s['reviews'][predecessor]
@@ -311,6 +315,8 @@ class Runtime:
         s['reviews'][review] = {'owner': actor, 'component': text(component), 'branch': branch,
                                 'opaque_contract': text(opaque_contract), 'context': text(context),
                                 'history': text(history), 'predecessor': predecessor, 'calls': []}
+        if execution_contract is not None:
+            s['reviews'][review]['execution_contract'] = execution_contract
         return {'review': review, 'encounter': 'new', 'exact_session_resume': 'unsupported'}
 
     def op_reserve(self, s, actor, attempt, event, phase, resources, basis, point=None, package=None, branch=None, review=None):

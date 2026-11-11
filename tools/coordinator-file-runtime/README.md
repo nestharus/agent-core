@@ -2,16 +2,20 @@
 
 This runnable Python 3.11+ CLI/library admits finite new Work, Branch, Reviews
 and QA responsibilities without a database or legacy-board adapter. It is a
-candidate for owner adoption, not a deployed four-role cutover. It never opens
+candidate for scoped role operation, not a demonstrated complete four-role cutover. It never opens
 old runtime state. No migration, release, arbitrary command execution,
 exact-session resume or retained-data deletion is supported. A finite Codex direct
-entry is described below; real provider and operating qualification remain owed.
+entry is described below; useful current Branch/Reviews operation still needs
+its own grant and actual evidence. Earlier LOW and fixed software-QA encounters
+retain their finite scope, described below.
 
 The selected failure model is cooperative same-user Linux processes, local
 filesystems with flock/rename/fsync, and process interruption. Credentials
 separate cooperative actors; they do not authenticate a human/session against a
-hostile same-user writer. The person operating each real owner must perform its
-own adoption and supply genuine evidence. Synthetic identities in tests are not
+hostile same-user writer. Each actual role program must perform its own adoption
+and supply genuine evidence. Task-local actors can do new work; participation by
+older persistent owners is not a completion gate. Their actual duties,
+credentials, originals and uncertain effects remain theirs. Synthetic identities in tests are not
 real role acceptance.
 
 ## Start and self-adopt
@@ -23,8 +27,11 @@ directories and the state directory is own 0700. A suggested prospective path is
 `/home/nes/.local/state/coordinator-file-runtime/cutover-20261110` with an
 explicitly prepared parent. This implementation has not initialized that path.
 
-The non-stdlib runtime dependencies are the public siblings
-`../direct-child/execution_pool.py` and `../direct-child/fast_tier.py`. Supply the admitted public routes file
+The basic non-stdlib dependencies are the public siblings
+`../direct-child/execution_pool.py` and `../direct-child/fast_tier.py`.
+The explicitly selected fresh Reviews path also uses the existing public
+`dispatch.py` opaque capability and its `profile_lease.py` import. It does not
+invoke the dispatcher or the legacy coordinator. Supply the admitted public routes file
 explicitly. Its adjacent `fast-tier` file must contain exactly `true` or
 `true\n`; missing, linked, corrupt or disabled fast policy holds admission under
 the current all-fast decision. No private account file is consulted. The
@@ -59,7 +66,7 @@ processing and settlement, and return results on its own assigned events. Work
 must classify and assign its known-repair event before Root can reserve known
 point work. It cannot invite actors, classify/ACK, create QA packages, administer
 Work, bind Branch or Reviews, take discovery/QA/review lanes, or borrow another
-collector. Use the genuine existing Root identity; synthetic tests confer no
+collector. Use the actual assigned implementation holder's identity; synthetic tests confer no
 real adoption or authority. Failure results and unresolved original custody stay
 with that original holder.
 
@@ -103,7 +110,7 @@ opaque and are never followed to source, provider, private history or old stores
 | `classify` | Work: `event,attempt,collector,classification,owner,needs`. Collected successful fresh `luna-low` classifier result must equal `{event_hash:SOURCE_HASH,classification:KIND}`. Kinds: `known,new,unresolved,control,coalesced`. Current adopted owner and 1..16 explicit needs become durable together with LOW provenance. Provenance is supplied evidence, not provider attestation. |
 | `ack` | Work: `event`; refuses until classification **and** responsibility are durable. Lost ACK can be retried without repeating classification. Unresolved/control/coalesced retain their needs and cannot enter ordinary known/discovery work. |
 | `branch` | Branch: `branch,repository,ref,incarnation,root,basis`. Immutable prospective association; a new incarnation needs a new ID. These are owner-supplied bindings, not Git mutations or independent verification of Root acceptance. |
-| `review` | Reviews: `review,component,branch,opaque_contract,context,history`, optional `predecessor`. Preserves separate component/run/history references and calls; successor is explicitly a **new** encounter. Does not resolve opaque selectors or manufacture a resumable session. |
+| `review` | Reviews: `review,component,branch,opaque_contract,context,history`, optional `predecessor,execution_contract`. Preserves separate component/run/history references and calls; successor is explicitly a **new** encounter. `execution_contract:"fresh-current-component-v1"` explicitly selects the bounded fresh provider path for `opaque_contract:"gpt-xhigh"`. Omitted selection remains record-only and refused by `run-provider`. Does not resolve opaque selectors or manufacture a resumable session. |
 | `package` | Work: `package,event,scope,basis`; admits a classified known event owned by QA. QA reserves this exact event/package. |
 | `integrate` | `attempt,collector,writes`. Collected numeric-zero attempt, still-owned attempt, complete current version basis and admitted write footprint required. Commits only coordinator deltas/generations; unrelated resources remain unchanged. External canonical files/Git refs are **not** mutated or certified current by this operation. |
 | `effect`, `observe_effect` | Intent: `effect,attempt,collector,kind,intent` while launching; kinds `publication,push,delivery`. Original owner later records `effect,outcome,evidence`, outcome `applied` or `not-applied`. Unknown remains intent and prevents reconciliation. These commands do not perform external effects. |
@@ -283,10 +290,67 @@ these in-memory bounds do not measure opaque provider storage or tools.
 The runtime-specific entry supports fresh `luna-low` from the frozen static
 `routes.explore` Codex model with supported low effort, and technical `sol-xhigh`
 from `routes.refine` with supported xhigh effort. It requests fast and ephemeral
-execution. Served tier is unobserved. Opaque continuing Reviews is explicitly
-unsupported here and held before task creation; use its separately qualified
-owner contract without resolving or substituting its selector. A required
-unsupported job remains unfinished, never silently routed through this entry.
+execution. Served tier is unobserved. Explicit fresh current-component Reviews
+can use the opaque contract below. Legacy/unselected Reviews and historical
+session continuation remain unsupported and held before task creation. A required
+unsupported job stays unfinished, never silently routed through technical work.
+
+### Fresh current-component Reviews
+
+Decision16 selects `fresh-current-component-v1`: each call is a fresh ephemeral
+encounter requesting opaque `gpt-xhigh`, with explicit attributed continuity.
+This does not select the separate protected continuing-review composition or
+historical private-session resume. After actual self-adoption, the Reviews
+program creates a new review record with these fields (substitute the actual
+current component, Branch binding and authored context/history references):
+
+```json
+{"review":"current-review","component":"runtime-provider","branch":"current-branch","opaque_contract":"gpt-xhigh","context":"current-material-and-question","history":"authored-prior-evidence-reference","execution_contract":"fresh-current-component-v1"}
+```
+
+An optional `predecessor` preserves the existing same-owner/component/branch/
+opaque-contract checks. It associates evidence without resuming that session or
+changing the predecessor's execution selection. Unknown execution selections or
+another selector cannot opt into this contract. Older records remain unchanged.
+
+Work must first classify and ACK an event assigned to the actual Reviews actor.
+That actor reserves `phase:"review"`, its exact `review` ID, a write footprint
+for `review:ID`, its actual branch footprint, and all current resource versions.
+It calls the existing `run-provider` entry using its original reservation and
+collector. No extra allocation, fallback, account search or lifetime renewal is
+performed. The public `open_opaque_execution`/`prepare` boundary consumes the
+already admitted frozen control bytes and original reserved profile; only
+ordinary provider internals prepare execution. Neither the consumer nor its
+report resolves or attests the underlying model/provider/effort binding. A
+missing or incompatible capability refuses before any preflight/task process.
+
+The task receives a JSON envelope with `review_execution` and `task` fields.
+`task` is the caller's sanitized prompt string. `review_execution` carries the
+component, opaque selector, context/history, complete Branch association and
+incarnation, predecessor context/history, prior call IDs, attempt/event and
+resource footprint/version basis. These are explicit references, never followed
+to private stores. The caller supplies sufficient admitted current material and
+authored history in its task; a reference is not proof of reading or review.
+The complete envelope must fit 16 KiB. Declared secrets in association fields
+refuse execution rather than changing those references. The provider report
+retains the opaque request and association digest, fresh status and lack of exact
+session resume; original results/calls retain their separate custody.
+
+All existing pool/fast/current-authority creation guards, effective MCP checks,
+secret-aware bounded capture, numeric-END and lost-reply rules apply. This path
+inherits the cooperative `codex-direct` trust model and its approval/sandbox
+bypass; it supplies no enforced read-only, tool/network protection, independent
+semantic judgment or actual operating qualification. The concrete grant must
+bound the real task and effects. An ordinary review remains observation-only;
+its result does not authorize source correction or integration.
+
+The existing Branch path is unchanged: bind a new actual branch/incarnation,
+assign a known event, reserve `point:ID` and write `branch:ID` with current
+versions, then use the technical entry under a concrete grant. Original owners
+perform and verify external Git actions separately; `reconcile` only records
+their commit/signature/push/readback evidence. Disjoint known work may overlap a
+review; shared writer footprints still conflict. Useful artifacts, independent
+review, addressed result receipts and current-material disposition remain owed.
 
 Effective MCP discovery is bounded, followed by individual disable flags plus
 the injected docs disable/transport flags and an exact all-disabled readback.
@@ -322,8 +386,9 @@ acceptance. A complete final can accompany a failed numeric END. Publication
 failure preserves launch uncertainty and original custody; it never triggers a
 raw output fallback. CLI stdout publishes only the ordinary bounded runtime
 response, not provider output. Provider/platform internals, SQL independence,
-real LOW/model response, service tier and genuine four-role/Root acceptance
-remain unqualified until the successor collects their actual encounters.
+actual response/service tier for a new call and complete four-role operation
+remain unqualified by these tests. Earlier real encounters do not qualify a new
+candidate or attest opaque provider internals.
 
 `run-fixture` accepts only `{attempt,collector}` and launches the bundled finite
 Python worker, holding pool admission and the supported fast-policy guard through
@@ -372,6 +437,11 @@ python3 tools/coordinator-file-runtime/test_runtime.py
 PYTHONDONTWRITEBYTECODE=1 \
 COORDINATOR_TEST_ARTIFACTS=/absolute/new/provider-fixture-attempt \
 python3 tools/coordinator-file-runtime/test_provider.py
+
+# Focused fresh Reviews/public opaque-boundary tests, separate retained root:
+PYTHONDONTWRITEBYTECODE=1 \
+COORDINATOR_TEST_ARTIFACTS=/absolute/new/review-fixture-attempt \
+python3 tools/coordinator-file-runtime/test_review_provider.py
 ```
 
 Every run needs a new bounded artifact root and keeps failed/interrupted files.
@@ -385,11 +455,20 @@ ambiguous creation, and the real public setter CLI at the fixed worker boundary.
 No real actor, provider, external ref, CI, product release or actual data cleanup
 is exercised. Check remaining material budget before repeating.
 
+The earlier published basis 5729edace6ee99f92c496edc40408a3be124945e has reported
+real Work LOW encounters and genuine independent acceptance of the 52-case fixed
+software-QA5 encounter. Both QA packets settled and Work completed its own grant
+event at 1794373595.2076478, with all eight holds retained. That evidence and the
+independent 71-case qualification remain reusable at their actual prior scope;
+they are not a run against this changed candidate. No automatic QA5 repeat or
+old-owner acknowledgment gate follows.
+
 Required next encounters: independent consequence observation of this candidate;
-real self-adoption and addressed packet/result acceptance by all four owners;
-qualification of any indispensable provider/launcher path with SQL unavailable;
-actual LOW provenance, opaque Reviews continuity, Branch commit/push/readback and
-QA acceptance; then current customer-risk disposition by the real delivery owner.
+then a concrete bounded original-controlled operating grant, actual task-local
+role self-adoption and useful Branch/independent Reviews work through the public
+pool, with actual outputs, original collection, addressed receipts and current
+material disposition. Root owns the final scoped risk/completion decision.
+Fixed-process tests establish neither actual model execution nor review quality.
 External canonical publication, automatic model scheduling, safe resume after
 owner exit, historical import, physical retention reclamation and automatic
 budget rollover remain unsupported. Their needs stay explicitly owned/offline.

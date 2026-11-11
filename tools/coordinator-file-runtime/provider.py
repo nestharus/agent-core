@@ -4,6 +4,7 @@ The original caller owns all Popen objects. Only sanitized, bounded results are
 published to runtime state. Opaque provider internals need separate qualification.
 """
 import json
+import importlib.util
 import os
 from pathlib import Path
 import re
@@ -14,8 +15,8 @@ import subprocess
 import time
 import tomllib
 
-from runtime import ALLOWED_PROFILES, _fast, _pool, require
-from storage import Held, encode
+from runtime import ALLOWED_PROFILES, FRESH_REVIEW, _fast, _pool, require
+from storage import Held, digest, encode
 
 
 class Redactor:
@@ -144,6 +145,44 @@ def mcp_rows(raw):
     return result
 
 
+def opaque_task_flags(routes, raw, profile, flags):
+    """Consume the existing public opaque capability, without inspecting it.
+
+    Only provider internals prepare the binding. No dispatch, allocation,
+    account query, historical context or continuing composition is selected.
+    The reader supplies the already admitted frozen public control bytes.
+    """
+    path = Path(__file__).resolve().parents[1] / 'direct-child' / 'dispatch.py'
+    try:
+        spec = importlib.util.spec_from_file_location('file_runtime_opaque_entry', path)
+        entry = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(entry)
+    except (ImportError, OSError) as exc:
+        raise Held('public opaque entry unavailable; no substitution') from exc
+    try:
+        execution = entry.open_opaque_execution(routes, 'gpt-xhigh', profile,
+                                                config_reader=lambda path, maximum: raw)
+        return execution.prepare(['codex', *flags], profile)[1:]
+    except entry.Refusal as exc:
+        raise Held('public opaque capability refused; no substitution') from exc
+
+
+def review_association(state, attempt, attempt_id):
+    """Explicit references for a fresh call, never historical-session recovery."""
+    review = state['reviews'][attempt['review']]
+    require(review.get('execution_contract') == FRESH_REVIEW and review['opaque_contract'] == 'gpt-xhigh',
+            'opaque Reviews provider unsupported; existing owner contract retained')
+    prior = state['reviews'][review['predecessor']] if review['predecessor'] is not None else None
+    return {'execution_contract': FRESH_REVIEW, 'review': attempt['review'],
+            **{k: review[k] for k in ('component', 'opaque_contract', 'context', 'history')},
+            'branch': {'id': review['branch'], **state['branches'][review['branch']]},
+            'predecessor': None if prior is None else {'review': review['predecessor'],
+                **{k: prior[k] for k in ('component', 'branch', 'opaque_contract', 'context', 'history')}},
+            'prior_calls': [call for call in review['calls'] if call != attempt_id],
+            'attempt': attempt_id, 'event': attempt['event'],
+            'resources': attempt['resources'], 'basis': attempt['basis']}
+
+
 class Codex:
     """Production command is fixed. A library-only public process seam tests it.
 
@@ -250,13 +289,26 @@ def run_provider(rt, actor, credential, request, *, adapter=None):
             a = rt.attempt(state, actor, attempt, collector)
             raw, _, _ = rt.pool(state).read()
             rt.pool(state).assert_control(raw, state['pool_binding'])
-            config = tomllib.loads(raw.decode())
-            route = {'luna-low': ('explore', 'low'), 'sol-xhigh': ('refine', 'xhigh')}.get(a['selector'])
-            require(route is not None, 'opaque Reviews provider unsupported; existing owner contract retained')
-            binding = config['routes'][route[0]]
-            model, effort = binding['model'], route[1]
-            require(binding['provider'] == 'codex' and re.fullmatch('[A-Za-z0-9._-]{1,80}', model)
-                    and effort in config['providers']['codex']['efforts'], 'unsupported static provider binding')
+            task_flags = ['exec', '--dangerously-bypass-approvals-and-sandbox', '--ephemeral', '--json']
+            if a['selector'] == 'opaque-reviews':
+                association = review_association(state, a, attempt)
+                require(Redactor(values).whole(encode(association)) == encode(association),
+                        'secret in review association; preserve exact references outside execution')
+                prompt = encode({'review_execution': association, 'task': prompt.decode()})
+                require(len(prompt) <= 16384, 'review envelope bound 16KiB')
+                task_flags = opaque_task_flags(state['pool_routes'], raw, a['pool']['profile'],
+                                               task_flags + ['--model', 'gpt-xhigh'])
+                report['review_execution'] = {'contract': FRESH_REVIEW, 'selector': 'gpt-xhigh',
+                    'association_sha256': digest(association), 'fresh': True, 'exact_session_resume': False}
+            else:
+                config = tomllib.loads(raw.decode())
+                route = {'luna-low': ('explore', 'low'), 'sol-xhigh': ('refine', 'xhigh')}.get(a['selector'])
+                require(route is not None, 'unsupported provider selector; no substitution')
+                binding = config['routes'][route[0]]
+                model, effort = binding['model'], route[1]
+                require(binding['provider'] == 'codex' and re.fullmatch('[A-Za-z0-9._-]{1,80}', model)
+                        and effort in config['providers']['codex']['efforts'], 'unsupported static provider binding')
+                task_flags += ['-m', model, '-c', 'model_reasoning_effort=' + json.dumps(effort)]
 
         def invoke(stage, flags, payload=b''):
             adapter.stage = stage
@@ -275,8 +327,7 @@ def run_provider(rt, actor, credential, request, *, adapter=None):
         verified, fact = invoke('mcp-disabled', flags + ['mcp', 'list', '--json'])
         require(fact['end'] == 0 and fact['complete'] and mcp_rows(verified) == dict.fromkeys(names, False),
                 'effective MCP all-disabled readback failed')
-        out, fact = invoke('task', ['exec', '--dangerously-bypass-approvals-and-sandbox', '--ephemeral', '--json',
-                           '-m', model, '-c', 'model_reasoning_effort=' + json.dumps(effort),
+        out, fact = invoke('task', [*task_flags,
                            *_fast.flags(True), *flags, '-C', request['cwd'], '--color', 'never', '-'], prompt)
         result = {'provider_incomplete': True}
         try:
