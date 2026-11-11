@@ -224,7 +224,7 @@ operation. There is no power-loss, distributed, hostile-writer or multi-file
 external-publication atomicity claim.
 
 A hash-chained append-only budget journal precharges state/control reads and
-state writes/temporary entries. Limits are cumulative 128 MiB bytes, 128 MiB
+state writes/temporary entries. Limits are cumulative 128 MiB bytes, 256 MiB
 logical read reservations, 1024 entry reservations, 256 KiB state, 512 KiB budget
 journal. Failed/refused operations retain prior charges; partial budget records
 hold rather than truncate/reset. Init control reads, public helper code loading,
@@ -245,6 +245,18 @@ snapshot writes, entries, state reads and growing charge-journal reads. The
 snapshot's own imminent save is checked with the same remaining tail. New material
 that would consume it refuses before snapshot commit, retaining the old record
 and caller's original material. There is no refund, reset or per-epoch renewal.
+
+The explicit finite source capacity amendment raises only cumulative logical
+reads from 128 to 256 MiB. The unchanged 64 MiB continuation reserve leaves a
+192 MiB ordinary read ceiling; write, entry, state, journal, audit and OS limits
+and admission guards remain unchanged. Upgrade code against the same retained
+state directory: the existing snapshot, hash-chained journal and cumulative
+charges, including prior charges from failed work, stay byte-for-byte unchanged
+at upgrade. Subsequent admitted calls append their genuine new charges. This
+capacity increase grants no ledger reset, refund, reclassification, truncation,
+new-directory rollover or automatic renewal. Growing journal reads remain
+charged, and the finite ordinary and hard guards still fail closed; the larger
+ceiling does not guarantee that all remaining work fits.
 
 Under ordinary pressure stop unrelated intake. `inbox`, `recover` (including
 addressed packet IDs and authorized partial candidates), `readback`, `integrate`

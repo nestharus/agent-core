@@ -372,6 +372,73 @@ class Trial(unittest.TestCase):
             self.ingest('new'); call(self.rt, 'ack', event='new')
         self.assertGreater(len((self.path / 'budget.jsonl').read_bytes()), len(before))
 
+    def test_read_ceiling_upgrade_preserves_ledger_and_finite_continuation(self):
+        # Decision22: the same lineage may admit new work above the former
+        # 64 MiB ordinary read ceiling, without refunding any earlier charge.
+        mib = 1024**2
+        journal = self.path / 'budget.jsonl'
+        snapshot = (self.path / 'state.json').read_bytes()
+        original_headroom = dict(HEADROOM)
+        with patch.dict('storage.LIMITS', reads=128 * mib):
+            with self.rt.files.transaction(readonly=True, continuation=True):
+                self.rt.files.charge(reads=65 * mib)
+            retained = journal.read_bytes()
+            previous = json.loads(retained.splitlines()[-1])
+            self.assertGreater(previous['reads'], 64 * mib)
+            with self.assertRaisesRegex(Held, 'work pressure hold'):
+                self.ingest('after-upgrade')
+            self.assertEqual(journal.read_bytes(), retained)
+            self.assertEqual((self.path / 'state.json').read_bytes(), snapshot)
+
+        # Reopen the exact fixture directory with the upgraded source policy.
+        # Construction must not migrate, rewrite or reinitialize either file.
+        upgraded = Runtime(self.path)
+        self.assertEqual(journal.read_bytes(), retained)
+        self.assertEqual((self.path / 'state.json').read_bytes(), snapshot)
+        self.assertEqual(HEADROOM, original_headroom)
+        self.assertEqual(HEADROOM, {'bytes': 32 * mib, 'reads': 64 * mib, 'entries': 256})
+        call(upgraded, 'ingest', event='after-upgrade', payload={'new': 'admitted'},
+             producer='fixture', source_basis='Decision22 finite capacity amendment')
+        self.assertEqual(self.raw()['events']['after-upgrade']['payload'], {'new': 'admitted'})
+        admitted = journal.read_bytes()
+        self.assertTrue(admitted.startswith(retained))
+        appended = [json.loads(line) for line in admitted[len(retained):].splitlines()]
+        self.assertTrue(appended)
+        self.assertEqual(appended[0]['prior'], previous['hash'])
+        self.assertEqual(appended[0]['seq'], previous['seq'] + 1)
+        for record in appended:
+            self.assertTrue(all(record[k] >= previous[k] for k in ('bytes', 'reads', 'entries')))
+            previous = record
+        self.assertGreater(previous['reads'], json.loads(retained.splitlines()[-1])['reads'])
+
+        # Spend logical reservations, not large fixture files. Ordinary work
+        # stops at 192 MiB; the final 64 MiB remains continuation-only.
+        with upgraded.files.lock():
+            ordinary = upgraded.files.charge(reads=192 * mib - previous['reads'] - len(admitted))
+        self.assertEqual(ordinary['reads'], 192 * mib)
+        ordinary_journal = journal.read_bytes()
+        ordinary_snapshot = (self.path / 'state.json').read_bytes()
+        with self.assertRaisesRegex(Held, 'work pressure hold'):
+            call(upgraded, 'ingest', event='reserve-only', payload={},
+                 producer='fixture', source_basis='ordinary work must preserve continuation')
+        self.assertEqual(journal.read_bytes(), ordinary_journal)
+        self.assertEqual((self.path / 'state.json').read_bytes(), ordinary_snapshot)
+
+        with upgraded.files.transaction(readonly=True, continuation=True):
+            current = journal.read_bytes()
+            last = json.loads(current.splitlines()[-1])
+            self.assertGreater(last['reads'], 192 * mib)
+            hard = upgraded.files.charge(reads=256 * mib - last['reads'] - len(current))
+        self.assertEqual(hard['reads'] - ordinary['reads'], 64 * mib)
+        exhausted = journal.read_bytes()
+        self.assertTrue(exhausted.startswith(ordinary_journal))
+        with self.assertRaisesRegex(Held, 'cumulative budget exhausted'):
+            with upgraded.files.transaction(readonly=True, continuation=True):
+                self.fail('hard read exhaustion must refuse before exposing state')
+        self.assertEqual(journal.read_bytes(), exhausted)
+        self.assertEqual((self.path / 'state.json').read_bytes(), ordinary_snapshot)
+        self.assertFalse(upgraded.files.continuation)
+
     def test_cli_actual_fixture_entrypoint_with_sql_disabled(self):
         self.classify('one')
         a = self.reserve('one')

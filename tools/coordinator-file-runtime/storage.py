@@ -11,7 +11,7 @@ import uuid
 
 MAX_STATE = 262144
 MAX_BUDGET = 524288
-LIMITS = {'bytes': 134217728, 'reads': 134217728, 'entries': 1024}
+LIMITS = {'bytes': 134217728, 'reads': 268435456, 'entries': 1024}
 # Normal work cannot consume the last quarter. Original-owner readback and
 # settlement may use it; it is finite headroom, never a new grant or refund.
 HEADROOM = {'bytes': 33554432, 'reads': 67108864, 'entries': 256}
