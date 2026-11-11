@@ -38,7 +38,10 @@ the current all-fast decision. No private account file is consulted. The
 selected static routes binding is pinned at initialization with membership
 masked; other route/state-directory changes hold. Supported public pool updates
 continue through `execution_pool.py set`, retain its counter and affect new
-allocations/admissions. Empty/corrupt pools hold. Reservations consume a turn
+allocations/admissions. Runtime account authority permits `.codex`, `.codex2`,
+`.codex3`, `.codex4` and `.codex5`; current public membership selects which may
+allocate or admit. Disabled reservations and unsupported profile names still
+hold. Empty/corrupt pools hold. Reservations consume a turn
 without refund, including failed commits. Existing encounters retain their
 original profile. Pool-setting authority is outside this CLI.
 

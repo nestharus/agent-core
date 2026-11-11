@@ -80,7 +80,7 @@ class Trial(unittest.TestCase):
         self.root.mkdir(mode=0o700)
         self.routes = self.root / 'routes.toml'
         self.routes.write_text('[providers.codex]\npool = [".codex2", ".codex4", ".codex5"]\n'
-                               'manual_profiles = [".codex2", ".codex3", ".codex4", ".codex5"]\n'
+                               'manual_profiles = [".codex", ".codex2", ".codex3", ".codex4", ".codex5"]\n'
                                '[rotation]\nstate_dir = ' + json.dumps(str(self.root / 'rotation')) + '\n')
         (self.root / 'fast-tier').write_text('true\n')
         self.path = self.root / 'state'
@@ -336,6 +336,87 @@ class Trial(unittest.TestCase):
             call(self.rt, 'start', attempt='a', collector=a['collector'], substrate='fixture', evidence='corrupt pool')
         self.assertTrue(self.raw()['attempts']['a']['fast_requested'])
         self.assertEqual(self.raw()['attempts']['a']['served_tier'], 'unobserved')
+
+    def test_five_profile_policy_allocates_and_admits_existing_counter_turns(self):
+        # Public control/state fixtures only; no account directories or calls.
+        enabled = ['.codex', '.codex2', '.codex3', '.codex4', '.codex5']
+        pool = _pool.Pool(self.routes)
+        pool.status()
+        counter = pool.read()[2]
+        counter.write_text('6994\n')
+        binding = self.raw()['pool_binding']
+        self.assertEqual(pool.set(enabled)['turn'], 6994)
+        self.assertEqual(pool.control_binding(pool.read()[0]), binding)
+
+        # Use the runtime initialized before the supported membership change.
+        expected = ['.codex5', '.codex', '.codex2', '.codex3', '.codex4']
+        for offset, profile in enumerate(expected):
+            event = 'five-' + str(offset)
+            self.ingest(event)
+            args = dict(attempt=event, event=event, phase='classifier', resources={}, basis={})
+            reserved = call(self.rt, 'reserve', **args)
+            turn = 6994 + offset
+            self.assertEqual(reserved['reservation']['profile'], profile)
+            self.assertEqual(reserved['reservation']['turn'], turn)
+            self.assertEqual(reserved['reservation']['enabled'], enabled)
+            self.assertEqual(counter.read_text(), str(turn + 1) + '\n')
+            start_args = dict(attempt=event, collector=reserved['collector'],
+                              substrate='fixture', evidence='five-profile admission fixture')
+            started = call(self.rt, 'start', **start_args)
+            attempt = self.raw()['attempts'][event]
+            self.assertEqual(attempt['admission']['profile'], profile)
+            self.assertEqual(attempt['admission']['next_reservation_turn'], turn + 1)
+            self.assertEqual(attempt['pool'], reserved['reservation'])
+            with self.assertRaisesRegex(Held, 'new attempt'):
+                call(self.rt, 'reserve', **args)
+            with self.assertRaisesRegex(Held, 'no replay'):
+                call(self.rt, 'start', **start_args)
+            self.assertEqual(self.raw()['attempts'][event]['launch_id'], started['launch_id'])
+            self.assertEqual(counter.read_text(), str(turn + 1) + '\n')
+
+        self.assertEqual(len(self.raw()['attempts']), 5)
+        # Fresh initialization under the same five-profile policy also admits
+        # the existing control without resetting or allocating another turn.
+        create(self.root / 'five-profile-state', 'work', TOKENS['work'], self.routes)
+        self.assertEqual(pool.status()['turn'], 6999)
+        self.assertEqual((self.root / 'fast-tier').read_text(), 'true\n')
+
+    def test_five_profile_policy_still_refuses_disabled_and_unsupported_names(self):
+        pool = _pool.Pool(self.routes)
+        pool.status()
+        counter = pool.read()[2]
+        counter.write_text('41\n')
+        self.assertEqual(pool.set(['.codex'])['turn'], 41)
+        self.ingest('disabled')
+        reserved = call(self.rt, 'reserve', attempt='disabled', event='disabled',
+                        phase='classifier', resources={}, basis={})
+        self.assertEqual(reserved['reservation']['profile'], '.codex')
+        start_args = dict(attempt='disabled', collector=reserved['collector'],
+                          substrate='fixture', evidence='disabled profile must refuse')
+        self.assertEqual(pool.set(['.codex2', '.codex3', '.codex4', '.codex5'])['turn'], 42)
+        with self.assertRaisesRegex(_pool.PoolError, 'reserved execution profile disabled'):
+            call(self.rt, 'start', **start_args)
+        raw = self.routes.read_bytes()
+        with self.assertRaisesRegex(_pool.PoolError, 'distinct authorized Codex names'):
+            pool.set(['.codex6'])
+        self.assertEqual(self.routes.read_bytes(), raw)
+
+        # A malformed public fixture cannot bypass the guard at initialization,
+        # allocation or admission; prior reservations and turns stay intact.
+        self.routes.write_bytes(_pool.replace_membership(raw, ['.codex6']))
+        self.ingest('unsupported')
+        snapshot = (self.path / 'state.json').read_bytes()
+        with self.assertRaisesRegex(_pool.PoolError, 'invalid Codex pool/authorization names'):
+            create(self.root / 'unsupported-state', 'work', TOKENS['work'], self.routes)
+        with self.assertRaisesRegex(_pool.PoolError, 'invalid Codex pool/authorization names'):
+            call(self.rt, 'reserve', attempt='unsupported', event='unsupported',
+                 phase='classifier', resources={}, basis={})
+        with self.assertRaisesRegex(_pool.PoolError, 'invalid Codex pool/authorization names'):
+            call(self.rt, 'start', **start_args)
+        self.assertFalse((self.root / 'unsupported-state').exists())
+        self.assertEqual((self.path / 'state.json').read_bytes(), snapshot)
+        self.assertEqual(counter.read_text(), '42\n')
+        self.assertEqual(self.raw()['attempts']['disabled']['state'], 'reserved')
 
     def test_retention_uses_whole_processing_plus_day_and_all_holds(self):
         self.classify('one')

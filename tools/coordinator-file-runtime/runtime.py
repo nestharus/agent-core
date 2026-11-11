@@ -24,7 +24,7 @@ _fast = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_fast)
 ROLES = {'Work', 'Branch', 'Reviews', 'QA', 'Root'}
 PHASES = {'classifier', 'known', 'discovery', 'qa-execute', 'qa-consolidate', 'review'}
-ALLOWED_PROFILES = {'.codex2', '.codex3', '.codex4', '.codex5'}
+ALLOWED_PROFILES = {'.codex', '.codex2', '.codex3', '.codex4', '.codex5'}
 MAX_TEXT = 512  # Encoded JSON bytes, including quotes/escapes; never characters.
 MAX_HISTORY = 12
 FRESH_REVIEW = 'fresh-current-component-v1'
