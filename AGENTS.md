@@ -483,7 +483,7 @@ EOF
 agents -a ~/ai/agents/some-orchestrator.md -p /repo -f /tmp/prompt.md | head -3"
 ```
 
-Use [`/home/nes/projects/agent-runner/trunk/README.md`](/home/nes/projects/agent-runner/trunk/README.md) as the authoritative CLI reference for flags, named-agent resolution, config, and alternate invocation forms.
+For the selected direct method, use the [direct dispatcher](/home/nes/ai/tools/direct-child/dispatch.py) and its [README](/home/nes/ai/tools/direct-child/README.md); explicit task/campaign selections take precedence. The former AgentRunner CLI reference (`/home/nes/projects/agent-runner/trunk/README.md`) is historical; use the [durable archive index](/home/nes/.local/share/drive-cleanup-coordination/20261030/sync-archive/PROJECT-RESTORE-INDEX.json) for recovery.
 
 All branch work runs in an isolated git worktree. Central-checkout branch-tracking includes authorized clean, fast-forward-only deployment synchronization of its configured default branch, not feature work; dirty or divergent states stop without repair. See [`~/ai/conventions/worktree-isolation.md`](conventions/worktree-isolation.md).
 
